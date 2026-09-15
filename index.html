@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Planeador de Clases Pedagógico - Gestión Docente</title>
+  <meta name="description" content="Aplicación profesional para organizar y estructurar planeadores de clase docentes con vista de calendario y exportación a Word y PDF.">
+  
+  <!-- CSS Principal -->
+  <link rel="stylesheet" href="css/styles.css">
+  
+  <!-- Favicon SVG -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%234f46e5'><path d='M4 19.5A2.5 2.5 0 0 1 6.5 17H20'/><path d='M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z'/></svg>">
+</head>
+<body>
+
+  <!-- Contenedor Principal de la App -->
+  <div class="app-container">
+
+    <!-- Encabezado Principal con Identidad del Docente y Selector de Rol -->
+    <header class="main-header" id="app-main-header">
+      <div class="teacher-identity-wrapper" style="position:relative;">
+        <div class="teacher-identity" onclick="App.toggleUserDropdown(event)" style="cursor:pointer;" title="Clic para alternar entre perfiles de docentes o ingresar como Coordinación">
+          <div class="teacher-avatar" id="header-teacher-avatar">D</div>
+          <div class="teacher-meta">
+            <h1>
+              <span id="header-teacher-name">Docente</span>
+              <span class="role-badge" id="header-teacher-role">Docente</span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-left:4px;"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </h1>
+            <div class="teacher-details">
+              <div class="teacher-detail-item">
+                <span>Dirección de grupo:</span>
+                <strong id="header-teacher-homeroom">Sin asignar</strong>
+              </div>
+              <span>•</span>
+              <div class="teacher-detail-item">
+                <span>Carga horaria:</span>
+                <strong id="header-teacher-hours">5 horas/día</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Menú Desplegable Rápido de Cambio de Docente / Rol -->
+        <div class="dropdown-menu user-switcher-dropdown" id="user-switcher-dropdown">
+          <!-- Renderizado dinámicamente -->
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <!-- Botón Panel de Coordinación (Supervisión, visto bueno y descargas) -->
+        <button class="btn btn-primary btn-coord-header" id="btn-coordinator-panel" onclick="CoordinatorView.openDashboard()" title="Panel de Coordinación: Supervisar planeaciones de los docentes, dar visto bueno y descargarlas en Word/PDF">
+          🎓 Panel de Coordinación
+        </button>
+
+        <!-- Botón Gestión de Docentes (Administrador) -->
+        <button class="btn btn-secondary" id="btn-manage-users-header" onclick="UserManagerModal.open()" title="Crear y configurar docentes y roles">
+          👥 Docentes & Roles
+        </button>
+
+        <!-- Botón de Configuración y Asignación de Materias -->
+        <button class="btn btn-manage-contents" onclick="App.openSettingsModal('matrix')" title="Configurar materias y los grados a los que se imparten">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+          Materias & Grados
+        </button>
+        <button class="btn btn-secondary" onclick="SchoolEventsManager.openModal()" title="Ver festivos en Colombia y configurar vacaciones, semana santa y exámenes">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+          Festivos & Eventos
+        </button>
+
+        <button class="btn btn-secondary" onclick="CurriculumManager.openModal()" title="Configurar banco de temas, logros y DBAs por periodo">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
+          Malla Curricular
+        </button>
+
+        <button class="btn btn-secondary" onclick="App.openSettingsModal('profile')" title="Editar información del perfil y horario">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+          Mi Perfil
+        </button>
+
+        <button class="btn btn-secondary btn-icon" onclick="StorageService.executeAutoSaveProtocol(true)" title="Ejecutar protocolo de guardado automático (Memoria, Base de Datos y Disco)" style="color:#059669; border-color:#a7f3d0; background:#ecfdf5;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+        </button>
+
+        <button class="btn btn-secondary btn-icon" onclick="StorageService.exportBackup()" title="Descargar copia de seguridad de mis planeaciones">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+        </button>
+
+        <label class="btn btn-secondary btn-icon" title="Restaurar copia de seguridad (JSON)" style="margin:0; cursor:pointer;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+          <input type="file" id="import-backup-file" accept=".json" style="display: none;" />
+        </label>
+      </div>
+    </header>
+
+    <!-- VISTA 1: CALENDARIO MENSUAL (INICIO EN LUNES) -->
+    <main id="calendar-view" class="calendar-page-layout">
+      <!-- Tarjeta del Calendario -->
+      <section class="calendar-card" id="calendar-mount-point">
+        <!-- Generado dinámicamente por js/calendar.js -->
+      </section>
+
+      <!-- Barra Lateral Informativa -->
+      <aside class="calendar-sidebar">
+        <!-- Resumen del Mes -->
+        <div class="sidebar-card">
+          <h3>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--primary-600)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+            Resumen del Mes
+          </h3>
+          <div class="stats-grid">
+            <div class="stat-box">
+              <div class="stat-number" id="stat-month-days">0</div>
+              <div class="stat-label">Días Planificados</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-number" id="stat-month-classes">0</div>
+              <div class="stat-label">Clases Totales</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Festivos y Eventos del Mes -->
+        <div class="sidebar-card">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.75rem;">
+            <h3 style="margin:0;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--primary-600)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+              Eventos & Festivos
+            </h3>
+            <button class="btn-table-action" onclick="SchoolEventsManager.openModal()" title="Configurar vacaciones y semanas especiales">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+            </button>
+          </div>
+          <div id="sidebar-month-events-list" style="display: flex; flex-direction: column; gap: 0.45rem;">
+            <!-- Renderizado dinámicamente por calendar.js -->
+          </div>
+        </div>
+
+        <!-- Asignaturas y Grados Asignados -->
+        <div class="sidebar-card">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.75rem;">
+            <h3 style="margin:0;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--primary-600)" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+              Materias & Grados
+            </h3>
+            <button class="btn-table-action" onclick="App.openSettingsModal('matrix')" title="Editar asignación de materias">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+            </button>
+          </div>
+          <div class="subject-tags-list" id="sidebar-subjects-list">
+            <!-- Renderizado dinámicamente -->
+          </div>
+        </div>
+
+        <!-- Guía Rápida -->
+        <div class="sidebar-card" style="background: var(--primary-50); border-color: var(--primary-100);">
+          <h3 style="color: var(--primary-800); font-size: 0.95rem;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--primary-600)" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+            ¿Cómo planear?
+          </h3>
+          <p style="font-size: 0.8rem; color: var(--primary-900); line-height: 1.5;">
+            1. Haz clic sobre cualquier día del calendario.<br/>
+            2. Selecciona la <strong>materia</strong> y el <strong>grado</strong> en la tabla.<br/>
+            3. Escribe los <strong>DBA</strong>, <strong>desempeños</strong> y <strong>descripción</strong>.<br/>
+            4. Adjunta <strong>imágenes o PDFs</strong> como anexos.<br/>
+            5. Exporta tu planeación a <strong>Word (.docx)</strong> o <strong>PDF</strong>.
+          </p>
+        </div>
+      </aside>
+    </main>
+
+    <!-- VISTA 2: EDITOR DE PLANEACIÓN DIARIA -->
+    <main id="planner-view" style="display: none;">
+      <section id="planner-mount-point">
+        <!-- Generado dinámicamente por js/planner.js -->
+      </section>
+    </main>
+
+    <!-- VISTA 3: PÁGINA COMPLETA DE EDICIÓN Y ORGANIZACIÓN DE CUADERNO / GUÍA PEDAGÓGICA -->
+    <main id="notebook-view" class="notebook-fullpage-layout" style="display: none;">
+      <section id="notebook-mount-point">
+        <!-- Generado dinámicamente por js/notebook-editor.js -->
+      </section>
+    </main>
+
+  </div>
+
+  <!-- MODAL PRINCIPAL DE CONFIGURACIÓN Y ASIGNACIÓN (PANEL DETALLADO MATERIAS VS GRADOS) -->
+  <div class="modal-backdrop" id="settings-modal-backdrop">
+    <div class="modal-card modal-large">
+      <div class="modal-header">
+        <h2 id="settings-modal-title">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--primary-600)" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+          Panel de Configuración Docente
+        </h2>
+        <button type="button" class="btn-close-modal" id="btn-close-settings-modal" onclick="App.closeSettingsModal()">&times;</button>
+      </div>
+
+      <!-- Barra de Pestañas de Navegación -->
+      <div class="modal-nav-tabs">
+        <button type="button" class="modal-nav-tab active" data-tab="matrix" onclick="App.switchSettingsTab('matrix')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+          Asignación de Materias y Grados
+        </button>
+        <button type="button" class="modal-nav-tab" data-tab="profile" onclick="App.switchSettingsTab('profile')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+          Datos del Docente e Institución
+        </button>
+        <button type="button" class="modal-nav-tab" data-tab="grades" onclick="App.switchSettingsTab('grades')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+          Lista de Grados Institucionales
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <!-- PESTAÑA 1: PANEL MATRICIAL (MATERIAS A LA IZQUIERDA VS GRADOS AL FRENTE) -->
+        <div id="tab-panel-matrix">
+          <div style="background:var(--primary-50); border:1px solid var(--primary-100); border-radius:var(--radius-md); padding:0.85rem 1.15rem; margin-bottom:1.25rem;">
+            <p style="font-size:0.85rem; color:var(--primary-900); margin:0; line-height:1.4;">
+              <strong>Instrucciones:</strong> Escribe o edita el nombre de tu materia en la columna izquierda y marca en los botones de la derecha <strong>a qué grados específicos</strong> le impartes esa materia (ej. Matemáticas a 2°, 3°, 7° / Sistemas de 1° a 11°).
+            </p>
+          </div>
+
+          <div style="overflow-x:auto;">
+            <table class="matrix-table">
+              <thead>
+                <tr>
+                  <th style="font-size:0.8rem; font-weight:700; color:var(--slate-600); text-transform:uppercase; padding:0.5rem 1.25rem;">Materia / Asignatura</th>
+                  <th style="font-size:0.8rem; font-weight:700; color:var(--slate-600); text-transform:uppercase; padding:0.5rem 1.25rem;">Grados a los que se imparte clase (Al frente)</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="matrix-table-body">
+                <!-- Filas renderizadas dinámicamente -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Barra para agregar nueva materia -->
+          <div class="add-content-box" style="margin-top:1.25rem; background:var(--slate-50); padding:0.85rem; border-radius:var(--radius-md); border:1px dashed var(--slate-300);">
+            <input type="text" id="input-new-matrix-subject" class="form-input" placeholder="Nombre de nueva materia (ej. Educación Artística o Ética)" />
+            <button type="button" class="btn btn-primary" onclick="App.addNewMatrixSubject()">
+              + Añadir Materia
+            </button>
+          </div>
+        </div>
+
+        <!-- PESTAÑA 2: DATOS DEL DOCENTE E INSTITUCIÓN -->
+        <div id="tab-panel-profile" style="display: none;">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="input-profile-name">Nombre del Docente *</label>
+              <input type="text" id="input-profile-name" class="form-input" placeholder="Ej. Lic. Carlos Mendoza" required />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Cargo / Rol</label>
+              <input type="text" class="form-input" value="Docente de Aula" readonly style="background: var(--slate-50); font-weight: 600;" />
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="input-profile-institution">Institución Educativa</label>
+              <input type="text" id="input-profile-institution" class="form-input" placeholder="Ej. Institución Educativa San José" />
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="input-profile-homeroom">Curso a Cargo (Dirección de Grupo)</label>
+              <select id="input-profile-homeroom" class="form-select"></select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Días laborales de la semana</label>
+            <div class="days-checkbox-group">
+              <label class="day-checkbox-label">
+                <input type="checkbox" class="profile-workday-cb" value="1" checked> Lunes
+              </label>
+              <label class="day-checkbox-label">
+                <input type="checkbox" class="profile-workday-cb" value="2" checked> Martes
+              </label>
+              <label class="day-checkbox-label">
+                <input type="checkbox" class="profile-workday-cb" value="3" checked> Miércoles
+              </label>
+              <label class="day-checkbox-label">
+                <input type="checkbox" class="profile-workday-cb" value="4" checked> Jueves
+              </label>
+              <label class="day-checkbox-label">
+                <input type="checkbox" class="profile-workday-cb" value="5" checked> Viernes
+              </label>
+              <label class="day-checkbox-label">
+                <input type="checkbox" class="profile-workday-cb" value="6"> Sábado
+              </label>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="input-profile-hours">Cantidad de horas / clases por día</label>
+            <input type="number" id="input-profile-hours" class="form-input" min="1" max="12" value="5" required />
+            <p class="form-helper">Determina cuántas filas de clase se generarán automáticamente en tu planeador.</p>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="input-profile-start-date">Primer Día de Clases (Inicio de Consecutivo - Clase 1)</label>
+            <input type="date" id="input-profile-start-date" class="form-input" required />
+            <p class="form-helper">A partir de esta fecha se inicia la numeración de Clase 1 para cada materia y curso, y se cargan automáticamente los temas, DBAs y desempeños.</p>
+          </div>
+        </div>
+
+        <!-- PESTAÑA 3: GESTIÓN DE GRADOS INSTITUCIONALES -->
+        <div id="tab-panel-grades" style="display: none;">
+          <p class="form-helper" style="margin-bottom:1rem;">
+            Aquí puedes personalizar la lista de grados de tu institución para que estén disponibles al asignar materias (ej. 1°, 2°, 3°, 4°A, 4°B, 5°... 11°).
+          </p>
+
+          <div id="grades-tags-container" style="display:flex; flex-wrap:wrap; gap:0.5rem; margin-bottom:1.5rem;"></div>
+
+          <div class="add-content-box" style="background:var(--slate-50); padding:0.85rem; border-radius:var(--radius-md); border:1px dashed var(--slate-300);">
+            <input type="text" id="input-new-grade-item" class="form-input" placeholder="Nuevo grado (ej. 4A, Transición, Jardín o 12°)" />
+            <button type="button" class="btn btn-primary" onclick="App.addNewInstitutionalGrade()">
+              + Añadir Grado
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="App.closeSettingsModal()">Cancelar</button>
+        <button type="button" class="btn btn-primary" onclick="App.saveAllSettings()">
+          Guardar Todas las Configuraciones
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: DUPLICAR / COPIAR PLANEACIÓN -->
+  <div class="modal-backdrop" id="duplicate-modal-backdrop">
+    <div class="modal-card" style="max-width: 480px;">
+      <div class="modal-header">
+        <h2>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--primary-600)" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+          Copiar Planeación de otra fecha
+        </h2>
+        <button type="button" class="btn-close-modal" onclick="document.getElementById('duplicate-modal-backdrop').classList.remove('active')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="duplicate-source-date">Selecciona la fecha de origen:</label>
+          <select id="duplicate-source-date" class="form-select"></select>
+          <p class="form-helper">Se copiarán las asignaturas, grados, DBA, desempeños y actividades a la fecha actual.</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="document.getElementById('duplicate-modal-backdrop').classList.remove('active')">Cancelar</button>
+        <button type="button" class="btn btn-primary" onclick="Planner.applyDuplicate(document.getElementById('duplicate-source-date').value); document.getElementById('duplicate-modal-backdrop').classList.remove('active');">
+          Copiar al día actual
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: INTERCAMBIAR DÍA / ROTAR HORARIO -->
+  <div class="modal-backdrop" id="swap-modal-backdrop">
+    <div class="modal-card" style="max-width: 480px;">
+      <div class="modal-header">
+        <h2>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
+          Intercambiar Planeación con otra fecha
+        </h2>
+        <button type="button" class="btn-close-modal" onclick="document.getElementById('swap-modal-backdrop').classList.remove('active')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="swap-target-date">Selecciona la fecha para intercambiar:</label>
+          <select id="swap-target-date" class="form-select"></select>
+          <p class="form-helper" style="color:#2563eb;">Ambas fechas intercambiarán sus materias y horarios. Todo el trabajo redactado (DBA, Temas, Secuencias, Observaciones) se conservará íntegramente.</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="document.getElementById('swap-modal-backdrop').classList.remove('active')">Cancelar</button>
+        <button type="button" class="btn btn-primary" style="background:#2563eb; border-color:#1d4ed8;" onclick="Planner.swapWithDate(document.getElementById('swap-target-date').value); document.getElementById('swap-modal-backdrop').classList.remove('active');">
+          🔄 Intercambiar Planeaciones
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: MALLA CURRICULAR POR PERIODO (TEMAS, LOGROS Y DBAs) -->
+  <div class="modal-backdrop" id="curriculum-modal-backdrop">
+    <div class="modal-card modal-large" style="max-width: 1050px;">
+      <div class="modal-header">
+        <h2>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--primary-600)" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
+          Malla Curricular: Temas, Logros y DBAs por Periodo
+        </h2>
+        <button type="button" class="btn-close-modal" onclick="CurriculumManager.closeModal()">&times;</button>
+      </div>
+      <div class="modal-body" id="curriculum-modal-body-container" style="max-height: 70vh; overflow-y: auto;">
+        <!-- Renderizado dinámico desde CurriculumManager -->
+      </div>
+      <div class="modal-footer" style="justify-content: space-between;">
+        <button type="button" class="btn btn-secondary" onclick="CurriculumManager.closeModal()">
+          Cerrar
+        </button>
+        <button type="button" class="btn btn-primary" onclick="CurriculumManager.save()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+          Guardar Malla del Periodo
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: VISTA PREVIA EXACTA DE LA HOJA OFICIAL (PREPARADOR DE CLASES) -->
+  <div class="modal-backdrop" id="sheet-preview-modal-backdrop">
+    <div class="modal-card modal-large" style="max-width: 1080px;">
+      <div class="modal-header">
+        <h2>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--primary-600)" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+          Vista Previa Oficial: Preparador de Clases
+        </h2>
+        <button type="button" class="btn-close-modal" onclick="document.getElementById('sheet-preview-modal-backdrop').classList.remove('active')">&times;</button>
+      </div>
+      <div class="modal-body" style="background: #e2e8f0; padding: 1.5rem; max-height: 75vh; overflow-y: auto;">
+        <div id="sheet-preview-content">
+          <!-- Contenido generado idéntico al formato oficial -->
+        </div>
+      </div>
+      <div class="modal-footer" style="justify-content: space-between;">
+        <button type="button" class="btn btn-secondary" onclick="document.getElementById('sheet-preview-modal-backdrop').classList.remove('active')">
+          Cerrar Vista Previa
+        </button>
+        <div style="display: flex; gap: 0.75rem;">
+          <button type="button" class="btn btn-secondary" onclick="Planner.exportWord()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+            Exportar a Word (.doc)
+          </button>
+          <button type="button" class="btn btn-primary" onclick="Planner.exportPdf()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+            Imprimir / Guardar como PDF
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: CENTRO DE DESCARGAS SEMANALES Y DIARIAS -->
+  <div class="modal-backdrop" id="day-download-modal-backdrop">
+    <div class="modal-card modal-large" style="max-width: 920px;">
+      <div class="modal-header">
+        <h2 id="day-download-main-title">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--primary-600)" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          Centro de Descargas Oficiales (Semana / Día / Materia)
+        </h2>
+        <button type="button" class="btn-close-modal" onclick="App.closeDayDownloadModal()">&times;</button>
+      </div>
+      <div class="modal-body" style="padding: 1.25rem;">
+        <!-- Selector y Navegador de Semana / Fecha -->
+        <div style="background: var(--primary-50); border: 1px solid var(--primary-200); border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 1rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="App.navigateDownloadWeek(-1)" title="Semana anterior">
+              ◀ Anterior
+            </button>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <label for="day-download-date-picker" style="font-size: 0.8rem; font-weight: 700; color: var(--primary-900); margin: 0;">
+                📅 Fecha:
+              </label>
+              <input type="date" id="day-download-date-picker" class="form-input" style="width: auto; font-weight: 700; font-size: 0.85rem; padding: 0.25rem 0.5rem;" onchange="App.onDayDownloadDateChange(this.value)" />
+            </div>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="App.navigateDownloadWeek(1)" title="Semana siguiente">
+              Siguiente ▶
+            </button>
+          </div>
+          <div id="day-download-date-title" style="font-size: 0.92rem; font-weight: 700; color: var(--primary-800); text-align: right;">
+            <!-- Rango de la semana y fecha activa -->
+          </div>
+        </div>
+
+        <!-- Pestañas de modalidad de descarga -->
+        <div class="download-modal-tabs" style="display: flex; gap: 6px; border-bottom: 2px solid var(--slate-200); margin-bottom: 1.25rem;">
+          <button type="button" class="download-tab-btn active" id="tab-btn-by-subject" onclick="App.switchDownloadTab('subject')">
+            📚 Por Materia a la Semana
+          </button>
+          <button type="button" class="download-tab-btn" id="tab-btn-by-day" onclick="App.switchDownloadTab('day')">
+            📅 Por Día de la Semana
+          </button>
+          <button type="button" class="download-tab-btn" id="tab-btn-all-classes" onclick="App.switchDownloadTab('classes')">
+            🎯 Clases Individuales y Guías
+          </button>
+        </div>
+
+        <div id="day-download-content-area">
+          <!-- Renderizado dinámicamente por App.renderDayDownloadContent -->
+        </div>
+      </div>
+      <div class="modal-footer" style="justify-content: space-between;">
+        <button type="button" class="btn btn-secondary" onclick="App.closeDayDownloadModal()">Cerrar</button>
+        <button type="button" class="btn btn-secondary" id="btn-open-in-planner" onclick="App.openPlannerForDownloadDate()" title="Abrir esta fecha en el planeador para editar">
+          ✏️ Abrir en el Planeador
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: GESTIÓN DE ANEXOS Y ARCHIVOS POR CLASE -->
+  <div class="modal-backdrop" id="class-attachments-modal-backdrop">
+    <div class="modal-card modal-large" style="max-width: 820px;">
+      <div class="modal-header">
+        <h2 id="class-attachments-modal-title">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--primary-600)" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+          Archivos y Guías de la Clase
+        </h2>
+        <button type="button" class="btn-close-modal" onclick="Planner.closeClassAttachmentsModal()">&times;</button>
+      </div>
+      <div class="modal-body" id="class-attachments-modal-body" style="padding: 1.25rem;">
+        <!-- Renderizado dinámicamente por Planner.renderClassAttachmentsModal -->
+      </div>
+      <div class="modal-footer" style="justify-content: flex-end;">
+        <button type="button" class="btn btn-secondary" onclick="Planner.closeClassAttachmentsModal()">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: VISTA PREVIA DE IMAGEN / ANEXO -->
+  <div class="modal-backdrop" id="image-preview-modal-backdrop">
+    <div class="modal-card" style="max-width: 800px; text-align: center;">
+      <div class="modal-header">
+        <h2 id="preview-modal-title">Vista previa de anexo</h2>
+        <button type="button" class="btn-close-modal" onclick="document.getElementById('image-preview-modal-backdrop').classList.remove('active')">&times;</button>
+      </div>
+      <div class="modal-body" style="padding: 1rem;">
+        <img id="preview-modal-image-tag" class="preview-modal-image" src="" alt="Vista previa de anexo" />
+      </div>
+    </div>
+  </div>
+
+  <!-- Contenedor para Impresión y Exportación a PDF -->
+  <div id="printable-report"></div>
+
+  <!-- Contenedor de Notificaciones Toast -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- Scripts de la Aplicación -->
+  <script src="js/jszip.min.js"></script>
+  <script src="js/idb-storage.js"></script>
+  <script src="js/users-service.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/curriculum.js"></script>
+  <script src="js/docx-generator.js"></script>
+  <script src="js/holidays.js"></script>
+  <script src="js/export.js"></script>
+  <script src="js/notebook-editor.js"></script>
+  <script src="js/coordinator-view.js"></script>
+  <script src="js/calendar.js"></script>
+  <script src="js/planner.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

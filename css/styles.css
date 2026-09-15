@@ -1,0 +1,3446 @@
+/* ==========================================================================
+   SISTEMA DE DISEÑO - GENERADOR DE PLANEADORES DE CLASE PARA DOCENTES
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap');
+
+:root {
+  /* Paleta cromática profesional */
+  --primary-50: #eef2ff;
+  --primary-100: #e0e7ff;
+  --primary-200: #c7d2fe;
+  --primary-500: #4f46e5;
+  --primary-600: #4338ca;
+  --primary-700: #3730a3;
+  --primary-800: #312e81;
+
+  --accent-50: #ecfdf5;
+  --accent-500: #10b981;
+  --accent-600: #059669;
+
+  --amber-50: #fffbeb;
+  --amber-100: #fef3c7;
+  --amber-500: #f59e0b;
+  --amber-700: #b45309;
+
+  --rose-50: #fff1f2;
+  --rose-100: #ffe4e6;
+  --rose-500: #f43f5e;
+  --rose-600: #e11d48;
+
+  --blue-50: #eff6ff;
+  --blue-600: #2563eb;
+
+  --slate-50: #f8fafc;
+  --slate-100: #f1f5f9;
+  --slate-200: #e2e8f0;
+  --slate-300: #cbd5e1;
+  --slate-400: #94a3b8;
+  --slate-500: #64748b;
+  --slate-600: #475569;
+  --slate-700: #334155;
+  --slate-800: #1e293b;
+  --slate-900: #0f172a;
+
+  /* Elevaciones */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.05);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.06);
+
+  /* Bordes */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+  --radius-full: 9999px;
+
+  /* Fuentes */
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-display: 'Outfit', var(--font-sans);
+
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: #f6f8fb;
+  color: var(--slate-800);
+  line-height: 1.5;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  -webkit-font-smoothing: antialiased;
+}
+
+button, input, select, textarea {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+/* ==========================================================================
+   LAYOUT PRINCIPAL
+   ========================================================================== */
+
+.app-container {
+  max-width: 1720px;
+  width: 98%;
+  margin: 0 auto;
+  padding: 1.25rem 1.5rem 3rem;
+  flex: 1;
+}
+
+/* Header */
+.main-header {
+  background: #ffffff;
+  border-radius: var(--radius-lg);
+  padding: 1.25rem 1.75rem;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--slate-200);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.teacher-identity {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.teacher-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--primary-500), var(--primary-700));
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1.35rem;
+  box-shadow: 0 4px 10px rgba(79, 70, 229, 0.25);
+  flex-shrink: 0;
+}
+
+.teacher-meta h1 {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--slate-900);
+  line-height: 1.2;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.role-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: var(--primary-50);
+  color: var(--primary-700);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.2rem 0.6rem;
+  border-radius: var(--radius-full);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border: 1px solid var(--primary-100);
+}
+
+.teacher-details {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.35rem;
+  font-size: 0.875rem;
+  color: var(--slate-500);
+}
+
+.teacher-detail-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.teacher-detail-item strong {
+  color: var(--slate-700);
+  font-weight: 600;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+/* Botones */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.65rem 1.15rem;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  font-size: 0.875rem;
+  transition: var(--transition-fast);
+  white-space: nowrap;
+}
+
+.btn-primary {
+  background: var(--primary-600);
+  color: #ffffff;
+  box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);
+}
+
+.btn-primary:hover {
+  background: var(--primary-700);
+  box-shadow: 0 4px 8px rgba(79, 70, 229, 0.3);
+  transform: translateY(-1px);
+}
+
+.btn-secondary {
+  background: #ffffff;
+  color: var(--slate-700);
+  border: 1px solid var(--slate-300);
+}
+
+.btn-secondary:hover {
+  background: var(--slate-100);
+  color: var(--slate-900);
+  border-color: var(--slate-400);
+}
+
+.btn-manage-contents {
+  background: var(--primary-50);
+  color: var(--primary-700);
+  border: 1px solid var(--primary-200);
+}
+
+.btn-manage-contents:hover {
+  background: var(--primary-100);
+  color: var(--primary-800);
+}
+
+.btn-accent {
+  background: var(--accent-600);
+  color: #ffffff;
+}
+
+.btn-accent:hover {
+  background: var(--accent-500);
+}
+
+.btn-danger-subtle {
+  background: var(--rose-50);
+  color: var(--rose-600);
+  border: 1px solid rgba(244, 63, 94, 0.2);
+}
+
+.btn-danger-subtle:hover {
+  background: var(--rose-500);
+  color: #ffffff;
+}
+
+.btn-icon {
+  padding: 0.55rem;
+  border-radius: var(--radius-md);
+}
+
+/* ==========================================================================
+   VISTA: CALENDARIO PRINCIPAL (INICIA EN LUNES)
+   ========================================================================== */
+
+.calendar-page-layout {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 1.75rem;
+}
+
+.calendar-card {
+  background: #ffffff;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--slate-200);
+  box-shadow: var(--shadow-sm);
+  padding: 1.75rem;
+}
+
+.calendar-header-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--slate-200);
+}
+
+.calendar-title-group {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.calendar-current-month {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--slate-900);
+  text-transform: capitalize;
+}
+
+.calendar-nav-buttons {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.calendar-nav-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--slate-300);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--slate-700);
+  transition: var(--transition-fast);
+}
+
+.calendar-nav-btn:hover {
+  background: var(--slate-100);
+  color: var(--slate-900);
+}
+
+.calendar-weekdays-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  text-align: center;
+}
+
+.weekday-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--slate-500);
+  padding: 0.5rem 0;
+}
+
+.weekday-label.weekend {
+  color: var(--slate-400);
+}
+
+.calendar-days-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.6rem;
+}
+
+.calendar-day-cell {
+  min-height: 105px;
+  background: var(--slate-50);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-md);
+  padding: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: var(--transition-fast);
+  position: relative;
+  overflow: hidden;
+}
+
+.calendar-day-cell:hover {
+  border-color: var(--primary-500);
+  background: #ffffff;
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.calendar-day-cell.other-month {
+  opacity: 0.35;
+  background: transparent;
+  border-color: transparent;
+}
+
+.calendar-day-cell.is-today {
+  border-color: var(--primary-500);
+  background: #ffffff;
+  box-shadow: 0 0 0 1px var(--primary-500);
+}
+
+.calendar-day-cell.is-today .day-number {
+  background: var(--primary-600);
+  color: #ffffff;
+  border-radius: var(--radius-full);
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.calendar-day-cell.is-non-working {
+  background: #f8fafc;
+  opacity: 0.75;
+}
+
+.day-cell-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.day-number {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--slate-700);
+}
+
+.day-plans-count {
+  font-size: 0.7rem;
+  font-weight: 700;
+  background: var(--primary-100);
+  color: var(--primary-700);
+  padding: 0.15rem 0.45rem;
+  border-radius: var(--radius-full);
+}
+
+.day-cell-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 0.4rem;
+}
+
+.day-subject-pill {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.15rem 0.4rem;
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  color: var(--slate-800);
+  border-left: 3px solid var(--primary-500);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+}
+
+.day-empty-hint {
+  font-size: 0.7rem;
+  color: var(--slate-400);
+  display: none;
+}
+
+.calendar-day-cell:hover .day-empty-hint {
+  display: block;
+}
+
+/* Festivos en Colombia */
+.calendar-day-cell.is-holiday {
+  background: #fff8f8;
+  border-color: #fca5a5;
+}
+
+.calendar-day-cell.is-holiday .day-number {
+  color: #dc2626;
+  font-weight: 800;
+}
+
+.day-holiday-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.15rem 0.35rem;
+  border-radius: var(--radius-sm);
+  background: #fee2e2;
+  color: #b91c1c;
+  border-left: 3px solid #dc2626;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 2px;
+}
+
+/* Eventos Escolares, Vacaciones y Exámenes */
+.calendar-day-cell.is-school-event {
+  background: #fafafa;
+}
+
+.day-school-event-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.15rem 0.35rem;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 2px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+}
+
+/* Sidebar */
+.calendar-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.sidebar-card {
+  background: #ffffff;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--slate-200);
+  padding: 1.5rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.sidebar-card h3 {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--slate-900);
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.stat-box {
+  background: var(--slate-50);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-md);
+  padding: 0.85rem;
+  text-align: center;
+}
+
+.stat-number {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--primary-600);
+  line-height: 1.2;
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  color: var(--slate-500);
+  font-weight: 600;
+}
+
+.subject-tags-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.subject-item-card {
+  background: var(--slate-50);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-md);
+  padding: 0.6rem 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.subject-item-name {
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--slate-800);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.subject-item-grades {
+  font-size: 0.75rem;
+  color: var(--slate-500);
+}
+
+.subject-item-grades span {
+  display: inline-block;
+  background: #ffffff;
+  border: 1px solid var(--slate-200);
+  border-radius: 4px;
+  padding: 0.05rem 0.35rem;
+  margin-right: 0.2rem;
+  font-weight: 600;
+  color: var(--primary-700);
+}
+
+/* ==========================================================================
+   VISTA: EDITOR DE PLANEACIÓN DIARIA
+   ========================================================================== */
+
+.planner-view-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.planner-top-bar {
+  background: #ffffff;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--slate-200);
+  box-shadow: var(--shadow-sm);
+  padding: 1.25rem 1.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.planner-date-title {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.btn-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--slate-300);
+  color: var(--slate-700);
+  transition: var(--transition-fast);
+  background: #ffffff;
+}
+
+.btn-back:hover {
+  background: var(--slate-100);
+  color: var(--slate-900);
+  border-color: var(--slate-400);
+}
+
+.date-info h2 {
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--slate-900);
+  text-transform: capitalize;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.academic-week-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: linear-gradient(135deg, var(--primary-50), var(--primary-100));
+  color: var(--primary-800);
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 0.25rem 0.75rem;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--primary-200);
+  letter-spacing: 0.02em;
+}
+
+.date-info p {
+  font-size: 0.85rem;
+  color: var(--slate-500);
+  margin-top: 0.2rem;
+}
+
+.planner-action-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  position: relative;
+  flex-wrap: wrap;
+}
+
+/* Dropdown Menu */
+.dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: #ffffff;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-xl);
+  min-width: 240px;
+  padding: 0.4rem;
+  z-index: 100;
+  display: none;
+  animation: fadeInDown 0.15s ease-out;
+}
+
+.dropdown-menu.show {
+  display: block;
+}
+
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.dropdown-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.7rem 0.9rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--slate-700);
+  border-radius: var(--radius-sm);
+  transition: var(--transition-fast);
+  text-align: left;
+}
+
+.dropdown-item:hover {
+  background: var(--primary-50);
+  color: var(--primary-700);
+}
+
+/* ==========================================================================
+   TABLA DE PLANEACIÓN DE CLASE (ESPACIADO CORREGIDO Y MEJORADO)
+   ========================================================================== */
+
+.planning-table-container {
+  background: #ffffff;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--slate-200);
+  box-shadow: var(--shadow-sm);
+  padding: 1.5rem;
+}
+
+.planning-table-header-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--slate-200);
+}
+
+.planning-table-header-info h3 {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--slate-800);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+}
+
+.planner-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.85rem;
+  min-width: 1320px; /* Asegura espacio amplio y fluido para todas las columnas */
+}
+
+.planner-table th {
+  background: var(--slate-100);
+  color: var(--slate-700);
+  font-weight: 700;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0.75rem 0.6rem;
+  text-align: left;
+  border-top: 1px solid var(--slate-200);
+  border-bottom: 2px solid var(--slate-300);
+  vertical-align: middle;
+}
+
+.planner-table th:first-child {
+  border-top-left-radius: var(--radius-sm);
+  border-left: 1px solid var(--slate-200);
+}
+
+.planner-table th:last-child {
+  border-top-right-radius: var(--radius-sm);
+  border-right: 1px solid var(--slate-200);
+}
+
+.planner-table td {
+  padding: 0.6rem 0.5rem;
+  border-bottom: 1px solid var(--slate-200);
+  border-right: 1px solid var(--slate-100);
+  vertical-align: top;
+  background: #ffffff;
+}
+
+.planner-table td:first-child {
+  border-left: 1px solid var(--slate-200);
+}
+
+.planner-table td:last-child {
+  border-right: 1px solid var(--slate-200);
+}
+
+.planner-table tr:hover td {
+  background-color: #fbfcfe;
+}
+
+/* Anchos y alineación específicos por columna optimizados */
+.col-date {
+  width: 95px;
+  min-width: 90px;
+}
+
+.col-day-num {
+  width: 75px;
+  min-width: 70px;
+}
+
+.col-day-name {
+  width: 85px;
+  min-width: 80px;
+}
+
+.col-subject-grade {
+  width: 155px;
+  min-width: 145px;
+}
+
+.col-dba {
+  width: 18%;
+  min-width: 220px;
+}
+
+.col-perf {
+  width: 18%;
+  min-width: 220px;
+}
+
+.col-topic {
+  width: 16%;
+  min-width: 200px;
+}
+
+.col-desc {
+  width: 26%;
+  min-width: 260px;
+}
+
+.col-action {
+  width: 75px;
+  min-width: 70px;
+  text-align: center;
+}
+
+/* Inputs y Selects */
+.table-input, .table-select, .table-textarea {
+  width: 100%;
+  border: 1px solid var(--slate-300);
+  border-radius: var(--radius-sm);
+  padding: 0.45rem 0.55rem;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  background: #ffffff;
+  color: var(--slate-800);
+  transition: var(--transition-fast);
+}
+
+.table-textarea {
+  resize: vertical;
+  min-height: 80px;
+  font-family: inherit;
+  word-break: normal;
+  overflow-wrap: break-word;
+}
+
+.table-input:focus, .table-select:focus, .table-textarea:focus {
+  outline: none;
+  border-color: var(--primary-500);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
+}
+
+.table-input-centered {
+  text-align: center;
+  font-weight: 600;
+}
+
+.table-input-readonly {
+  background: var(--slate-50);
+  color: var(--slate-700);
+  font-weight: 600;
+  border-color: var(--slate-200);
+  cursor: default;
+}
+
+.table-textarea {
+  min-height: 85px;
+  resize: vertical;
+  line-height: 1.4;
+}
+
+.table-textarea.desc-field {
+  min-height: 110px;
+}
+
+.btn-table-action {
+  color: var(--slate-400);
+  padding: 0.4rem;
+  border-radius: var(--radius-sm);
+  transition: var(--transition-fast);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-table-action:hover {
+  color: var(--rose-500);
+  background: var(--rose-50);
+}
+
+.table-footer-actions {
+  margin-top: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+/* ==========================================================================
+   SECCIÓN DE ANEXOS / ARCHIVOS ADJUNTOS (IMÁGENES Y PDFS)
+   ========================================================================== */
+
+.attachments-card {
+  background: #ffffff;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--slate-200);
+  box-shadow: var(--shadow-sm);
+  padding: 1.5rem;
+}
+
+.attachments-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.attachments-card-header h4 {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--slate-800);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.attachments-dropzone {
+  border: 2px dashed var(--slate-300);
+  border-radius: var(--radius-md);
+  padding: 1.25rem;
+  text-align: center;
+  background: var(--slate-50);
+  cursor: pointer;
+  transition: var(--transition-fast);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+}
+
+.attachments-dropzone:hover {
+  border-color: var(--primary-500);
+  background: var(--primary-50);
+}
+
+.attachments-dropzone svg {
+  color: var(--primary-600);
+}
+
+.attachments-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.85rem;
+  margin-top: 1rem;
+}
+
+.attachment-card {
+  background: #ffffff;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-md);
+  padding: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  transition: var(--transition-fast);
+}
+
+.attachment-card:hover {
+  border-color: var(--primary-300);
+  box-shadow: var(--shadow-md);
+}
+
+.attachment-preview-box {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-sm);
+  background: var(--slate-100);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.attachment-preview-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.attachment-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.attachment-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--slate-800);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.attachment-meta {
+  font-size: 0.7rem;
+  color: var(--slate-400);
+}
+
+.attachment-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.btn-attachment-action {
+  padding: 0.35rem;
+  color: var(--slate-400);
+  border-radius: var(--radius-sm);
+}
+
+.btn-attachment-action:hover {
+  color: var(--primary-600);
+  background: var(--slate-100);
+}
+
+.btn-attachment-action.delete:hover {
+  color: var(--rose-600);
+  background: var(--rose-50);
+}
+
+/* Observaciones Generales */
+.general-notes-card {
+  background: #ffffff;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--slate-200);
+  box-shadow: var(--shadow-sm);
+  padding: 1.5rem;
+}
+
+.general-notes-card h4 {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--slate-800);
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.notes-textarea {
+  width: 100%;
+  border: 1px solid var(--slate-300);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 1rem;
+  font-size: 0.9rem;
+  min-height: 90px;
+  resize: vertical;
+}
+
+/* ==========================================================================
+   MODALES (EDICIÓN DE CONTENIDOS, PERFIL, ANEXOS)
+   ========================================================================== */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1.5rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: var(--transition-normal);
+}
+
+.modal-backdrop.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.modal-card {
+  background: #ffffff;
+  border-radius: var(--radius-xl);
+  max-width: 680px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-xl);
+  border: 1px solid var(--slate-200);
+  transform: scale(0.96) translateY(10px);
+  transition: var(--transition-normal);
+}
+
+.modal-backdrop.active .modal-card {
+  transform: scale(1) translateY(0);
+}
+
+.modal-header {
+  padding: 1.5rem 1.75rem 1.25rem;
+  border-bottom: 1px solid var(--slate-200);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.modal-header h2 {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--slate-900);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-close-modal {
+  color: var(--slate-400);
+  font-size: 1.35rem;
+  padding: 0.25rem;
+  border-radius: var(--radius-sm);
+  transition: var(--transition-fast);
+}
+
+.btn-close-modal:hover {
+  color: var(--slate-700);
+  background: var(--slate-100);
+}
+
+.modal-body {
+  padding: 1.75rem;
+}
+
+/* ==========================================================================
+   PANEL DETALLADO DE ASIGNACIÓN ACADÉMICA (MATERIAS VS GRADOS AL FRENTE)
+   ========================================================================== */
+
+.matrix-config-card {
+  background: #ffffff;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.matrix-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 0.75rem;
+}
+
+.matrix-row {
+  background: var(--slate-50);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-md);
+  transition: var(--transition-fast);
+}
+
+.matrix-row:hover {
+  background: #ffffff;
+  box-shadow: var(--shadow-sm);
+  border-color: var(--primary-300);
+}
+
+.matrix-subject-cell {
+  padding: 1rem 1.25rem;
+  width: 32%;
+  min-width: 220px;
+  vertical-align: top;
+  border-top-left-radius: var(--radius-md);
+  border-bottom-left-radius: var(--radius-md);
+  border-left: 4px solid var(--primary-500);
+}
+
+.matrix-subject-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.matrix-subject-input {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--slate-900);
+  border: 1px solid var(--slate-300);
+  border-radius: var(--radius-sm);
+  padding: 0.35rem 0.6rem;
+  width: 100%;
+  background: #ffffff;
+}
+
+.matrix-subject-input:focus {
+  border-color: var(--primary-500);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
+}
+
+.matrix-subject-meta {
+  font-size: 0.75rem;
+  color: var(--slate-500);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.matrix-grades-cell {
+  padding: 1rem 1.25rem;
+  vertical-align: top;
+  border-top: 1px solid var(--slate-200);
+  border-bottom: 1px solid var(--slate-200);
+}
+
+.matrix-quick-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.btn-quick-grade {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.15rem 0.45rem;
+  border-radius: var(--radius-sm);
+  background: var(--slate-200);
+  color: var(--slate-700);
+  transition: var(--transition-fast);
+}
+
+.btn-quick-grade:hover {
+  background: var(--primary-100);
+  color: var(--primary-700);
+}
+
+.matrix-grades-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.matrix-grade-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  height: 32px;
+  padding: 0 0.5rem;
+  border-radius: var(--radius-md);
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--slate-600);
+  background: #ffffff;
+  border: 1px solid var(--slate-300);
+  cursor: pointer;
+  user-select: none;
+  transition: var(--transition-fast);
+}
+
+.matrix-grade-chip:hover {
+  border-color: var(--primary-400);
+  background: var(--primary-50);
+  color: var(--primary-700);
+}
+
+.matrix-grade-chip.active {
+  background: var(--primary-600);
+  color: #ffffff;
+  border-color: var(--primary-600);
+  box-shadow: 0 2px 4px rgba(79, 70, 229, 0.25);
+}
+
+.matrix-action-cell {
+  padding: 1rem;
+  text-align: center;
+  vertical-align: middle;
+  width: 60px;
+  border-top-right-radius: var(--radius-md);
+  border-bottom-right-radius: var(--radius-md);
+}
+
+/* Modal más espacioso y organizado */
+.modal-card.modal-large {
+  max-width: 900px;
+  width: 95%;
+}
+
+.modal-nav-tabs {
+  display: flex;
+  border-bottom: 2px solid var(--slate-200);
+  padding: 0 1.75rem;
+  background: var(--slate-50);
+  gap: 1.5rem;
+}
+
+.modal-nav-tab {
+  padding: 0.9rem 0.25rem;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--slate-500);
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: var(--transition-fast);
+}
+
+.modal-nav-tab:hover {
+  color: var(--slate-800);
+}
+
+.modal-nav-tab.active {
+  color: var(--primary-600);
+  border-bottom-color: var(--primary-600);
+}
+
+/* Lista de Materias con asignación de grados */
+.content-subject-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.content-subject-card {
+  background: var(--slate-50);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.content-subject-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.content-subject-name-input {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--slate-800);
+  border: 1px solid var(--slate-300);
+  border-radius: var(--radius-sm);
+  padding: 0.4rem 0.65rem;
+  background: #ffffff;
+  flex: 1;
+}
+
+.grades-checkbox-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.grade-pill-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.55rem;
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  border: 1px solid var(--slate-300);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--slate-700);
+  cursor: pointer;
+  user-select: none;
+  transition: var(--transition-fast);
+}
+
+.grade-pill-checkbox input {
+  accent-color: var(--primary-600);
+}
+
+.grade-pill-checkbox:has(input:checked) {
+  background: var(--primary-50);
+  border-color: var(--primary-300);
+  color: var(--primary-700);
+}
+
+.add-content-box {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.form-group {
+  margin-bottom: 1.25rem;
+}
+
+.form-label {
+  display: block;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--slate-700);
+  margin-bottom: 0.4rem;
+}
+
+.form-input, .form-select {
+  width: 100%;
+  border: 1px solid var(--slate-300);
+  border-radius: var(--radius-md);
+  padding: 0.65rem 0.85rem;
+  font-size: 0.9rem;
+  color: var(--slate-800);
+  background: #ffffff;
+  transition: var(--transition-fast);
+}
+
+.form-input:focus, .form-select:focus {
+  outline: none;
+  border-color: var(--primary-500);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
+}
+
+.form-helper {
+  font-size: 0.75rem;
+  color: var(--slate-400);
+  margin-top: 0.35rem;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.days-checkbox-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.day-checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: var(--slate-100);
+  padding: 0.45rem 0.75rem;
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--slate-700);
+  cursor: pointer;
+  border: 1px solid var(--slate-200);
+  user-select: none;
+  transition: var(--transition-fast);
+}
+
+.day-checkbox-label input {
+  accent-color: var(--primary-600);
+}
+
+.day-checkbox-label:has(input:checked) {
+  background: var(--primary-50);
+  color: var(--primary-700);
+  border-color: var(--primary-200);
+}
+
+.modal-footer {
+  padding: 1.25rem 1.75rem;
+  border-top: 1px solid var(--slate-200);
+  background: var(--slate-50);
+  border-bottom-left-radius: var(--radius-xl);
+  border-bottom-right-radius: var(--radius-xl);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+/* Modal Vista Previa de Imagen / Anexo */
+.preview-modal-image {
+  max-width: 100%;
+  max-height: 75vh;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto;
+  border-radius: var(--radius-md);
+}
+
+/* Toast */
+.toast-container {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  z-index: 2000;
+}
+
+.toast {
+  background: var(--slate-900);
+  color: #ffffff;
+  padding: 0.85rem 1.25rem;
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  font-weight: 500;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  animation: slideInUp 0.2s ease-out;
+}
+
+.toast.success { border-left: 4px solid var(--accent-500); }
+.toast.info { border-left: 4px solid var(--primary-500); }
+.toast.warning { border-left: 4px solid var(--amber-500); }
+
+@keyframes slideInUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ==========================================================================
+   HOJA OFICIAL DE PREPARADOR DE CLASES - COLEGIO HOGAR MADRE DE DIOS
+   ========================================================================== */
+
+.preparador-sheet-wrapper {
+  background: #ffffff;
+  color: #000000;
+  font-family: Arial, Helvetica, sans-serif;
+  padding: 1.5rem;
+  max-width: 1000px;
+  margin: 0 auto;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--slate-300);
+}
+
+.preparador-header-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 2px solid #000000;
+  margin-bottom: 12px;
+}
+
+.preparador-header-table td {
+  border: 1px solid #000000;
+  vertical-align: middle;
+}
+
+.header-logo-cell {
+  width: 14%;
+  text-align: center;
+  padding: 4px;
+}
+
+.header-title-cell {
+  width: 62%;
+  text-align: center;
+  padding: 6px 4px;
+}
+
+.header-title-cell .inst-name {
+  font-size: 13pt;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  margin-bottom: 4px;
+}
+
+.header-title-cell .doc-title {
+  border-top: 1px solid #000000;
+  padding-top: 5px;
+  font-size: 10.5pt;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.header-meta-cell {
+  width: 24%;
+  padding: 0 !important;
+  font-size: 8.5pt;
+}
+
+.header-meta-cell .meta-row {
+  border-bottom: 1px solid #000000;
+  padding: 3px 6px;
+}
+
+.header-meta-cell .meta-row:last-child {
+  border-bottom: none;
+  text-align: center;
+}
+
+/* Subencabezado y Tabla de Metadatos (Nuevo Formato Oficial 2x6) */
+.preparador-meta-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1.5px solid #000000;
+  margin: 10px 0 8px 0;
+}
+
+.preparador-meta-table td {
+  border: 1px solid #000000;
+  padding: 5px 6px;
+  font-size: 8.5pt;
+  vertical-align: middle;
+}
+
+.preparador-meta-table .meta-lbl {
+  font-weight: bold;
+  text-align: right;
+  background-color: #fafafa;
+  white-space: nowrap;
+}
+
+.preparador-meta-table .meta-val {
+  font-weight: normal;
+  text-align: left;
+}
+
+.preparador-meta-table .text-center {
+  text-align: center;
+}
+
+.preparador-meta-lines {
+  margin: 12px 0 10px 0;
+  font-size: 9pt;
+  line-height: 1.6;
+}
+
+.meta-line-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.meta-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.meta-field strong {
+  font-weight: bold;
+}
+
+.underlined-val {
+  border-bottom: 1px solid #000000;
+  padding: 0 6px;
+  font-weight: 600;
+  min-width: 80px;
+  display: inline-block;
+}
+
+/* Tabla Principal */
+.preparador-main-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1.5px solid #000000;
+  margin-top: 8px;
+}
+
+.preparador-main-table th, 
+.preparador-main-table td {
+  border: 1px solid #000000;
+  padding: 6px 4px;
+  font-size: 8.5pt;
+  vertical-align: top;
+}
+
+.preparador-main-table th {
+  background-color: #f5f5f5;
+  font-weight: bold;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.preparador-cell-p {
+  margin: 0 0 4px 0;
+  line-height: 1.3;
+}
+
+.preparador-cell-p:last-child {
+  margin-bottom: 0;
+}
+
+.preparador-phase-title {
+  margin: 6px 0 2px 0;
+  font-weight: bold;
+}
+
+/* Sección de Observaciones Estructurada (Nuevo Formato Oficial) */
+.preparador-obs-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1.5px solid #000000;
+  margin-top: 10px;
+}
+
+.preparador-obs-table td {
+  border: 1px solid #000000;
+  padding: 6px 8px;
+  vertical-align: top;
+}
+
+.preparador-obs-table .obs-lbl {
+  width: 15%;
+  font-size: 8.5pt;
+  font-weight: bold;
+  background-color: #fafafa;
+  white-space: nowrap;
+}
+
+.preparador-obs-table .obs-content-cell {
+  width: 85%;
+  font-size: 8.5pt;
+  min-height: 36px;
+}
+
+.preparador-obs-table .obs-text-line {
+  margin-bottom: 3px;
+  line-height: 1.3;
+}
+
+.preparador-obs-table .obs-empty-line {
+  min-height: 20px;
+}
+
+.preparador-obs-container {
+  margin-top: 14px;
+  font-size: 9pt;
+}
+
+.preparador-obs-container .obs-title {
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+.preparador-obs-container .obs-line {
+  border-bottom: 1px solid #000000;
+  min-height: 22px;
+  line-height: 22px;
+  padding-left: 4px;
+  font-size: 8.5pt;
+  margin-bottom: 4px;
+}
+
+/* Estilos de Impresión y Salto de Página Optimizado */
+#printable-report {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: letter landscape;
+    margin: 0.6cm 0.8cm 0.6cm 0.8cm;
+  }
+
+  html, body {
+    display: block !important;
+    height: auto !important;
+    min-height: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Ocultar absolutamente todo en el DOM excepto el reporte a imprimir */
+  body > *:not(#printable-report) {
+    display: none !important;
+  }
+
+  .app-container,
+  .main-header,
+  .calendar-page-layout,
+  #calendar-view,
+  #planner-view,
+  .planner-view-container,
+  .planner-top-bar,
+  .planning-table-container,
+  .attachments-card,
+  .general-notes-card,
+  .modal-backdrop,
+  .coordinator-modal-backdrop,
+  .notebook-modal-backdrop,
+  .toast-container {
+    display: none !important;
+  }
+
+  #printable-report {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .preparador-sheet-wrapper {
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  /* Encabezado Institucional compacto y sin cortes */
+  .preparador-header-table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    border: 1.5px solid #000000 !important;
+    margin-bottom: 5px !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+  }
+
+  .header-logo-cell {
+    width: 12% !important;
+    padding: 3px !important;
+    text-align: center !important;
+  }
+
+  .header-title-cell {
+    width: 64% !important;
+    text-align: center !important;
+    padding: 4px !important;
+  }
+
+  .header-title-cell .inst-name {
+    font-size: 11pt !important;
+    font-weight: 900 !important;
+    margin-bottom: 2px !important;
+  }
+
+  .header-title-cell .doc-title {
+    font-size: 9.5pt !important;
+    font-weight: 800 !important;
+    padding-top: 2px !important;
+  }
+
+  .header-meta-cell {
+    width: 24% !important;
+    font-size: 8pt !important;
+  }
+
+  .header-meta-cell .meta-row {
+    padding: 2px 4px !important;
+  }
+
+  /* Tabla de Metadatos (Nuevo Formato Oficial 2x6) */
+  .preparador-meta-table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    border: 1.5px solid #000000 !important;
+    margin: 4px 0 6px 0 !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .preparador-meta-table td {
+    border: 1px solid #000000 !important;
+    padding: 3px 5px !important;
+    font-size: 8pt !important;
+    vertical-align: middle !important;
+  }
+
+  .preparador-meta-table .meta-lbl {
+    font-weight: bold !important;
+    text-align: right !important;
+    background-color: #fafafa !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .preparador-meta-table .meta-val {
+    font-weight: normal !important;
+    text-align: left !important;
+  }
+
+  .preparador-meta-table .text-center {
+    text-align: center !important;
+  }
+
+  /* Subencabezado de Metadatos (Fallback) */
+  .preparador-meta-lines {
+    margin: 5px 0 !important;
+    font-size: 8.5pt !important;
+    line-height: 1.35 !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+  }
+
+  .meta-line-row {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    gap: 0.75rem !important;
+  }
+
+  .underlined-val {
+    border-bottom: 1px solid #000000 !important;
+    padding: 0 4px !important;
+    font-weight: 600 !important;
+    min-width: 60px !important;
+    display: inline-block !important;
+  }
+
+  /* Tabla Principal de Clases con paginación natural y fragmentación continua */
+  .preparador-main-table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    border: 1.5px solid #000000 !important;
+    margin-top: 4px !important;
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+  }
+
+  .preparador-main-table thead {
+    display: table-header-group !important; /* Encabezado de columnas visible y repetido limpiamente al inicio de cada página */
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    page-break-after: auto !important;
+    break-after: auto !important;
+  }
+
+  .preparador-main-table tbody {
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+  }
+
+  .preparador-main-table tr {
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+    page-break-after: auto !important;
+    break-after: auto !important;
+  }
+
+  .preparador-main-table td {
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+    padding: 4px 4px !important;
+    font-size: 8pt !important;
+    line-height: 1.25 !important;
+  }
+
+  .preparador-main-table th {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    padding: 4px 4px !important;
+    font-size: 8pt !important;
+    line-height: 1.25 !important;
+    background-color: #f5f5f5 !important;
+    font-weight: bold !important;
+    text-align: center !important;
+    vertical-align: middle !important;
+  }
+
+  /* Párrafos estructurados con flujo continuo que se fragmentan naturalmente entre páginas */
+  .preparador-cell-p {
+    margin: 0 0 3px 0 !important;
+    line-height: 1.25 !important;
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+    orphans: 2 !important;
+    widows: 2 !important;
+  }
+
+  .preparador-cell-p:last-child {
+    margin-bottom: 0 !important;
+  }
+
+  /* Títulos y subtítulos de fase pedagógica */
+  .preparador-phase-title {
+    margin: 4px 0 2px 0 !important;
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+    page-break-after: auto !important;
+    break-after: auto !important;
+    orphans: 2 !important;
+    widows: 2 !important;
+  }
+
+  /* Sección de Observaciones Estructurada (Nuevo Formato Oficial) */
+  .preparador-obs-table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    border: 1.5px solid #000000 !important;
+    margin-top: 6px !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .preparador-obs-table td {
+    border: 1px solid #000000 !important;
+    padding: 4px 6px !important;
+    font-size: 8pt !important;
+    vertical-align: top !important;
+  }
+
+  .preparador-obs-table .obs-lbl {
+    width: 15% !important;
+    font-weight: bold !important;
+    background-color: #fafafa !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .preparador-obs-table .obs-content-cell {
+    width: 85% !important;
+    font-size: 8pt !important;
+  }
+
+  .preparador-obs-table .obs-text-line {
+    margin-bottom: 2px !important;
+    line-height: 1.25 !important;
+  }
+
+  /* Sección de Observaciones reglada (Fallback) */
+  .preparador-obs-container {
+    margin-top: 6px !important;
+    font-size: 8.5pt !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .preparador-obs-container .obs-title {
+    font-weight: bold !important;
+    margin-bottom: 2px !important;
+  }
+
+  .preparador-obs-container .obs-line {
+    border-bottom: 1px solid #000000 !important;
+    min-height: 16px !important;
+    line-height: 16px !important;
+    padding-left: 4px !important;
+    margin-bottom: 2px !important;
+  }
+}
+
+/* =========================================================================
+   ESTILOS DEL MÓDULO DE CUADERNO / GUÍA PEDAGÓGICA DETALLADA (TIPO WORD)
+   ========================================================================= */
+
+.notebook-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 1rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease, backdrop-filter 0.25s ease;
+}
+
+.notebook-modal-backdrop.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.notebook-modal-card {
+  width: 95vw;
+  max-width: 1120px;
+  height: 94vh;
+  max-height: 94vh;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  background: #ffffff;
+  border-radius: var(--radius-xl);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--slate-200);
+  transform: scale(0.98);
+  transition: transform 0.25s ease;
+}
+
+.notebook-modal-backdrop.active .notebook-modal-card {
+  transform: scale(1);
+}
+
+.notebook-modal-header {
+  padding: 0.85rem 1.5rem;
+  background: #ffffff;
+  border-bottom: 1px solid var(--slate-200);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.notebook-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.notebook-header-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: var(--primary-100);
+  color: var(--primary-700);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.notebook-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+/* Barra de Herramientas Estilo Word */
+.notebook-word-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 0.5rem 1.25rem;
+  background: #f8fafc;
+  border-bottom: 1px solid var(--slate-200);
+  user-select: none;
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 22px;
+  background: var(--slate-300);
+  margin: 0 0.35rem;
+}
+
+.toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.35rem 0.6rem;
+  min-width: 28px;
+  height: 28px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--slate-700);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.toolbar-btn:hover {
+  background: var(--slate-200);
+  color: var(--slate-900);
+}
+
+.toolbar-btn.color-label {
+  cursor: pointer;
+}
+
+.toolbar-select {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.82rem;
+  border: 1px solid var(--slate-300);
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  color: var(--slate-700);
+  height: 28px;
+  outline: none;
+  cursor: pointer;
+}
+
+.toolbar-select:hover, .toolbar-select:focus {
+  border-color: var(--slate-400);
+}
+
+.toolbar-select.font-size-select {
+  min-width: 96px;
+}
+
+
+/* ==========================================================================
+   VISTA DE PÁGINA COMPLETA DE CUADERNO / GUÍA PEDAGÓGICA (NO MODAL)
+   ========================================================================== */
+.notebook-fullpage-layout {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #f1f5f9;
+}
+
+body.notebook-mode .app-container {
+  padding-top: 0;
+  padding-left: 0;
+  padding-right: 0;
+  max-width: 100%;
+  width: 100%;
+}
+
+/* Contenedor Superior Sticky Unificado: Encabezado y Barra de Herramientas siempre visibles al hacer scroll */
+.notebook-sticky-header-wrapper {
+  position: sticky;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: #ffffff;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.07);
+  border-bottom: 1px solid var(--slate-200);
+  transition: all 0.2s ease;
+}
+
+.notebook-fullpage-header {
+  position: relative;
+  z-index: 2;
+  padding: 0.6rem 1.25rem;
+  background: #ffffff;
+  border-bottom: 1px solid var(--slate-200);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  transition: all 0.2s ease;
+}
+
+.notebook-sticky-header-wrapper.is-compact .notebook-fullpage-header {
+  padding: 0.35rem 1rem;
+}
+
+.notebook-sticky-header-wrapper.is-compact .notebook-header-icon,
+.notebook-sticky-header-wrapper.is-compact #notebook-page-subtitle {
+  display: none !important;
+}
+
+.notebook-fullpage-header .notebook-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.notebook-fullpage-header .notebook-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.notebook-sticky-toolbar {
+  /* Mantenido por compatibilidad */
+}
+
+.notebook-fullpage-container {
+  flex: 1;
+  background: #e2e8f0;
+  overflow-y: visible;
+  padding: 2rem 1rem 5rem;
+  display: flex;
+  justify-content: center;
+}
+
+.notebook-fullpage-container .notebook-page-canvas {
+  width: 100%;
+  max-width: 880px;
+  min-height: 1150px;
+  background: #ffffff;
+  border-radius: 4px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12), 0 0 1px rgba(0, 0, 0, 0.15);
+  padding: 3.5rem 4rem;
+  box-sizing: border-box;
+}
+
+.badge-autosave {
+  font-size: 0.75rem;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+/* Lienzo de la Página de Cuaderno */
+.notebook-canvas-scroll-container {
+  flex: 1;
+  background: #e2e8f0;
+  overflow-y: auto;
+  padding: 2rem 1.5rem 4rem;
+  display: flex;
+  justify-content: center;
+}
+
+.notebook-page-canvas {
+  width: 100%;
+  max-width: 840px;
+  background: #ffffff;
+  border-radius: 4px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12), 0 0 1px rgba(0,0,0,0.1);
+  padding: 3rem 3.5rem;
+  min-height: 950px;
+  box-sizing: border-box;
+}
+
+.notebook-institutional-header {
+  margin-bottom: 1.5rem;
+}
+
+.notebook-editable-header-field {
+  outline: none;
+  min-height: 28px;
+  padding: 6px 10px;
+  margin-top: 4px;
+  border-radius: 6px;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  color: var(--slate-800);
+  font-size: 0.88rem;
+  line-height: 1.45;
+  transition: all 0.2s ease;
+  cursor: text;
+}
+
+.notebook-editable-header-field:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+.notebook-editable-header-field:focus {
+  background: #ffffff;
+  border-color: var(--primary-500);
+  border-style: solid;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.notebook-editable-header-field:empty:before {
+  content: attr(placeholder);
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.notebook-editable-content {
+  outline: none;
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.65;
+  color: var(--slate-800);
+  min-height: 600px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px dashed transparent;
+  transition: border-color 0.2s ease;
+  cursor: text;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.notebook-editable-content:hover {
+  border-color: #e2e8f0;
+}
+
+.notebook-editable-content:focus {
+  border-color: #cbd5e1;
+}
+
+.notebook-editable-content:empty:before {
+  content: "Haz clic aquí para escribir el contenido de la clase, preguntas dinamizadoras, actividades, talleres o tareas...";
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.notebook-editable-content h1 {
+  font-size: 1.45rem;
+  color: var(--primary-900);
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  padding-bottom: 2px;
+}
+
+.notebook-editable-content h2 {
+  font-size: 1.2rem;
+  color: var(--primary-800);
+  margin-top: 1.25rem;
+  margin-bottom: 0.4rem;
+  padding-bottom: 2px;
+}
+
+.notebook-editable-content h3 {
+  font-size: 1.05rem;
+  color: var(--slate-800);
+  margin-top: 1rem;
+  margin-bottom: 0.3rem;
+}
+
+.notebook-editable-content p {
+  margin: 0.5rem 0;
+  min-height: 1.5em; /* Asegura que los renglones vacíos <p><br></p> tengan altura visible garantizada */
+}
+
+.notebook-editable-content p:empty {
+  min-height: 1.5em;
+}
+
+.notebook-editable-content ul,
+.notebook-editable-content ol {
+  padding-left: 1.5rem;
+  margin: 0.5rem 0;
+}
+
+.notebook-editable-content li {
+  margin-bottom: 0.3rem;
+}
+
+/* Cuadros Didácticos / Callouts */
+.notebook-callout {
+  border-radius: var(--radius-md);
+  padding: 0.85rem 1.15rem;
+  margin: 1rem 0;
+}
+
+.notebook-callout p {
+  margin: 0.3rem 0 0;
+}
+
+.notebook-callout.concept {
+  background: #eff6ff;
+  border-left: 4px solid #3b82f6;
+  color: #1e40af;
+}
+
+.notebook-callout.activity {
+  background: #f0fdf4;
+  border-left: 4px solid #22c55e;
+  color: #166534;
+}
+
+.notebook-callout.homework {
+  background: #fffbeb;
+  border-left: 4px solid #f59e0b;
+  color: #92400e;
+}
+
+/* Tablas e Imágenes Incrustadas */
+.notebook-embedded-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  font-size: 0.92rem;
+}
+
+.notebook-embedded-table th,
+.notebook-embedded-table td {
+  border: 1px solid var(--slate-300);
+  padding: 7px 10px;
+}
+
+.notebook-embedded-table th {
+  background: var(--slate-100);
+  color: var(--slate-900);
+  font-weight: 700;
+}
+
+.notebook-embedded-img {
+  max-width: 90%;
+  height: auto;
+  border-radius: var(--radius-md);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  display: block;
+  margin: 0.5rem auto;
+}
+
+/* =========================================================================
+   PAGINACIÓN EN HOJAS SEPARADAS TIPO WORD Y BLOQUES DE 2 COLUMNAS
+   ========================================================================= */
+
+/* Contenedor principal de hojas tipo Word */
+.notebook-pages-wrapper {
+  width: 100%;
+  max-width: 850px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+}
+
+/* Hoja física individual tamaño Carta calibrada con impresión */
+.notebook-page-sheet {
+  width: 100%;
+  max-width: 850px;
+  height: 1040px;
+  max-height: 1040px;
+  background: #ffffff;
+  border-radius: 2px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.1), 0 0 1px rgba(0, 0, 0, 0.2);
+  padding: 2.8rem 3.5rem 2.2rem 3.5rem;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  transition: box-shadow 0.2s ease;
+  overflow: hidden; /* Garantiza contención limpia de página tipo Word/Docs */
+}
+
+.notebook-page-sheet:focus-within {
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.16), 0 0 0 1px var(--primary-400);
+}
+
+.notebook-page-sheet .notebook-editable-content {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden; /* Evita que el texto desborde visualmente sobre el pie de página */
+  box-sizing: border-box;
+  outline: none;
+}
+
+/* Encabezado discreto de continuación en hojas 2, 3, etc. */
+.notebook-sheet-cont-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 2px solid var(--primary-200);
+  padding-bottom: 0.5rem;
+  margin-bottom: 1.5rem;
+  font-size: 0.84rem;
+  color: var(--slate-600);
+  user-select: none;
+}
+
+.notebook-sheet-cont-header .cont-title {
+  font-weight: 800;
+  color: var(--primary-800);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.notebook-sheet-cont-header .cont-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.notebook-sheet-cont-header .btn-remove-sheet {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.notebook-sheet-cont-header .btn-remove-sheet:hover {
+  background: #ef4444;
+  color: #ffffff;
+  border-color: #dc2626;
+}
+
+/* Pie de página de cada hoja con numeración */
+.notebook-sheet-footer {
+  margin-top: auto;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--slate-200);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.8rem;
+  color: var(--slate-400);
+  user-select: none;
+  background: #ffffff;
+  position: relative;
+  z-index: 5;
+}
+
+.notebook-sheet-footer .sheet-institution-tag {
+  font-weight: 500;
+  color: var(--slate-500);
+}
+
+.notebook-sheet-footer .sheet-page-number {
+  font-weight: 700;
+  color: var(--primary-700);
+}
+
+/* Divisor visual de salto de página entre hojas */
+.notebook-page-break-indicator {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 1.75rem 0;
+  position: relative;
+  user-select: none;
+}
+
+.notebook-page-break-indicator::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: repeating-linear-gradient(90deg, #94a3b8 0, #94a3b8 6px, transparent 6px, transparent 12px);
+}
+
+.notebook-page-break-indicator .page-break-tag {
+  position: relative;
+  background: #e2e8f0;
+  color: #334155;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 4px 14px;
+  border-radius: 20px;
+  border: 1px solid #cbd5e1;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.06);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  user-select: none;
+}
+
+/* Barra inferior para agregar nueva hoja */
+.notebook-add-sheet-bar {
+  margin-top: 2rem;
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  user-select: none;
+}
+
+/* Bloques de organización en 2 columnas (para optimizar espacio) */
+.notebook-two-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin: 1rem 0;
+  padding: 0.85rem 1rem;
+  border-radius: 6px;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  transition: all 0.2s ease;
+}
+
+.notebook-two-columns:hover,
+.notebook-two-columns:focus-within {
+  border-color: var(--primary-400);
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.08);
+}
+
+.notebook-col {
+  min-height: 50px;
+  outline: none;
+  padding: 2px 4px;
+}
+
+.notebook-col p:first-child {
+  margin-top: 0;
+}
+
+/* Flujo automático de texto / listas en 2 columnas (Estilo Word / Google Docs) */
+.notebook-columns-flow {
+  column-count: 2;
+  column-gap: 2rem;
+  margin: 0.75rem 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+}
+
+.notebook-columns-flow ol,
+.notebook-columns-flow ul {
+  padding-left: 1.25rem;
+  margin: 0.25rem 0;
+}
+
+/* Estilos de impresión para hojas y 2 columnas */
+@media print {
+  .notebook-fullpage-container {
+    background: transparent !important;
+    padding: 0 !important;
+  }
+
+  .notebook-pages-wrapper {
+    max-width: 100% !important;
+  }
+
+  .notebook-page-sheet {
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    min-height: auto !important;
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+
+  .notebook-page-sheet:last-child {
+    page-break-after: auto !important;
+    break-after: auto !important;
+  }
+
+  .notebook-page-break-indicator,
+  .notebook-add-sheet-bar,
+  .btn-remove-sheet {
+    display: none !important;
+  }
+
+  .notebook-two-columns {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 1.5rem !important;
+    border: none !important;
+    background: transparent !important;
+    padding: 0 !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .notebook-columns-flow {
+    column-count: 2 !important;
+    column-gap: 2rem !important;
+    border: none !important;
+    background: transparent !important;
+    padding: 0 !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+}
+
+/* =========================================================================
+   EXTENSIÓN DE PROCESADOR DE TEXTO (WORD / DOCS) Y BARRA DE ESTADO
+   ========================================================================= */
+
+.toolbar-select.font-family-select {
+  max-width: 140px;
+}
+
+.toolbar-select.line-spacing-select {
+  max-width: 110px;
+}
+
+.notebook-editable-content a {
+  color: var(--primary-600);
+  text-decoration: underline;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.notebook-editable-content a:hover {
+  color: var(--primary-800);
+}
+
+.notebook-editable-content hr {
+  border: 0;
+  border-top: 2px dashed #cbd5e1;
+  margin: 1.25rem 0;
+  width: 100%;
+}
+
+.notebook-editable-content sub,
+.notebook-editable-content sup {
+  font-size: 75%;
+  line-height: 0;
+  position: relative;
+  vertical-align: baseline;
+}
+
+.notebook-editable-content sup {
+  top: -0.5em;
+}
+
+.notebook-editable-content sub {
+  bottom: -0.25em;
+}
+
+/* Cuadrícula de Símbolos Matemáticos y Científicos */
+.notebook-symbols-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+  padding: 8px;
+  min-width: 240px;
+  max-height: 280px;
+  overflow-y: auto;
+  background: #ffffff;
+  border-radius: var(--radius-md);
+  box-shadow: 0 10px 25px rgba(0,0,0,0.12);
+  border: 1px solid var(--slate-200);
+}
+
+.symbol-btn {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 6px 2px;
+  font-size: 1.05rem;
+  font-family: 'Segoe UI Symbol', 'Cambria Math', var(--font-sans);
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.15s ease;
+}
+
+.symbol-btn:hover {
+  background: var(--primary-100);
+  border-color: var(--primary-300);
+  color: var(--primary-800);
+  transform: scale(1.1);
+}
+
+/* Menú de herramientas de tablas */
+.notebook-table-menu {
+  min-width: 200px;
+  padding: 6px;
+  background: #ffffff;
+  border-radius: var(--radius-md);
+  box-shadow: 0 10px 25px rgba(0,0,0,0.12);
+  border: 1px solid var(--slate-200);
+}
+
+.notebook-table-menu button {
+  width: 100%;
+  text-align: left;
+  padding: 6px 10px;
+  font-size: 0.8rem;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--slate-700);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.notebook-table-menu button:hover {
+  background: var(--primary-50);
+  color: var(--primary-800);
+}
+
+/* Panel Flotante de Buscar y Reemplazar (Ctrl + F) */
+.notebook-find-replace-panel {
+  position: fixed;
+  top: 95px;
+  right: 25px;
+  background: #ffffff;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+  border: 1px solid var(--slate-300);
+  padding: 0.85rem 1rem;
+  z-index: 500;
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  animation: fadeInDown 0.2s ease;
+}
+
+.notebook-find-replace-panel .find-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--slate-800);
+  border-bottom: 1px solid var(--slate-100);
+  padding-bottom: 0.4rem;
+}
+
+.notebook-find-replace-panel .find-header .btn-close-find {
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  color: var(--slate-400);
+  line-height: 1;
+}
+
+.notebook-find-replace-panel .find-header .btn-close-find:hover {
+  color: var(--slate-800);
+}
+
+.notebook-find-replace-panel .find-row {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.notebook-find-replace-panel input {
+  flex: 1;
+  font-size: 0.82rem;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--slate-300);
+  border-radius: var(--radius-sm);
+  outline: none;
+}
+
+.notebook-find-replace-panel input:focus {
+  border-color: var(--primary-500);
+}
+
+/* Barra de Estado Inferior Tipo Word / Google Docs */
+.notebook-status-bar {
+  position: sticky;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 90;
+  background: #ffffff;
+  border-top: 1px solid var(--slate-200);
+  padding: 0.4rem 1.25rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.78rem;
+  color: var(--slate-600);
+  user-select: none;
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.03);
+}
+
+.notebook-status-bar .status-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 500;
+}
+
+.notebook-status-bar .status-sep {
+  color: var(--slate-300);
+}
+
+.notebook-status-bar .status-center {
+  display: flex;
+  align-items: center;
+  font-size: 0.74rem;
+  color: var(--slate-400);
+}
+
+.notebook-status-bar .status-right {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.notebook-status-bar .status-zoom-select {
+  font-size: 0.78rem;
+  padding: 2px 6px;
+  border: 1px solid var(--slate-300);
+  border-radius: 4px;
+  background: #f8fafc;
+  color: var(--slate-700);
+  cursor: pointer;
+  outline: none;
+}
+
+.notebook-pages-wrapper.zoom-75 {
+  transform: scale(0.75);
+  transform-origin: top center;
+  margin-bottom: -250px;
+}
+
+.notebook-pages-wrapper.zoom-90 {
+  transform: scale(0.90);
+  transform-origin: top center;
+  margin-bottom: -100px;
+}
+
+.notebook-pages-wrapper.zoom-100 {
+  transform: none;
+}
+
+.notebook-pages-wrapper.zoom-115 {
+  transform: scale(1.15);
+  transform-origin: top center;
+  margin-bottom: 150px;
+}
+
+.notebook-pages-wrapper.zoom-125 {
+  transform: scale(1.25);
+  transform-origin: top center;
+  margin-bottom: 250px;
+}
+
+/* =========================================================================
+   ESTILOS DE ROLES, GESTIÓN DE USUARIOS Y PANEL DE COORDINACIÓN ACADÉMICA
+   ========================================================================= */
+
+/* Badges de Roles */
+.badge-role-admin {
+  background: #fdf4ff;
+  color: #86198f;
+  border: 1px solid #f0abfc;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-weight: 700;
+  font-size: 0.72rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.badge-role-coordinator {
+  background: #eef2ff;
+  color: #3730a3;
+  border: 1px solid #c7d2fe;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-weight: 700;
+  font-size: 0.72rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.badge-role-teacher {
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-weight: 700;
+  font-size: 0.72rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+/* Botón Especial de Coordinación en el Header */
+.btn-coord-header {
+  background: linear-gradient(135deg, #4338ca 0%, #3b82f6 100%) !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  border: none !important;
+  box-shadow: 0 2px 8px rgba(67, 56, 202, 0.3) !important;
+}
+
+.btn-coord-header:hover {
+  background: linear-gradient(135deg, #3730a3 0%, #2563eb 100%) !important;
+  transform: translateY(-1px);
+}
+
+/* Menú Desplegable Selector de Usuario */
+.user-switcher-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 320px;
+  z-index: 500;
+  margin-top: 8px;
+  background: #ffffff;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--slate-200);
+}
+
+.active-user-item {
+  background: #f1f5f9;
+  border-left: 3px solid var(--primary-600);
+}
+
+.user-item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.85rem 1rem;
+  background: #ffffff;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-md);
+  transition: var(--transition-fast);
+}
+
+.user-item-row:hover {
+  border-color: var(--primary-300);
+  box-shadow: var(--shadow-sm);
+}
+
+.user-item-row.is-active-user {
+  background: #f8fafc;
+  border-color: var(--primary-500);
+}
+
+/* Modal y Layout del Panel de Coordinación */
+.coordinator-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2100;
+  padding: 1rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.25s ease;
+}
+
+.coordinator-modal-backdrop.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.coordinator-modal-card {
+  width: 95vw;
+  max-width: 1100px;
+  height: 92vh;
+  max-height: 92vh;
+  background: #ffffff;
+  border-radius: var(--radius-xl);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--slate-200);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.coordinator-modal-header {
+  padding: 1rem 1.5rem;
+  background: #ffffff;
+  border-bottom: 1px solid var(--slate-200);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.coordinator-icon-badge {
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius-md);
+  background: #eef2ff;
+  color: #4338ca;
+  font-size: 1.3rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.coordinator-dashboard-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.5rem;
+  background: #f8fafc;
+}
+
+/* Tarjetas de Métricas Estadísticas */
+.coord-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.coord-stat-card {
+  background: #ffffff;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-lg);
+  padding: 1rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  box-shadow: var(--shadow-xs);
+}
+
+.stat-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  font-size: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stat-value {
+  font-size: 1.45rem;
+  font-weight: 800;
+  color: var(--slate-900);
+  line-height: 1.2;
+}
+
+.stat-label {
+  font-size: 0.78rem;
+  color: var(--slate-500);
+  font-weight: 600;
+}
+
+/* Tarjetas de Docentes en Coordinación */
+.coord-teachers-list {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.coord-teacher-card {
+  background: #ffffff;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem 1.5rem;
+  box-shadow: var(--shadow-xs);
+}
+
+.coord-teacher-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  border-bottom: 1px solid var(--slate-100);
+  padding-bottom: 0.85rem;
+  margin-bottom: 0.85rem;
+}
+
+/* Tabla de Fechas del Docente */
+.coord-dates-table-container {
+  overflow-x: auto;
+}
+
+.coord-dates-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.coord-dates-table th {
+  background: var(--slate-50);
+  color: var(--slate-700);
+  font-weight: 700;
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--slate-200);
+}
+
+.coord-dates-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--slate-100);
+  vertical-align: middle;
+}
+
+.coord-dates-table tr:hover td {
+  background-color: #fbfcfe;
+}
+
+/* Badges de Estado de Revisión */
+.badge-review {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.badge-review.approved {
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.badge-review.notes {
+  background: #fffbeb;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+.badge-review.pending {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+}
+
+.badge-review.warning {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+/* Botones de Acción de Coordinación */
+.btn-coord-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 3px 7px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.btn-coord-action.view {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: #bfdbfe;
+}
+.btn-coord-action.view:hover { background: #dbeafe; }
+
+.btn-coord-action.docx {
+  background: #eff6ff;
+  color: #2563eb;
+  border-color: #bfdbfe;
+}
+.btn-coord-action.docx:hover { background: #dbeafe; }
+
+.btn-coord-action.pdf {
+  background: #fef2f2;
+  color: #b91c1c;
+  border-color: #fecaca;
+}
+.btn-coord-action.pdf:hover { background: #fee2e2; }
+
+.btn-coord-action.stamp {
+  background: #f0fdf4;
+  color: #15803d;
+  border-color: #bbf7d0;
+}
+.btn-coord-action.stamp:hover { background: #dcfce7; }
+
+/* ==========================================================================
+   CENTRO DE DESCARGAS (PESTAÑAS Y TARJETAS)
+   ========================================================================== */
+.download-modal-tabs {
+  display: flex;
+  gap: 6px;
+  border-bottom: 2px solid var(--slate-200);
+  margin-bottom: 1.25rem;
+  overflow-x: auto;
+}
+
+.download-tab-btn {
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  padding: 0.5rem 1rem;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--slate-600);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.download-tab-btn:hover {
+  color: var(--primary-700);
+  background: var(--slate-50);
+}
+
+.download-tab-btn.active {
+  color: var(--primary-700);
+  border-bottom-color: var(--primary-600);
+  background: var(--primary-50);
+  border-radius: 6px 6px 0 0;
+}
+
+/* ==========================================================================
+   OBSERVACIONES Y ANEXOS POR CLASE EN EL PLANEADOR
+   ========================================================================== */
+.class-obs-box {
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.class-obs-box:focus-within {
+  border-color: #f59e0b !important;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.15);
+}
+
+.btn-class-att {
+  transition: all 0.15s ease;
+}
+
+.btn-class-att:hover {
+  background: #e0e7ff !important;
+  border-color: #a5b4fc !important;
+  transform: translateY(-1px);
+}
+

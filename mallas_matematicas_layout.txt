@@ -1,0 +1,1103 @@
+FILE: Mallas/Mallas Manuel 2026 -2027 Matemáticas.pdf
+TOTAL PAGES: 24
+
+
+======================================================================
+PAGE 1
+======================================================================
+                                                                          Mallas área de matemáticas preescolar a once.
+LÓGICA MATEMÁTICA GRADO SEXTO
+
+
+
+ GRADO:  SEXTO               PERÍODO: I                 INTENSIDAD         HORARIA:         1   DOCENTE:
+                                                        hora                                        -    Manuel Alejandro Muñoz Palomino
+ OBJETIVO DEL GRADO:
+              -   Desarrollar   las   habilidades    matemáticas     necesarias     para   resolver   problemas     de  manera     efectiva,  utilizando   diferentes   estrategias   y
+                  herramientas.
+ D.B.A. PARA TODOS LOS PERÍODOS:
+      ●    DBA 1: Comprende y utiliza los números enteros y racionales (fracciones y decimales) con sus operaciones en diversos contextos.
+      ●    DBA 8: Plantea y resuelve ecuaciones, describiendo verbalmente y representando situaciones de cambio cuantitativo.
+      ●    DBA 9: Opera sobre números desconocidos para resolver problemas con cantidades inciertas usando propiedades de las operaciones.
+      ●    DBA 10: Interpreta información estadística de diversas fuentes, analizándola para plantear hipótesis.
+      ●    DBA 11: Compara y clasifica eventos de experimentos aleatorios y calcula probabilidad simple mediante la regla de Laplace.
+ COMPONENTES Y ESTÁNDARES
+
+ COMPETENCIAS MATEMÁTICAS:
+ Razonamiento y demostración: Razona y demuestra los procedimientos que utiliza para resolver problemas matemáticos.
+ Modelación: Modela situaciones de la vida real con objetos matemáticos.
+ Comunicación: Comunica sus ideas matemáticas de manera clara y efectiva.
+ Resolución de problemas: Resuelve problemas matemáticos de manera creativa e innovadora.
+ PENSAMIENTO NUMÉRICO Y SISTEMAS NUMÉRICOS:
+ El Pensamiento      Numérico y los Sistemas       Numéricos     están concevidos      de  tal manera   que   los estudiantes    avancen hacia     la construcción del número, su
+ representación, las relaciones que existen entre ellos, así como las operaciones que se efectúan en cada uno de los sistemas numéricos.
+ PENSAMIENTO ESPACIAL Y SISTEMAS GEOMÉTRICOS:
+ Conjunto de procesos cognitivos con los que se construyen y manipulan las representaciones mentales de objetos del espacio, así como sus relaciones y sus
+ transformaciones.
+ PENSAMIENTO MÉTRICO Y SISTEMAS DE MEDIDAS:
+ Hace referencia a la comprensión general que tiene una persona sobre las magnitudes y las cantidades, su medición y el uso flexible de lo sistemas métricos
+ o de medidas en diferentes situaciones.
+ PENSAMIENTO ALEATORIO Y SISTEMAS DE DATOS:
+ También    llamado   probabilístico o   estocástico. “Ayuda     a tomar    decisiones en situaciones      de  incertidumbre,    de  azar,  de  riesgo, o  ambigüedad por falta de
+ información    confiable,  en  las  que  no   es  posible  predecir   con  seguridad    lo que   va  a  pasar,  éste  se  apoya    en  la teoría  de  probabilidad, la estadística:
+ descriptiva, inferencial y combinatoria.” Doc. 3E.B.C, MEN, 2006.
+ PENSAMIENTO VARIACIONAL Y SISTEMAS ALGEBRÁICOS Y ANALÍTICOS:
+
+
+
+                                                                                                                                                                                                          1
+======================================================================
+PAGE 2
+======================================================================
+                                                                           Mallas área de matemáticas preescolar a once.
+ Se   define  con   la  percepción,    la identificación   y  la caracterización     de  la variación   y  el cambio    en  diferentes   contextos,    así  como   con   su  descripción,
+ modelación y representación en distintos sistemas o registros simbólicos, ya sean verbales, icónicos, gráficos y algebraicos.
+
+ CONVIVENCIA Y PAZ.
+     ●    Comprendo la importancia de valores básicos de la convivencia ciudadana como la solidaridad, el cuidado, el buen trato y el respeto por mí mismo y
+          por los demás, y los practico en mi contexto cercano (hogar, salón de clase, descanso, etc.).
+     ●    Reconozco que las acciones se relacionan con las emociones y que puedo aprender a manejar mis emociones para no hacer daño a otras personas.
+ CONVIVENCIA Y PAZ.
+     ●    Comprendo la importancia de valores básicos de la convivencia ciudadana como la solidaridad, el cuidado, el buen trato y el respeto por mí mismo y
+          por los demás, y los practico en mi contexto cercano (hogar, salón de clase, descanso, etc.).
+     ●    Comprendo que las normas ayudan a promover el buen trato y evitar el maltrato en el juego y en la vida escolar.
+ PARTICIPACIÓN Y RESPONSABILIDAD DEMOCRÁTICA.
+     ●    Participo,  en  mi  contexto    cercano   (con   mi  familia  y  compañeros),     en  la construcción    de  acuerdos básicos sobre normas           para el logro de metas
+          comunes y las cumplo.
+     ●    Comprendo qué es una norma y qué es un acuerdo.
+ PLURALIDAD, IDENTIDAD PLURALIDAD, IDENTIDAD Y VALORACIÓN DE LAS DIFERENCIAS.
+      ●   Identifico y respeto    las diferencias    y semejanzas entre       los demás y yo, y rechazo situaciones de exclusión o discriminación en mi familia, con mis
+          amigas y amigos y en mi salón.
+     ●    Valoro las semejanzas y diferencias de gente cercana. (¿Qué tal si me detengo a escuchar sus historias de vida?).
+ PRIMER PERIODO:
+
+ PREGUNTA                     ESTÁNDAR                   EJES TEMÁTICOS                           INDICADORES                     DE     RECURSOS              EVALUACIÓN
+ PROBLEMATIZADO                                                                                   DESEMPEÑO                              PEDAGÓGICO            FORMATIVA
+ RA   Y/O    SITUACIÓN                                                                                                                   S    (Materiales      (Valoración
+ PROBLÉMICA                                                                                                                              educativos,           permanente      e  Integral
+                                                                                                                                         tecnológicos,         para la vida)
+                                                                                                                                         lúdicos          y
+                                                                                                                                         didácticos)
+ ¿Cómo las     relaciones     Interpreta           los   LÓGICA      DE    CONJUNTOS         Y    -  Diferencia       proposiciones      Uso    de    TICs,    La   evaluación     es   un
+ lógicas  y la estructura     números     enteros    y   FUNDAMENTOS                                 de enunciados.                      cuadernos,            proceso      continuo      y
+ de     los     conjuntos     racionales    (en   sus    ARITMÉTICOS                                                                     marcadores,           formativo         realizado
+ permiten         modelar     representaciones de                                                 -  Emplea        diagramas       de    aplicaciones          mediante la observación
+ situaciones                  fracción       y     de    Proposiciones       y    conectores         Venn       y     criterios    de    educativas            de   la  participación   en
+ numéricas?                   decimal)     con    sus    lógicos      (enunciados,        valor      divisibilidad                                             clase,  la  resolución   de
+                              operaciones,         en    verdad, conectores).                              .                                                   talleres,                 la
+                              diferentes                                                          -  Argumenta      deducciones      y                         autoevaluación reflexiva
+                              contextos,            al                                               valida críticamente.                                      y  la  coevaluación.     Se
+                              resolver    problemas                                                                                                            utilizan   rúbricas     que
+
+
+                                                                                                                                                                                                              2
+======================================================================
+PAGE 3
+======================================================================
+                                                                           Mallas área de matemáticas preescolar a once.
+                              de           variación,    Razonamiento        con    conjuntos                                                                   valoran      el    proceso
+                              repartos,                  (Venn,      pertenencia,        unión,                                                                 lógico,  el  pensamiento
+                              particiones,               intersección).                                                                                         crítico y la capacidad de
+                              estimaciones, etc.                                                                                                                resolución                de
+                                                         Lógica    numérica      (divisibilidad,                                                                problemas     de    manera
+                              Utiliza              las   primos, MCD, MCM).                                                                                     integral.
+                              propiedades      de  los
+                              números     enteros    y
+                              racionales      y    las
+                              propiedades     de sus
+                              operaciones        para
+                              proponer
+                              estrategias            y
+                              procedimientos       de
+                              cálculo       en      la
+                              solución             de
+                              problemas.
+ SEGUNDO PERIODO:
+ PREGUNTA                     ESTÁNDAR                   EJES TEMÁTICOS                            INDICADORES                     DE     RECURSOS              EVALUACIÓN
+ PROBLEMATIZADO                                                                                    DESEMPEÑO                              PEDAGÓGICO            FORMATIVA
+ RA   Y/O    SITUACIÓN                                                                                                                    S    (Materiales      (Valoración
+ PROBLÉMICA                                                                                                                               educativos,           permanente      e  Integral
+                                                                                                                                          tecnológicos,         para la vida)
+                                                                                                                                          lúdicos          y
+                                                                                                                                          didácticos)
+ ¿Cómo                   el   Plantea    y  resuelve     MATEMÁTICAS:                              - Reconoce          reglas       de    Uso    de    TICs,    La   evaluación     es    un
+ pensamiento                  ecuaciones,          las                                              secuencias.                           cuadernos,            proceso      continuo      y
+ variacional      y     los   describe                   Secuencias       y    generalización                                             marcadores,           formativo         realizado
+ patrones        permiten     verbalmente            y   (patrones, regla de cambio).              - Plantea       relaciones       de    aplicaciones          mediante la observación
+ generalizar   relaciones     representa                                                            igualdad          y        calcula    educativas            de   la  participación    en
+ y  resolver   problemas      situaciones          de    Algebra    temprano      (ecuaciones       proporciones.                                               clase,  la  resolución    de
+ de cambio?                   cambio     cuantitativo    lineales, balanzas).                                                                                   talleres,                  la
+                              en tablas, gráficos y                                                - Busca   estrategias    eficientes                          autoevaluación reflexiva
+                              fórmulas.                  Lógica                 proposicional       para el cálculo mental.                                     y  la  coevaluación.     Se
+                                                         (razonamiento        directo/inverso,                                                                  utilizan   rúbricas     que
+                              Opera             sobre    porcentajes).                                                                                          valoran      el    proceso
+                              números                                                                                                                           lógico,  el  pensamiento
+                              desconocidos           y                                                                                                          crítico y la capacidad de
+                              para           resolver                                                                                                           resolución                de
+
+
+                                                                                                                                                                                                               3
+======================================================================
+PAGE 4
+======================================================================
+                                                                         Mallas área de matemáticas preescolar a once.
+                             problemas       donde                                                                                                       problemas     de   manera
+                             intervienen                                                                                                                 integral.
+                             cantidades
+                             desconocidas,      usa
+                             propiedades     de  las
+                             operaciones.
+ TERCER PERIODO:
+ PREGUNTA                    ESTÁNDAR                  EJES TEMÁTICOS                         INDICADORES                     DE    RECURSOS             EVALUACIÓN
+ PROBLEMATIZADO                                                                               DESEMPEÑO                             PEDAGÓGICO           FORMATIVA
+ RA   Y/O   SITUACIÓN                                                                                                               S    (Materiales     (Valoración
+ PROBLÉMICA                                                                                                                         educativos,          permanente      e Integral
+                                                                                                                                    tecnológicos,        para la vida)
+                                                                                                                                    lúdicos          y
+                                                                                                                                    didácticos)
+ ¿Cómo                  el   Interpreta   y   utiliza  LÓGICA         PROPOSICIONAL           Identifica proposiciones y            Uso    de   TICs,    La   evaluación     es   un
+ razonamiento                conceptos de lógica       FORMAL      Y   RAZONAMIENTO           determina sus valores de              cuadernos,           proceso      continuo     y
+ deductivo       y      la   proposicional     para    ALGORÍTMICO                            verdad mediante tablas.               marcadores,          formativo        realizado
+ implementación        de    resolver   problemas                                             Aplica reglas de inferencia           aplicaciones         mediante la observación
+ algoritmos lógicos nos      y construir modelos       Lógica               Proposicional:    (Modus Ponens y Tollens)              educativas           de   la  participación   en
+ permiten     estructurar    de     razonamiento       Proposiciones      y   valores    de   para validar argumentos                                    clase,  la  resolución   de
+ soluciones              a   deductivo.                verdad.     Conectores      lógicos.   deductivos. Diseña algoritmos                              talleres,                 la
+ problemas     complejos                               Tablas    de    verdad     básicas.    lógicos para estructurar la                                autoevaluación reflexiva
+ de nuestro entorno?                                   Inferencia lógica: Modus Ponens        solución a problemas                                       y  la  coevaluación.     Se
+                                                       y Modus    Tollens. Resolución de      complejos.                                                 utilizan   rúbricas    que
+                                                       acertijos  lógicos   y   problemas                                                                valoran      el    proceso
+                                                       deductivos.       Algoritmos        y                                                             lógico,  el  pensamiento
+                                                       secuencias de instrucciones.                                                                      crítico y la capacidad de
+                                                                                                                                                         resolución               de
+                                                                                                                                                         problemas     de   manera
+                                                                                                                                                         integral.
+ CUARTO PERIODO:
+ PREGUNTA                    ESTÁNDAR                  EJES TEMÁTICOS                         INDICADORES                     DE    RECURSOS             EVALUACIÓN
+ PROBLEMATIZADO                                                                               DESEMPEÑO                             PEDAGÓGICO           FORMATIVA
+ RA   Y/O   SITUACIÓN                                                                                                               S    (Materiales     (Valoración
+ PROBLÉMICA                                                                                                                         educativos,          permanente      e Integral
+                                                                                                                                    tecnológicos,        para la vida)
+                                                                                                                                    lúdicos          y
+                                                                                                                                    didácticos)
+
+
+
+                                                                                                                                                                                                       4
+======================================================================
+PAGE 5
+======================================================================
+                                                                            Mallas área de matemáticas preescolar a once.
+ ¿Cómo       el    análisis    Interpreta                  MATEMÁTICAS:                              - Analiza datos estadísticos            Uso     de    TICs,    La    evaluación     es    un
+ crítico  de   datos   y  la   información                                                             identificando posibles                cuadernos,             proceso       continuo      y
+ probabilidad     permiten     estadística                 Análisis crítico de datos y                 falacias o sesgos en                  marcadores,            formativo          realizado
+ tomar         decisiones      presentada            en    falacias estadísticas.                      gráficos. Calcula                     aplicaciones           mediante la observación
+ informadas       ante    la   diversas    fuentes   de    Interpretación de gráficos y                probabilidades simples                educativas             de   la  participación     en
+ incertidumbre?                información,           la   detección de sesgos. Medidas                utilizando el razonamiento                                   clase,   la  resolución    de
+                               analiza            para     de tendencia central y toma de              lógico. Sustenta posturas                                    talleres,                   la
+                               plantear   hipótesis   y    decisiones. Lógica                          críticas y toma decisiones                                   autoevaluación reflexiva
+                               responder              a    probabilística: eventos, espacio            basadas en el análisis de                                    y   la  coevaluación.      Se
+                               interrogantes.              muestral y probabilidad clásica.            datos.                                                       utilizan    rúbricas     que
+                               Compara      y clasifica    Argumentación basada en                                                                                  valoran       el    proceso
+                               eventos       de      un    datos.                                                                                                   lógico,   el  pensamiento
+                               experimento                                                           -                                                              crítico y la capacidad de
+                               aleatorio         como                                                                                                               resolución                 de
+                               seguros,     probables                                                                                                               problemas      de    manera
+                               o     imposibles,       y                                                                                                            integral.
+                               calcula                la
+                               probabilidad     simple
+                               (regla de Laplace).
+ ESTRATEGIAS DE APOYO PARA LA SUPERACIÓN DE DIFICULTADES:
+ Los temas     serán   los mismos     para todos     los estudiantes, se realizará flexibilización curricular en la forma de evaluar y en la metodología que se utilizada,
+ teniendo en cuenta las necesidades de cada estudiante y acompañamiento permanente.
+ TRANSVERSALIDAD INTERDISCIPLINARIEDAD
+ Cabe anotar que el área de matemáticas es transversal con todas las áreas, puesto que, en el análisis de lecturas, escritura, las exposiciones y movimientos
+ se apropian de las demás asignaturas.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                                                                                                                                                                     5
+======================================================================
+PAGE 6
+======================================================================
+                                                                          Mallas área de matemáticas preescolar a once.
+MATEMÁTICAS GRADO SÉPTIMO
+
+ GRADO:  SÉPTIMO             PERÍODO:       I, II, III, INTENSIDAD HORARIA: 5H                  DOCENTE:
+                             IV                                                                     -   Manuel Alejandro Muñoz Palomino
+         OBJETIVO DEL CURSO:
+ Comprender      y utilizar diferentes   formas   de  representar    números    enteros,   fraccionarios   y decimales,    aplicando   la  estructura del sistema     de numeración
+ decimal   y  los algoritmos   para   operar   con  ellos. Emplear estrategias      de estimación, modelación simbólica          y lenguaje   algebraico para     resolver y verificar
+ problemas numéricos, variacionales y aleatorios, analizando situaciones de cambio y de incertidumbre en contextos reales.
+ D.B.A. PARA TODOS LOS PERÍODOS:
+     ●   Comprende       y resuelve    problemas     que   involucran   números     racionales    en  sus  diferentes   representaciones      (fracciones,   decimales,    razones)   y
+         operaciones básicas (suma, resta, multiplicación, división), así como potenciación y radicación en contextos adecuados.
+     ●   Describe y utiliza algoritmos —convencionales y no convencionales— para realizar operaciones con números racionales y los emplea con sentido en
+         la solución de problemas.
+     ●   Utiliza  diferentes  relaciones    y representaciones     (recta  numérica,    fracciones   equivalentes,    decimales)    para  argumentar     y resolver   problemas con
+         cantidades desconocidas.
+     ●   Aplica el sistema métrico decimal en la conversión y uso de unidades (longitud, masa, capacidad, tiempo) para resolver problemas de medida.
+     ●   Plantea y resuelve ecuaciones y expresiones algebraicas simples, las describe verbalmente y las representa de forma numérica, simbólica o gráfica.
+     ●   Justifica procedimientos aritméticos y algebraicos mediante las propiedades de las operaciones (conmutativa, asociativa, distributiva) y razona cuándo
+         un cálculo debe ser exacto o aproximado.
+     ●   Aplica técnicas de estimación y verificación para valorar la plausibilidad de los resultados obtenidos.
+ COMPONENTES Y ESTÁNDARES
+ COMPETENCIAS MATEMÁTICAS:
+ Razonamiento y demostración, Modelación, Comunicación y Resolución de problemas.
+ PENSAMIENTO NUMÉRICO Y SISTEMAS NUMÉRICOS:
+ Avanzar hacia la construcción del número, su representación, relaciones y operaciones.
+ PENSAMIENTO ESPACIAL Y SISTEMAS GEOMÉTRICOS:
+ Procesos cognitivos para manipular representaciones mentales de objetos del espacio.
+ PENSAMIENTO MÉTRICO Y SISTEMAS DE MEDIDAS:
+ Comprensión de magnitudes, cantidades, medición y uso de sistemas métricos.
+ PENSAMIENTO ALEATORIO Y SISTEMAS DE DATOS:
+ Toma de decisiones en situaciones de incertidumbre apoyada en estadística y probabilidad.
+ PENSAMIENTO VARIACIONAL Y SISTEMAS ALGEBRÁICOS Y ANALÍTICOS:
+ Identificación y caracterización de la variación y el cambio en diferentes contextos.
+ COMPETENCIAS CIUDADANAS, CONVIVENCIA Y PAZ, PARTICIPACIÓN Y PLURALIDAD
+     ●   Practico el respeto, manejo mis emociones, cumplo normas y valoro las diferencias.
+ PRIMER PERIODO: Pensamiento Numérico (Números Enteros)
+
+
+
+
+
+                                                                                                                                                                                                          6
+======================================================================
+PAGE 7
+======================================================================
+                                                                            Mallas área de matemáticas preescolar a once.
+ PREGUNTA                      ESTÁNDAR                   EJES TEMÁTICOS                            INDICADORES                      DE     RECURSOS              EVALUACIÓN
+ PROBLEMATIZADO                                                                                     DESEMPEÑO                               PEDAGÓGICO            FORMATIVA
+ RA                                                                                                                                         S
+ ¿Cómo                                                    Tema 1: El conjunto de los                Reconoce      y  conceptualiza     el   TICs, cuaderno,       Observación                 y
+ profundizamos       en   el   Justifico                  Números Enteros {Z}:                      conjunto      de    los    números      aplicaciones          registro         continuo:
+ uso   de   los  números       procedimientos             Necesidad histórica, números              enteros {Z}, su representación          educativas,           seguimiento               del
+ enteros     (Z)   y    sus    aritméticos   y  aplico    relativos con signo, recta                en   la   recta   numérica     y  las   material              progreso      individual    y
+ operaciones          para     las  propiedades     de    numérica, orden y valor                   relaciones     de   orden   y  valor    concrete.             grupal    mediante      listas
+ modelar      y   resolver     las operaciones con        absoluto.                                 absoluto, con el propósito de                                 de     cotejo     y    notas
+ situaciones             de    números        enteros                                                                                                             anecdóticas          durante
+ nuestro          entorno,     para          modelar                                                modelar         cuantitativamente                             actividades     prácticas   y
+ como      temperaturas,       situaciones     de    la   Tema 2: Operaciones aditivas y            fenómenos      del  entorno    físico                         discusiones.
+ deudas y niveles?             vida         cotidiana     multiplicativas en {Z} (adición,          y  socioeconómico        donde    los
+                               (temperaturas,             sustracción, multiplicación y             números       naturales     resultan                          Rúbricas         analíticas:
+                               niveles,       deudas,     división exacta), ley de signos y         insuficientes       (tales     como                           valoración                 de
+                               ganancias).                problemas del entorno.                    balances               financieros,                           estrategias                de
+                                                                                                    temperaturas         extremas       y                         resolución                 de
+                                                          Tema 3: Potenciación,                                                                                   problemas,
+                                                          radicación de enteros,                    altitudes geográficas).                                       argumentación
+                                                          propiedades y jerarquía de las                                                                          matemática       y  uso    de
+                                                                                                    Aplica     con     exactitud      los                         propiedades        de     las
+                                                          operaciones (polinomios                   algoritmos         de       adición,                          operaciones
+                                                          aritméticos con signos de                 sustracción,        multiplicación,                           (conmutativa,
+                                                          agrupación).                              división,        potencias          y                         asociativa, distributiva).
+                                                                                                    polinomios aritméticos en        {Z},
+                                                          Tema 4: Introducción al                                                                                 Autoevaluación              y
+                                                          lenguaje algebraico y                     con       la      finalidad       de                          coevaluación:
+                                                          ecuaciones lineales básicas en            estructurar      estrategias      de                          espacios       donde      los
+                                                          {Z} aplicadas a la solución de            solución         a       problemas                            estudiantes      reflexionan
+                                                                                                    cotidianos         y       plantear                           sobre                     sus
+                                                          problemas.                                ecuaciones      lineales   sencillas                          procedimientos,      errores
+                                                                                                    que         permitan          tomar                           y  aciertos,   y  comparan
+                                                                                                                                                                  sus   estrategias    con  las
+                                                                                                    decisiones fundamentadas.                                     de sus compañeros.
+
+                                                                                                    Desarrolla      el   razonamiento                             Retroalimentación
+                                                                                                    lógico, el rigor matemático y el                              Formativa: comentarios
+                                                                                                    hábito      de      verificar     los                         orientados    a  mejorar    la
+                                                                                                                                                                  comprensión          y      la
+
+
+                                                                                                                                                                                                                   7
+======================================================================
+PAGE 8
+======================================================================
+                                                                           Mallas área de matemáticas preescolar a once.
+                                                                                                   procedimientos        propios      y                         comunicación
+                                                                                                   ajenos, con el fin de formular                               matemática, más       que  a
+                                                                                                   argumentos       sólidos,    emitir                          calificar resultados.
+                                                                                                   juicios        críticos        ante
+                                                                                                   situaciones       problema         y
+                                                                                                   afrontar      con       seguridad
+                                                                                                   desafíos       académicos          y
+                                                                                                   pruebas estandarizadas
+ SEGUNDO PERIODO: Pensamiento Numérico y Variacional (Racionales y Proporcionalidad)
+ PREGUNTA                     ESTÁNDAR                   EJES TEMÁTICOS                            INDICADORES                     DE     RECURSOS              EVALUACIÓN
+ PROBLEMATIZADO                                                                                    DESEMPEÑO                              PEDAGÓGICO            FORMATIVA
+ RA                                                                                                                                       S
+ ¿De    qué  manera     los   Resuelvo     y formulo                                               Representa               números       TICs, cuaderno,       Observación                y
+ números       racionales     problemas           que    Tema    1:  Conjunto    de   números      racionales       en    diferentes      material              registro         continuo:
+ (Q)   y  las  relaciones     implican              la   racionales (Q)                            formas     y  los   ubica    en   la   concreto          y   seguimiento              del
+ de     proporcionalidad      potenciación,              Necesidad      histórica  y   relación    recta       numérica,          para    manipulativo.         progreso     individual    y
+ nos permiten modelar         radicación             y   con los números enteros.                  reconocer      equivalencias       y                         grupal   mediante      listas
+ situaciones             de   aplicación           de                                              relaciones     entre   fracciones,     Aplicaciones          de    cotejo     y    notas
+ reparto,     cambio      y   razones                y   Representación          en      forma     decimales     y  porcentajes     en    educativas            anecdóticas         durante
+ comparación            en    proporciones        con    fraccionaria,         decimal         y   contextos reales.                      interactivas          actividades    prácticas   y
+ contextos     cotidianos     números racionales,        porcentual.                                                                                            discusiones.
+ como        descuentos,      utilizando   diferentes                                              Aplica       algoritmos          de    Trabajo
+ mezclas o escalas?           representaciones           Ubicación en la recta numérica y          operaciones       con    números       colaborativo      y   Rúbricas        analíticas:
+                              (fracción,    decimal,     comparación de magnitudes.                racionales    en   la resolución       debates               valoración                de
+                              porcentaje)        para                                              de                    problemas        matemáticos           estrategias               de
+                              interpretar            y   Tema      2:    Operaciones        con    contextualizados,              para    sobre                 resolución                de
+                              comunicar                  números racionales                        fortalecer   la  precisión    y   la   estrategias     de    problemas,
+                              situaciones      de   la                                             coherencia            en          el   resolución.           argumentación
+                              vida cotidiana.            Adición,                 sustracción,     razonamiento matemático.                                     matemática      y  uso    de
+                                                         multiplicación,              división,                                                                 propiedades        de    las
+                                                         potenciación y radicación.                Argumenta          y      justifica                          operaciones
+                                                                                                   procedimientos de cálculo y                                  (conmutativa,
+                                                         Estrategias    de   simplificación    y   simplificación,                para                          asociativa, distributiva).
+                                                         estimación.                               comunicar     con   claridad    sus
+                                                                                                   estrategias     y    validar    sus                          Autoevaluación             y
+                                                                                                   resultados ante sus pares.                                   coevaluación:
+                                                                                                                                                                espacios      donde      los
+                                                                                                                                                                estudiantes     reflexionan
+
+
+                                                                                                                                                                                                               8
+======================================================================
+PAGE 9
+======================================================================
+                                                                           Mallas área de matemáticas preescolar a once.
+                                                         Aplicación    en   contextos    reales    Modela       situaciones         de                         sobre                    sus
+                                                         (recetas,     mezclas,       escalas,     proporcionalidad       directa    e                         procedimientos,      errores
+                                                         tasas de cambio).                         inversa    utilizando    la  regla                          y  aciertos,   y  comparan
+                                                                                                   de  tres   y porcentajes,     para                          sus   estrategias   con   las
+                                                                                                   interpretar            fenómenos                            de sus compañeros.
+                                                         Tema 3: Razones, proporciones             cotidianos     como      repartos,
+                                                         y porcentajes                             descuentos o escalas.                                       Retroalimentación
+                                                                                                                                                               Formativa: comentarios
+                                                         Regla   de   tres simple   (directa e     Interpreta      resultados        y                         orientados    a  mejorar   la
+                                                         inversa).                                 comunica conclusiones con                                   comprensión          y     la
+                                                                                                   lenguaje             matemático                             comunicación
+                                                         Cálculo      de     porcentajes       y   adecuado,       para      expresar                          matemática, más       que   a
+                                                         variaciones porcentuales.                 ideas cuantitativas con rigor y                             calificar resultados.
+                                                                                                   comprensión conceptual.
+                                                         Modelación      de   situaciones    de
+                                                         proporcionalidad         directa     e
+                                                         inversa.
+
+
+
+ TERCER PERIODO: Pensamiento Variacional y Espacial (Álgebra y Geometría)
+ PREGUNTA                     ESTÁNDAR                   EJES TEMÁTICOS                            INDICADORES                     DE     RECURSOS             EVALUACIÓN
+ PROBLEMATIZADO                                                                                    DESEMPEÑO                              PEDAGÓGICO           FORMATIVA
+ RA                                                                                                                                       S
+                                                                                                   Identifica       variables        y    TMaterial            Observación                 y
+ ¿Cómo podemos usar           Formulo, represento        Tema    1:  Lenguaje    algebraico y      constantes     en   expresiones        concreto          y  registro         continuo:
+ el lenguaje algebraico       y             resuelvo     representación simbólica                  algebraicas,                  para     manipulativo         seguimiento               del
+ y las ecuaciones para        problemas           que                                              comprender          cómo         se    (tarjetas            progreso      individual    y
+ representar, analizar y      involucran                 Concepto de variable, constante           representan      relaciones      de    algebraicas,         grupal    mediante     listas
+ resolver     situaciones     ecuaciones             y   y término algebraico.                     cambio       y    patrones       en    regletas,            de     cotejo     y    notas
+ de        cambio         y   expresiones                Traducción de situaciones                 diferentes contextos.                  balanzas        de   anecdóticas         durante
+ relaciones          entre    algebraicas,                                                                                                ecuaciones).         actividades     prácticas   y
+ cantidades    en  la  vida   aplicando                  cotidianas al lenguaje                    Traduce              situaciones                            discusiones.
+ cotidiana?                   propiedades     de   las   algebraico.                               cotidianas        al     lenguaje      TICs             y
+                              operaciones      y   del   Evaluación y simplificación de            algebraico,      para     modelar      aplicaciones         Rúbricas        analíticas:
+                              orden              para                                              fenómenos          y      resolver     interactivas.        valoración                de
+                              interpretar                expresiones.                              problemas         con       mayor                           estrategias               de
+                              relaciones           de                                              precisión y claridad.                                       resolución                de
+
+
+
+                                                                                                                                                                                                               9
+======================================================================
+PAGE 10
+======================================================================
+                                                                            Mallas área de matemáticas preescolar a once.
+                               variación              y   Identificación de patrones                                                        Guías           de    problemas,
+                               comunicar                  numéricos y relaciones                    Resuelve       ecuaciones         de    ejercicios            argumentación
+                               resultados          con    funcionales.                              primer       grado      aplicando       contextualizado       matemática      y   uso   de
+                               precisión.                                                           propiedades       de   igualdad    y    s  y   proyectos      propiedades        de     las
+                                                          Tema        2:     Ecuaciones         y   operaciones       inversas,    para     prácticos             operaciones
+                                                          resolución de problemas                   determinar                  valores     (análisis       de    (conmutativa,
+                                                          Planteamiento y solución de               desconocidos       y   verificar   la   precios,              asociativa, distributiva).
+                                                                                                    validez de sus soluciones.              mezclas,
+                                                          ecuaciones de primer grado con                                                    repartos).            Autoevaluación              y
+                                                          una incógnita.                            Analiza         y       comunica                              coevaluación:
+                                                          Uso de propiedades de igualdad            resultados     obtenidos      en   la   Trabajo               espacios      donde       los
+                                                          y operaciones inversas.                   resolución      de   ecuaciones,        colaborativo      y   estudiantes     reflexionan
+                                                                                                    para           fortalecer          la   debates               sobre                    sus
+                                                          Verificación de soluciones y              argumentación             y        la   matemáticos           procedimientos,      errores
+                                                          análisis de coherencia.                   interpretación matemática.              sobre                 y  aciertos,  y  comparan
+                                                                                                                                            estrategias     de    sus  estrategias    con   las
+                                                          Aplicación en contextos reales            Representa        relaciones      de    resolución.           de sus compañeros.
+                                                          (repartos, precios, distancias,           cambio      mediante      tablas   y
+                                                          mezclas, balances).                       gráficas,       para      visualizar                          Retroalimentación
+                                                                                                    dependencias      entre   variables                           Formativa: comentarios
+                                                          Tema      3:    Representación        y   y   comunicar     tendencias      de                          orientados    a  mejorar   la
+                                                          análisis de relaciones de cambio          manera efectiva.                                              comprensión          y     la
+                                                                                                                                                                  comunicación
+                                                          Construcción de tablas y                  Argumenta                       sus                           matemática, más       que   a
+                                                          gráficas para representar                 procedimientos                     y                          calificar resultados.
+                                                          relaciones entre variables.               resultados, para consolidar la
+                                                                                                    comprensión      conceptual     y  la
+                                                          Interpretación de tendencias y            comunicación matemática.
+                                                          dependencias.
+
+                                                          Comunicación de resultados
+                                                          mediante lenguaje algebraico y
+                                                          verbal.
+
+
+
+ CUARTO PERÍODO: Pensamiento Aleatorio (Estadística)
+
+
+
+
+                                                                                                                                                                                                                 10
+======================================================================
+PAGE 11
+======================================================================
+                                                                            Mallas área de matemáticas preescolar a once.
+ PREGUNTA                     ESTÁNDAR                    EJES TEMÁTICOS                            INDICADORES                      DE    RECURSOS               EVALUACIÓN
+ PROBLEMATIZADO                                                                                     DESEMPEÑO                              PEDAGÓGICO             FORMATIVA
+ RA                                                                                                                                        S
+                                                                                                                                                                  Observación                y
+ ¿Cómo podemos usar           Recojo,       organizo,     Tema       1:     Recolección         y   Recolecta     y  organiza    datos     TICs, cuaderno,        registro         continuo:
+ la   estadística    y    la  analizo    e  interpreto    organización de datos                     en   tablas    y  gráficos,    para    material               seguimiento              del
+ probabilidad         para    datos    de  diferentes                                               representar      información      de   concreto           y   progreso     individual     y
+ interpretar                  fuentes             para    Tipos de datos: cualitativos y            manera     clara   y   facilitar  su   manipulativo           grupal   mediante      listas
+ información,        tomar    describir fenómenos         cuantitativos.                            análisis.                              (dados,     fichas,    de    cotejo     y    notas
+ decisiones               y   y   tomar   decisiones      Tablas de frecuencia y                                                           encuestas).            anecdóticas         durante
+ comunicar     resultados     fundamentadas,                                                        Calcula         medidas           de   Aplicaciones           actividades    prácticas    y
+ sobre        situaciones     aplicando                   representación gráfica (barras,           tendencia      central     (media,     educativas             discusiones.
+ reales     en     nuestro    conceptos       básicos     sectores, pictogramas).                   mediana       y    moda),      para    interactivas
+ entorno?                     de    probabilidad      y   Uso de herramientas digitales             resumir y comparar conjuntos                                  Rúbricas        analíticas:
+                              medidas                     para organizar información.               de       datos       de       forma    Guías            de    valoración                de
+                              estadísticas.                                                         significativa.                         ejercicios             estrategias               de
+                                                          Identificación de errores y                                                      contextualizado        resolución                de
+                                                          sesgos en la recolección de               Interpreta    gráficos    y  tablas    s   y   proyectos      problemas,
+                                                          datos.                                    de        frecuencia,          para    prácticos              argumentación
+                                                                                                    comunicar       conclusiones       y   (encuestas             matemática      y  uso    de
+                                                          Tema         2:       Análisis        e   tomar   decisiones    basadas en       escolares,             propiedades        de     las
+                                                          interpretación de información             evidencia.                             análisis         de    operaciones
+                                                                                                                                           datos reales).         (conmutativa,
+                                                          Medidas de tendencia central:             Aplica    conceptos       básicos                             asociativa, distributiva).
+                                                          media, mediana y moda.                    de        probabilidad           en    }Trabajo
+                                                                                                    situaciones cotidianas, para           colaborativo       y   Autoevaluación             y
+                                                          Lectura e interpretación de               estimar   resultados    posibles   y   debates      sobre     coevaluación:
+                                                          gráficos y tablas.                        comprender la incertidumbre.           interpretación         espacios      donde      los
+                                                                                                                                           de    información      estudiantes     reflexionan
+                                                          Comparación de conjuntos de                                                      y     toma       de    sobre                    sus
+                                                          datos y conclusiones.                                                            decisiones.            procedimientos,     errores
+                                                                                                                                                                  y aciertos,   y  comparan
+                                                          Aplicación en contextos reales                                                                          sus  estrategias    con  las
+                                                          (encuestas, resultados                                                                                  de sus compañeros.
+                                                          deportivos, consumo, clima).
+                                                                                                                                                                  Retroalimentación
+                                                          Tema      3:   Introducción      a   la                                                                 Formativa: comentarios
+                                                          probabilidad                                                                                            orientados    a mejorar    la
+                                                                                                                                                                  comprensión         y      la
+
+
+                                                                                                                                                                                                                11
+======================================================================
+PAGE 12
+======================================================================
+                                                                           Mallas área de matemáticas preescolar a once.
+                                                         Concepto de evento y espacio                                                                          comunicación
+                                                         muestral.                                                                                             matemática, más       que   a
+                                                                                                                                                               calificar resultados.
+                                                         Cálculo de probabilidades
+                                                         simples.
+
+                                                         Estimación y predicción en
+                                                         situaciones cotidianas.
+
+                                                         Relación entre frecuencia
+                                                         relativa y probabilidad.
+
+
+
+ ESTRATEGIAS DE APOYO Y TRANSVERSALIDAD
+ Flexibilización curricular y acompañamiento permanente en todas las áreas.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                                                                                                                                                             12
+======================================================================
+PAGE 13
+======================================================================
+                                                                           Mallas área de matemáticas preescolar a once.
+
+MATEMÁTICAS GRADO TERCERO
+
+ GRADO:  TERCERO              PERÍODO: I                 INTENSIDAD HORARIA: 4h                   DOCENTE: Manuel Alejandro Muñoz Palomino
+
+
+ OBJETIVO DEL GRADO:
+     -    Reconocer y utilizar los números naturales, las operaciones básicas y las medidas para resolver problemas en situaciones cotidianas.
+     ●    Desarrollar   las  habilidades    geométricas      necesarias    para   reconocer,    nombrar     y  representar    figuras   geométricas     básicas,   utilizando   diferentes
+          estrategias y herramientas.
+
+           D.B.A. PARA TODOS LOS PERÍODOS:
+      ●    Interpreta, formula y resuelve problemas aditivos y multiplicativos en contextos cotidianos.
+      ●    Propone y justifica estrategias para estimaciones y cálculos con operaciones básicas.
+      ●    Establece comparaciones y relaciones entre cantidades y expresiones numéricas.
+      ●    Representa y analiza datos en tablas y gráficos sencillos.
+      ●    Explica la probabilidad de ocurrencia de eventos simples.
+      ●    Reconoce y utiliza fracciones y equivalencias en contextos concretos.
+
+
+ COMPONENTES Y ESTÁNDARES
+
+ Competencias matemáticas:
+
+ Sentido numérico y pensamiento algebraico
+
+     ●    Reconozco y uso los números naturales para contar, comparar y resolver problemas.
+     ●    Realizo operaciones básicas (suma, resta, multiplicación y división) utilizando diferentes estrategias.
+     ●    Utilizo los números para establecer relaciones de orden, equivalencia y proporcionalidad.
+
+ Razonamiento y demostración
+
+     ●    Aplico estrategias de razonamiento para resolver problemas aritméticos.
+     ●    Argumento la validez de mis procedimientos y resultados.
+
+ Modelación
+
+
+
+                                                                                                                                                                                                            13
+======================================================================
+PAGE 14
+======================================================================
+                                                                           Mallas área de matemáticas preescolar a once.
+     ●    Represento situaciones de la vida cotidiana mediante operaciones y relaciones numéricas.
+     ●    Uso propiedades de las operaciones para resolver problemas prácticos.
+
+ Comunicación
+
+     ●    Explico con claridad y precisión mis procedimientos y resultados numéricos.
+     ●    Interpreto y comunico información matemática en tablas y gráficos sencillos.
+
+ Competencias ciudadanas
+
+     ●    Trabajo con respeto y colaboración en la resolución de problemas.
+     ●    Escucho y valoro las estrategias de mis compañeros.
+     ●    Asumo responsabilidad en el uso de materiales y recursos durante las actividades matemáticas
+
+
+ COMPONENTES Y ESTÁNDARES
+
+ Competencias matemáticas:
+
+ Sentido numérico y pensamiento algebraico
+
+     ●    Reconozco y uso los números naturales para contar, comparar y resolver problemas.
+     ●    Realizo operaciones básicas (suma, resta, multiplicación y división) utilizando diferentes estrategias.
+     ●    Utilizo los números para establecer relaciones de orden, equivalencia y proporcionalidad.
+
+ Razonamiento y demostración
+
+     ●    Aplico estrategias de razonamiento para resolver problemas aritméticos.
+     ●    Argumento la validez de mis procedimientos y resultados.
+
+ Modelación
+
+     ●    Represento situaciones de la vida cotidiana mediante operaciones y relaciones numéricas.
+     ●    Uso propiedades de las operaciones para resolver problemas prácticos.
+
+ Comunicación
+
+     ●    Explico con claridad y precisión mis procedimientos y resultados numéricos.
+
+
+
+                                                                                                                                                                                                               14
+======================================================================
+PAGE 15
+======================================================================
+                                                                          Mallas área de matemáticas preescolar a once.
+     ●   Interpreto y comunico información matemática en tablas y gráficos sencillos.
+
+ PRIMER PERIODO:
+
+ PREGUNTA                    ESTÁNDAR                  EJES TEMÁTICOS                           INDICADORES                    DE    RECURSOS              EVALUACIÓN
+ PROBLEMATIZADO                                                                                 DESEMPEÑO                            PEDAGÓGICO            FORMATIVA
+ RA   Y/O   SITUACIÓN                                                                                                                S                     (Evaluación
+ PROBLÉMICA                                                                                                                                                permanente      e Integral
+                                                                                                                                                           para la vida)
+ ¿Cómo      puedo     usar   Utilizo  los  números     MATEMÁTICAS:                             Resuelve problemas aditivos y             ●   Tablero      Observación        directa,
+ los   números     y   las   naturales        hasta                                             sustractivos    en    situaciones         ●   Marcado      ejercicios       prácticos,
+ operaciones      básicas    99 999        y     las   Números naturales hasta 99 999           cotidianas      para      aplicar             res          autoevaluación guiada y
+ para            resolver    operaciones                                                        estrategias     de    cálculo    y        ●   Diapositi    resolución               de
+ situaciones                 básicas           para    Valor posicional y comparación           razonamiento       en    la  vida             vas          problemas
+ cotidianas?                 resolver    problemas                                              diaria.                                   ●   Fotocopi     contextualizados.
+                             en          diferentes    Adición y sustracción                                                                  as
+                             contextos.                                                         Utiliza el valor posicional para          ●   Aplicaci
+                                                       Estrategias de cálculo mental            leer    y    escribir    números              ones
+                                                                                                correctamente                para             digitales
+                                                                                                comprender       la   estructura          ●   Marcado
+                                                                                                del   sistema      numérico      y            res
+                                                                                                fortalecer   la precisión    en el
+                                                                                                cálculo.
+
+                                                                                                Emplea estrategias de cálculo
+                                                                                                mental    y   estimación     para
+                                                                                                desarrollar      autonomía       y
+                                                                                                confianza    en   la  resolución
+                                                                                                de problemas .
+ SEGUNDO PERIODO:
+
+ PREGUNTA                    ESTÁNDAR                  EJES TEMÁTICOS                           INDICADORES                    DE    RECURSOS              EVALUACIÓN
+ PROBLEMATIZADO                                                                                 DESEMPEÑO                            PEDAGÓGICO            FORMATIVA
+ RA   Y/O   SITUACIÓN                                                                                                                S
+ PROBLÉMICA
+ ¿De    qué   manera     la  Aplico                la  Concepto      de   multiplicación    y   Aplica    la   multiplicación     y       ●   Tablero      Talleres   de  aplicación,
+ multiplicación     y    la  multiplicación        y   división                                 división      en       problemas          ●   Marcado      debates        numéricos,
+ división  me   ayudan   a   división          para                                             concretos     para    desarrollar             res          ejercicios               de
+                             resolver    problemas     Relaciones entre operaciones             pensamiento          lógico      y                         razonamiento              y
+
+
+                                                                                                                                                                                                       15
+======================================================================
+PAGE 16
+======================================================================
+                                                                           Mallas área de matemáticas preescolar a once.
+ organizar    y   resolver    concretos              y                                            reconocer     regularidades      en        ●   Diapositi    retroalimentación      entre
+ problemas?                   establecer                 Patrones          numéricos          y   los cálculos.                                  vas          pares.
+                              relaciones        entre    secuencias                                                                          ●   Fotocopi
+                              cantidades                 Propiedades de la multiplicación         Reconoce      y  utiliza  patrones             as
+                                                         .                                        para  anticipar   resultados para          ●   Aplicaci
+                                                                                                  fortalecer    la  capacidad      de            ones
+                                                                                                  predicción         y       análisis            web
+                                                                                                  numérico.                                  ●   Tijeras
+                                                                                                                                             ●   Marcado
+                                                                                                  Justifica   sus   procedimientos               res
+                                                                                                  con    argumentos       numéricos
+                                                                                                  para   comunicar     con   claridad
+                                                                                                  su  razonamiento      matemático
+                                                                                                  y validar sus resultados.
+ TERCER PERIODO:
+
+ PREGUNTA                     ESTÁNDAR                   EJES TEMÁTICOS                           INDICADORES                     DE     RECURSOS             EVALUACIÓN
+ PROBLEMATIZADO                                                                                   DESEMPEÑO                              PEDAGÓGICO           FORMATIVA
+ RA   Y/O    SITUACIÓN                                                                                                                   S
+ PROBLÉMICA
+ ¿Cómo              puedo     Reconozco      y utilizo   Concepto      de    fracción    como     Identifica      y      representa                           Actividades
+ representar    partes de     fracciones             y   parte de un todo                         fracciones       en     diferentes         ●   Tablero      manipulativas, ejercicios
+ un   todo   y  comparar      equivalencias      para                                             contextos    para    comprender            ●   Marcado      de           comparación,
+ cantidades       usando      representar            y   Representación          gráfica      y   la  relación    entre    partes    y           res          análisis    de   errores    y
+ fracciones?                  comparar                   numérica                                 todo en situaciones reales.                ●   Diapositi    coevaluación grupal.
+                              cantidades           en                                                                                            vas
+                              diferentes                 Fracciones equivalentes                  Reconoce                fracciones         ●   Fotocopi
+                              contextos.                                                          equivalentes     y  las  usa   para            as
+                                                         Comparación        y     orden     de    comparar      cantidades      para         ●   Palitos
+                                                         fraccione                                fortalecer     la    noción      de            de
+                                                                                                  proporcionalidad                   y           paleta
+                                                                                                  equivalencia.                              ●   Tijeras
+                                                                                                                                             ●   Marcado
+                                                                                                  Explica    el  significado   de   la           res
+                                                                                                  fracción en situaciones reales             ●   Videos
+                                                                                                  para   aplicar   el concepto     en            de
+                                                                                                  contextos        cotidianos        y           youtube
+                                                                                                  escolares.
+ CUARTO PERIODO:
+
+
+                                                                                                                                                                                                            16
+======================================================================
+PAGE 17
+======================================================================
+                                                                           Mallas área de matemáticas preescolar a once.
+
+ PREGUNTA                     ESTÁNDAR                  EJES TEMÁTICOS                           INDICADORES                     DE     RECURSOS             EVALUACIÓN
+ PROBLEMATIZADO                                                                                  DESEMPEÑO                              PEDAGÓGICO           FORMATIVA
+ RA   Y/O   SITUACIÓN                                                                                                                   S
+ PROBLÉMICA
+ ¿Cómo              puedo     Represento            y   Recolección     y  organización     de   - Representa     datos   en  tablas        -   Tablero      Proyectos                 de
+ organizar   información      analizo    datos     en   datos                                    y   gráficos   para    comunicar           -   Marcado      recolección     de    datos,
+ y  anticipar  resultados     tablas    y   gráficos                                             información         de     manera              res          análisis   de   resultados,
+ en           situaciones     sencillos,  y  explico    Tablas y gráficos de barras              clara   y visual   en   contextos          -   Diapositi    exposiciones      orales    y
+ cotidianas?                  la  probabilidad     de                                            reales.                                        vas          rúbricas                  de
+                              eventos simples.          Interpretación de información                                                       -   Fotocopi     interpretación
+                                                                                                 Interpreta    información      para            as
+                                                        Probabilidad de eventos simples          tomar        decisiones        para        -   Palitos
+                                                                                                 desarrollar         pensamiento                de
+                                                                                                 crítico   y  reflexivo    frente   a           paleta
+                                                                                                 situaciones cotidianas.                    -   Tijeras
+                                                                                                                                            -   Marcado
+                                                                                                 Explica    la   probabilidad     de            res
+                                                                                                 eventos       cotidianos      para
+                                                                                                 anticipar       resultados         y
+                                                                                                 comprender                        la
+                                                                                                 incertidumbre       en    la   vida
+                                                                                                 diaria.
+ ESTRATEGIAS DE APOYO PARA LA SUPERACIÓN DE DIFICULTADES:
+ Los temas    serán   los mismos     para todos    los estudiantes, se realizará flexibilización curricular en la forma de evaluar y en la metodología que se utilizada,
+ teniendo en cuenta las necesidades de cada estudiante y acompañamiento permanente.
+ TRANSVERSALIDAD INTERDISCIPLINARIEDAD
+ Cabe anotar que el área de matemáticas es transversal con todas las áreas, puesto que, en el análisis de lecturas, escritura, las exposiciones y movimientos
+ se apropian de las demás asignaturas.
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                                                                                                                                                           17
+======================================================================
+PAGE 18
+======================================================================
+                                                                           Mallas área de matemáticas preescolar a once.
+
+MATEMÁTICAS GRADO SEGUNDO
+
+
+ GRADO:  SEGUNDO              PERÍODO: I                 INTENSIDAD HORARIA:                      DOCENTE:
+                                                                                                      -    Manuel Alejandro Muñoz;
+ OBJETIVO DEL GRADO:
+
+     -    Desarrollar dinámicas de orden, adición, sustracción, agrupación, clasificación y representación de los factores numéricos, geométricos, aleatorio y de
+          medidas,   atendiendo al contexto socio cultural del estudiante, utilizando material concreto o manipulativo que los ayuden a la obtención de saberes
+          conceptuales, procedimentales y actitudinales en matemáticas.
+
+ D.B.A. PARA TODOS LOS PERÍODOS:
+      ●    Interpreta, propone y resuelve problemas aditivos (de composición, transformación y relación) con números hasta de tres cifras.
+      ●    Utiliza estrategias de cálculo (agrupación, descomposición) para resolver adiciones y sustracciones, comprendiendo su relación inversa.
+      ●    Compara, ordena y utiliza el Sistema de Numeración Decimal para establecer relaciones entre números hasta 999.
+      ●    Clasifica, describe y representa formas bidimensionales y tridimensionales según sus propiedades geométricas (lados, vértices, caras).
+      ●    Utiliza patrones, unidades e instrumentos convencionales (longitud, peso, capacidad, tiempo) para medir magnitudes en contextos cotidianos.
+      ●    Clasifica y organiza datos en tablas de conteo y pictogramas, comunicando los resultados obtenidos para responder preguntas sencillas.
+      ●    Identifica patrones numéricos y utiliza propiedades de las operaciones para hallar valores desconocidos en expresiones aritméticas simples.
+
+
+ COMPONENTES Y ESTÁNDARES
+
+          PENSAMIENTO NUMÉRICO Y SISTEMAS NUMÉRICOS
+     -    El Pensamiento Numérico y los Sistemas Numéricos están concebidos de tal manera que los estudiantes avancen hacia la construcción del número,
+          su representación, las relaciones que existen entre ellos, así como las operaciones que se efectúan en cada uno de los sistemas numéricos.
+
+          PENSAMIENTO ESPACIAL Y SISTEMAS GEOMÉTRICOS
+     -    Conjunto    de  procesos    cognitivos   con   los que   se  construyen     y manipulan     las  representaciones     mentales    de   objetos   del espacio,    así  como   sus
+          relaciones y sus transformaciones. Ejercitación, razonamiento, modelación, comunicación, formulación y resolución de problemas.
+
+
+
+
+
+                                                                                                                                                                                                            18
+======================================================================
+PAGE 19
+======================================================================
+                                                                           Mallas área de matemáticas preescolar a once.
+
+          PENSAMIENTO MÉTRICO Y SISTEMAS DE MEDIDAS
+     -    Hace referencia a la comprensión general que tiene una persona sobre las magnitudes y las cantidades, su medición y el uso flexible de los sistemas
+          métricos o de medidas en diferentes situaciones.
+
+          PENSAMIENTO ALEATORIO Y SISTEMAS DE DATOS
+     -    También llamado probabilístico o estocástico. "Ayuda a tomar decisiones en situaciones de incertidumbre, de azar, de riesgo, o ambigüedad por falta
+          de información confiable, en las que no es posible predecir con seguridad lo que va a pasar, éste se apoya en la teoría de probabilidad, la estadística:
+          descriptiva, inferencial y combinatoria." Doc. 3E.B.C, MEN, 2006.
+
+          PENSAMIENTO VARIACIONAL Y SISTEMAS ALGEBRÁICOS Y ANALÍTICOS
+     -    Se  define con    la percepción, la identificación y la caracterización de la variación y el cambio en diferentes contextos, así como con su descripción,
+          modelación y representación en distintos sistemas o registros simbólicos, ya sean verbales, icónicos, gráficos y algebraicos.
+
+
+ COMPETENCIAS CIUDADANAS
+
+          CONVIVENCIA Y PAZ
+     -    Practico   el respeto   y  la escucha    activa durante las     actividades matemáticas grupales,          valorando    los aportes   y  estrategias   de  mis compañeros al
+          resolver problemas.
+     -    Cuido los   materiales    manipulativos    (bloques, fichas,    geoplanos)    y  comparto los     recursos de trabajo, entendiendo que son herramientas colectivas
+          para aprender matemáticas.
+     -    Gestiono mis emociones de manera constructiva (frustración o entusiasmo) al enfrentar retos matemáticos o participar en juegos lúdicos en el aula.
+
+ PARTICIPACIÓN Y RESPONSABILIDAD DEMOCRÁTICA
+     -    Participo  en   la construcción    de  acuerdos     para  el  uso  del  tiempo    y los materiales    en la  clase   de  matemáticas, asegurando que           todos tengamos
+          oportunidades equitativas de aprendizaje.
+     -    Asumo    con   responsabilidad     el rol asignado     en  actividades    de  trabajo  cooperativo,    comprendiendo       que   mi  participación es clave     para lograr    los
+          objetivos matemáticos grupales.
+
+ PLURALIDAD, IDENTIDAD Y VALORACIÓN DE LAS DIFERENCIAS
+     -    Valoro la diversidad de      estrategias y caminos      que   mis compañeros utilizan para         resolver un problema matemático,           reconociendo que no hay una
+          única forma correcta de pensar.
+
+
+
+
+                                                                                                                                                                                                             19
+======================================================================
+PAGE 20
+======================================================================
+                                                                          Mallas área de matemáticas preescolar a once.
+     -   Respeto los ritmos de aprendizaje de los demás, evitando burlas y fomentando un ambiente donde todos nos sentimos seguros para proponer ideas y
+         cometer errores como parte del proceso de aprendizaje.
+ PRIMER PERIODO:
+
+ PREGUNTA                    ESTÁNDAR                  EJES TEMÁTICOS                           INDICADORES                    DE     RECURSOS             EVALUACIÓN
+ PROBLEMATIZADO                                                                                 DESEMPEÑO                             PEDAGÓGICO           FORMATIVA
+ RA   Y/O   SITUACIÓN                                                                                                                 S    (Materiales     (Evaluación
+ PROBLÉMICA                                                                                                                           educativos,          permanente      e  Integral
+                                                                                                                                      tecnológicos,        para la vida)
+                                                                                                                                      lúdicos          y
+                                                                                                                                      didácticos)
+ ¿Cómo     utilizamos  los   Describe,     compara                                                                                                         Observación      directa   y
+ números    hasta   9.999    y            cuantifica   MATEMÁTICAS:                                                                   Cuaderno        de   registros     anecdóticos.
+ y    las   operaciones      situaciones        con    Lectura,      escritura    y    valor    Lee,   escribe   y  descompone        trabajo.             Lista   de  chequeo     por
+ básicas   para  resolver    números              en   posicional     (unidades     de   mil,   números hasta 9.999 por valor                              indicador.
+ situaciones            de   diferentes contextos      C-D-U) hasta 9.999.                      posicional.                           Tablero de valor
+ nuestro          entorno    y     con     diversas                                                                                   posicional           Rúbrica       breve      de
+ escolar y familiar?         representaciones.         Descomposición, comparación y            Resuelve         adiciones        y                        resolución               de
+                                                       ordenación numérica.                     sustracciones           aplicando     Fichas/contador      problemas
+                                                                                                propiedades      para   optimizar     es,    regla     y   (comprensión,
+                                                       Suma         y     resta      con/sin    cálculos.                             escuadra.            representación,
+                                                       reagrupación     y  propiedades    de                                          Láminas          y   procedimiento,
+                                                       la adición.                              Plantea,   resuelve    y   explica    cartulinas.          verificación).
+                                                                                                problemas         aditivos      en
+                                                       Problemas           aditivos       de    contextos cotidianos.                 Presentaciones       Portafolio  de evidencias
+                                                       composición,      transformación     y                                         y videos cortos,     con         fotos        de
+                                                       comparación.                                                                   aplicaciones   de    manipulativos.     Auto    y
+                                                                                                                                      práctica       de    coevaluación             de
+                                                                                                                                      operaciones.         explicación              de
+                                                                                                                                                           estrategias.
+                                                                                                                                      Juegos         de
+                                                                                                                                      números,
+                                                                                                                                      rompecabezas
+                                                                                                                                      numéricos,
+ SEGUNDO PERIODO:
+
+ PREGUNTA                    ESTÁNDAR                  EJES TEMÁTICOS                           INDICADORES                    DE     RECURSOS             EVALUACIÓN
+ PROBLEMATIZADO                                                                                 DESEMPEÑO                             PEDAGÓGICO           FORMATIVA
+
+
+
+                                                                                                                                                                                                        20
+======================================================================
+PAGE 21
+======================================================================
+                                                                            Mallas área de matemáticas preescolar a once.
+ RA   Y/O    SITUACIÓN                                                                                                                     S    (Materiales      (Valoración
+ PROBLÉMICA                                                                                                                                educativos,           permanente       e  Integral
+                                                                                                                                           tecnológicos,         para la vida)
+                                                                                                                                           lúdicos           y
+                                                                                                                                           didácticos)
+ ¿Cómo                    la  Usa            diversas     MATEMÁTICAS:                              Modela      grupos     iguales     y   Fichas        para    Observación       directa   y
+ multiplicación      y    la  estrategias           de                                              representa          multiplicación     agrupar           y   registros     anecdóticos.
+ división  nos ayudan a       cálculo y estimación        Patrones numéricos                        como suma repetida.                    repartir,             Lista   de   chequeo      por
+ resolver     situaciones     para           resolver                                                                                      tapitas/botones,      indicador.
+ de     agrupación        y   problemas             en    Identificación   y continuación     de    Resuelve    repartos equitativos       tarjetas        de
+ reparto    en    la   vida   situaciones                 patrones numéricos                        y relaciona    el reparto   con   la   tablas                Rúbrica        breve      de
+ diaria?                      multiplicativas    y  de                                              división.                                                    resolución                de
+                              reparto;       describe     Multiplicación       como       suma                                             Apps/juegos     de    problemas
+                              desplazamientos        y    repetida.                                                                        tablas,     videos    (comprensión,
+                              posiciones           con                                              Memoriza y utiliza     con fluidez     de    estrategias     representación,
+                              nociones                    Tablas del 2, 3, 4 y 5.                   tablas    del    2    al    5    en    multiplicativas,      procedimiento,
+                              geométricas                                                           problemas.                             actividades           verificación).
+                              básicas.                    División como reparto equitativo                                                 interactivas.
+                                                          y como agrupación.                        Explica       verbalmente         la                         Portafolio   de evidencias
+                                                                                                    estrategia      utilizada      para                          con          fotos        de
+                                                          Relación                         entre    resolver       problemas         de                          manipulativos.      Auto    y
+                                                          multiplicación–división.                  multiplicación      o     división,                          coevaluación              de
+                                                                                                    justificando su razonamiento.                                explicación               de
+                                                          Problemas             multiplicativos                                                                  estrategias.
+                                                          simples en contextos cercanos.
+ SEGUNDO PERIODO:
+
+ PREGUNTA                     ESTÁNDAR                    EJES TEMÁTICOS                            INDICADORES                     DE     RECURSOS              EVALUACIÓN
+ PROBLEMATIZADO                                                                                     DESEMPEÑO                              PEDAGÓGICO            FORMATIVA
+ RA   Y/O    SITUACIÓN                                                                                                                     S    (Materiales      (Evaluación
+ PROBLÉMICA                                                                                                                                educativos,           permanente       e  Integral
+                                                                                                                                           tecnológicos,         para la vida)
+                                                                                                                                           lúdicos           y
+                                                                                                                                           didácticos)
+ ¿Cómo                    la  Usa            diversas     MATEMÁTICAS:                              Modela      grupos     iguales     y   Fichas        para    Observación       directa   y
+ multiplicación      y    la  estrategias           de                                              representa          multiplicación     agrupar           y   registros     anecdóticos.
+ división  nos ayudan a       cálculo y estimación        Patrones numéricos                        como suma repetida.                    repartir,             Lista   de   chequeo      por
+ resolver     situaciones     para           resolver                                                                                      tapitas/botones,      indicador.
+
+
+
+                                                                                                                                                                                                                21
+======================================================================
+PAGE 22
+======================================================================
+                                                                            Mallas área de matemáticas preescolar a once.
+ de     agrupación        y   problemas             en   Identificación    y continuación     de   Resuelve     repartos equitativos       tarjetas        de    Rúbrica       breve       de
+ reparto    en    la   vida   situaciones                patrones numéricos                        y  relaciona    el reparto   con   la   tablas                resolución                de
+ diaria?                      multiplicativas    y  de                                             división.                               Apps/juegos     de    problemas
+                              reparto;       describe    Multiplicación        como       suma                                             tablas,    videos     (comprensión,
+                              desplazamientos        y   repetida.                                 Memoriza y utiliza      con fluidez     de    estrategias     representación,
+                              posiciones          con                                              tablas     del    2    al    5    en    multiplicativas,      procedimiento,
+                              nociones                   Tablas del 2, 3, 4 y 5.                   problemas.                              actividades           verificación).
+                              geométricas                                                                                                  interactivas.         Portafolio  de evidencias
+                              básicas.                   División como reparto equitativo          Explica        verbalmente         la                         con         fotos         de
+                                                         y como agrupación.                        estrategia       utilizada      para                          manipulativos.      Auto    y
+                                                                                                   resolver        problemas         de                          coevaluación              de
+                                                         Relación                         entre    multiplicación       o     división,                          explicación               de
+                                                         multiplicación–división.                  justificando su razonamiento.                                 estrategias.
+
+                                                         Problemas              multiplicativos
+                                                         simples en contextos cercanos.
+ ESTRATEGIAS DE APOYO PARA LA SUPERACIÓN DE DIFICULTADES:
+ Los temas     serán   los mismos     para todos    los estudiantes, se realizará flexibilización curricular en la forma de evaluar y en la metodología que se utilizada,
+ teniendo en cuenta las necesidades de cada estudiante y acompañamiento permanente.
+ TRANSVERSALIDAD INTERDISCIPLINARIEDAD
+ Cabe anotar que el área de matemáticas es transversal con todas las áreas, puesto que, en el análisis de lecturas, escritura, las exposiciones y movimientos
+ se apropian de las demás asignaturas.
+
+
+ TERCER PERIODO:
+ PREGUNTA                     ESTÁNDAR                   EJES TEMÁTICOS                            INDICADORES                      DE     RECURSOS              EVALUACIÓN
+ PROBLEMATIZADO                                                                                    DESEMPEÑO                               PEDAGÓGICO            FORMATIVA
+ RA   Y/O    SITUACIÓN                                                                                                                     S    (Materiales      (Valoración
+ PROBLÉMICA                                                                                                                                educativos,           permanente      e  Integral
+                                                                                                                                           tecnológicos,         para la vida)
+                                                                                                                                           lúdicos           y
+                                                                                                                                           didácticos)
+ ¿Cómo     mejoramos la       Utiliza  estrategias y     MATEMÁTICA:                               Usa    con   fluidez  tablas   2–10     Cuaderno        de    Observación      directa    y
+ fluidez    de     hechos     algoritmos         para    Consolidación de tablas del 7, 8,         en problemas y cálculo rápido.          trabajo.              registros     anecdóticos.
+ básicos   y resolvemos       estimar     y  calcular    9 y 10.                                   Aplica distributiva para 1×n de         Tablero.              Lista   de   chequeo     por
+ cálculos con números         resultados            en   Estrategias de cálculo mental             tres cifras.                            Marcadores.           indicador.
+                              multiplicación         y   Propiedad     distributiva   sobre   la                                           Lápices.
+                              división;         opera    suma     para  multiplicar   números                                              Colores.
+                                                                                                                                           Resaltadores
+
+
+                                                                                                                                                                                                               22
+======================================================================
+PAGE 23
+======================================================================
+                                                                            Mallas área de matemáticas preescolar a once.
+ mayores           usando     sobre      secuencias       de  hasta    3  cifras  por  1  dígito   Realiza divisiones por 1 dígito         Cartulinas.           Rúbrica        breve      de
+ estrategias eficientes?      para hallar faltantes.      (por ejemplo 7×134).                     y    explica     el   residuo     en    Tijeras.              resolución                de
+                                                          División   por  1  dígito  (exacta   e   contexto.                               Periódicos.           problemas
+                                                          inexacta)   con  interpretación    del   Resuelve      problemas     de   dos    Revistas.             (comprensión,
+                                                          residuo.                                 pasos                   integrando      Regla                 representación,
+                                                          Problemas            multiplicativos;    multiplicación/división          con                          procedimiento,
+                                                          secuencias          y       patrones     suma/resta       y   verifica    con                          verificación).
+                                                          multiplicativos y aditivos.              estimación.                                                   Portafolio   de evidencias
+                                                                                                                                                                 con          fotos        de
+                                                                                                                                                                 manipulativos.      Auto    y
+                                                                                                                                                                 coevaluación              de
+                                                                                                                                                                 explicación               de
+                                                                                                                                                                 estrategias
+ CUARTO PERIODO:
+ PREGUNTA                     ESTÁNDAR                    EJES TEMÁTICOS                           INDICADORES                      DE     RECURSOS              EVALUACIÓN
+ PROBLEMATIZADO                                                                                    DESEMPEÑO                               PEDAGÓGICO            FORMATIVA
+ RA   Y/O    SITUACIÓN                                                                                                                     S    (Materiales      (Evaluación
+ PROBLÉMICA                                                                                                                                educativos,           permanente       e Integral
+                                                                                                                                           tecnológicos,         para la vida)
+                                                                                                                                           lúdicos           y
+                                                                                                                                           didácticos)
+ ¿Cómo        integramos      Propone     e identifica    MATEMÁTICAS:                             Planifica,   resuelve    y   verifica   Cuaderno        de    Observación       directa   y
+ las                cuatro    patrones       y    usa     Problemas de varias etapas con           problemas       de   dos    o   más     trabajo.              registros     anecdóticos.
+ operaciones       y   sus    propiedades      de  las    suma,     resta,   multiplicación    y   pasos                   justificando    Tablero.              Lista   de   chequeo     por
+ propiedades          para    operaciones        para     división.                                operaciones       y   propiedades       Marcadores.           indicador.
+ resolver problemas de        calcular        valores     Selección de operación y control         usadas.                                 Lápices.
+ varias      etapas       y   desconocidos;               de errores.                              Resuelve               ecuaciones       Colores.              Rúbrica        breve      de
+ comunicar     resultados     resuelve    problemas       Relaciones inversas suma–resta           aritméticas        simples       con    Resaltadores          resolución                de
+ con claridad?                aritméticos                 y multiplicación–división.               incógnita y explica el proceso.         Cartulinas.           problemas
+                              integrando                                                           Conecta     reparto   con   fracción    Tijeras.              (comprensión,
+                              diferentes                                                           unitaria   en  situaciones    reales    Periódicos.           representación,
+                              estructuras.                                                         y lo comunica con claridad.             Revistas.             procedimiento,
+                                                                                                   Registra      operaciones        con    Regla                 verificación).
+                                                                                                   dinero     y    comprueba        con                          Portafolio   de evidencias
+                                                                                                   estimaciones razonables.                                      con          fotos        de
+                                                                                                                                                                 manipulativos.      Auto    y
+
+
+
+                                                                                                                                                                                                                23
+======================================================================
+PAGE 24
+======================================================================
+                                                                           Mallas área de matemáticas preescolar a once.
+                                                                                                                                                             coevaluación              de
+                                                                                                                                                             explicación               de
+                                                                                                                                                             estrategias
+
+ ESTRATEGIAS DE APOYO PARA LA SUPERACIÓN DE DIFICULTADES:
+ Los temas    serán   los mismos     para todos    los estudiantes, se realizará flexibilización curricular en la forma de evaluar y en la metodología que se utilizada,
+ teniendo en cuenta las necesidades de cada estudiante y acompañamiento permanente.
+ TRANSVERSALIDAD INTERDISCIPLINARIEDAD
+ Cabe anotar que el área de matemáticas es transversal con todas las áreas, puesto que, en el análisis de lecturas, escritura, las exposiciones y movimientos
+ se apropian de las demás asignaturas.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                                                                                                                                                                          24

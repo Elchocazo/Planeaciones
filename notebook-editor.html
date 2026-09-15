@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Editor de Cuaderno y Guía Pedagógica</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,400&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css" />
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: #f1f5f9;
+      font-family: var(--font-sans);
+    }
+  </style>
+</head>
+<body>
+  <main id="notebook-view" class="notebook-fullpage-layout" style="display: block;">
+    <section id="notebook-mount-point">
+      <div style="padding: 3rem; text-align: center; color: var(--slate-500);">
+        Cargando editor de cuaderno...
+      </div>
+    </section>
+  </main>
+
+  <!-- Scripts del Sistema -->
+  <script src="js/idb-storage.js"></script>
+  <script src="js/users-service.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/curriculum.js"></script>
+  <script src="js/holidays.js"></script>
+  <script src="js/export.js"></script>
+  <script src="js/notebook-editor.js"></script>
+
+  <script>
+    // Inicialización independiente en pestaña nueva
+    window.addEventListener('DOMContentLoaded', async () => {
+      const params = new URLSearchParams(window.location.search);
+      const dateStr = params.get('date');
+      const classIdx = parseInt(params.get('class') || '0', 10);
+
+      // Sincronización transparente con base de datos de alta capacidad
+      if (typeof IDBStorage !== 'undefined' && IDBStorage.isSupported && IDBStorage.isSupported()) {
+        try {
+          await IDBStorage.init();
+          const currentUserId = (typeof UserService !== 'undefined' && UserService.getCurrentUserId) ? UserService.getCurrentUserId() : 'usr_manuel';
+          const key = (typeof UserService !== 'undefined' && UserService.getPlansStorageKey) ? UserService.getPlansStorageKey(currentUserId) : `teacher_planner_plans_${currentUserId}_v2`;
+          const idbPlans = await IDBStorage.get(key);
+          if (idbPlans && typeof UserService !== 'undefined') {
+            if (!UserService._plansCache) UserService._plansCache = {};
+            UserService._plansCache[currentUserId] = idbPlans;
+          }
+        } catch (eIDB) {}
+      }
+
+      if (!dateStr) {
+        document.getElementById('notebook-mount-point').innerHTML = `
+          <div style="padding: 4rem 2rem; text-align: center;">
+            <h2>No se especificó la fecha de planeación</h2>
+            <p>Por favor abre el editor desde el planeador diario de clases.</p>
+            <button class="btn btn-primary" onclick="window.location.href='index.html'">Ir al Generador Principal</button>
+          </div>
+        `;
+        return;
+      }
+
+      // Cargar plan guardado en StorageService (con caché de alta capacidad)
+      const plan = (StorageService.getPlanByDate ? StorageService.getPlanByDate(dateStr) : null) || (StorageService.getPlan ? StorageService.getPlan(dateStr) : null);
+      if (!plan || !plan.classes || !plan.classes[classIdx]) {
+        document.getElementById('notebook-mount-point').innerHTML = `
+          <div style="padding: 4rem 2rem; text-align: center;">
+            <h2>No se encontró la clase para el día ${dateStr}</h2>
+            <button class="btn btn-primary" onclick="window.location.href='index.html'">Volver al Inicio</button>
+          </div>
+        `;
+        return;
+      }
+
+      // Mock mínimo de Planner para compatibilidad completa
+      window.Planner = {
+        currentPlan: plan,
+        currentDateStr: dateStr,
+        formatFullDate(d) {
+          return ExportService.formatDate(d);
+        },
+        saveCurrentPlan(showFeedback) {
+          return StorageService.savePlan(dateStr, this.currentPlan);
+        },
+        collectDataFromDOM() {}
+      };
+
+      // Mock de App para toasts
+      window.App = {
+        showToast(msg, type) {
+          console.log('[Toast]', type, msg);
+        },
+        showPlannerView() {
+          if (window.NotebookEditor) {
+            window.NotebookEditor.saveCurrentNotebookContent(false);
+          }
+          window.location.href = 'index.html';
+        }
+      };
+
+      // Guardar automáticamente al cerrar o cambiar pestaña
+      window.addEventListener('beforeunload', () => {
+        if (window.NotebookEditor && typeof window.NotebookEditor.saveCurrentNotebookContent === 'function') {
+          window.NotebookEditor.saveCurrentNotebookContent(false);
+        }
+      });
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden' && window.NotebookEditor && typeof window.NotebookEditor.saveCurrentNotebookContent === 'function') {
+          window.NotebookEditor.saveCurrentNotebookContent(false);
+        }
+      });
+
+      NotebookEditor.openInPage(classIdx, true);
+    });
+  </script>
+</body>
+</html>

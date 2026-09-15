@@ -1,0 +1,14 @@
+{
+  "version": "2.0-secure-complete",
+  "generatedAt": "2026-09-14T19:17:28.755Z",
+  "institution": "COLEGIO HOGAR MADRE DE DIOS",
+  "docente": "Manuel Muñoz",
+  "status": "PROTOCOLO_AUTOGUARDADO_ACTIVO",
+  "protocolDescription": "Sistema blindado de 5 capas: RAM, IndexedDB, LocalStorage, SessionStorage y Disco Físico",
+  "systemCheck": {
+    "diskBackupDirectory": "backups/",
+    "heartbeatIntervalSeconds": 45,
+    "maxSnapshotsRetention": 20,
+    "storagePersistentPermission": "ACTIVE"
+  }
+}
