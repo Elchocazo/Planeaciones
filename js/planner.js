@@ -1550,12 +1550,12 @@ class PlannerComponent {
     let str = (typeof text === 'string') ? text : '';
     const html = (typeof rawHtml === 'string') ? rawHtml : '';
 
-    // Si viene HTML con etiquetas de párrafo o marcas de negrita (Word, Docs, ChatGPT)
+    // Si viene HTML con etiquetas de párrafo o marcas de formato
     if (html && (html.includes('<p') || html.includes('<br') || html.includes('<div') || html.includes('<strong>') || html.includes('<b>') || html.includes('<li'))) {
       try {
         let h = html
-          .replace(/<strong[^>]*>(.*?)<\/strong>/gi, '**$1**')
-          .replace(/<b[^>]*>(.*?)<\/b>/gi, '**$1**')
+          .replace(/<strong[^>]*>(.*?)<\/strong>/gi, '$1')
+          .replace(/<b[^>]*>(.*?)<\/b>/gi, '$1')
           .replace(/<br\s*[\/]?>/gi, '\n')
           .replace(/<\/p>/gi, '\n\n')
           .replace(/<\/div>/gi, '\n\n')
@@ -1581,7 +1581,11 @@ class PlannerComponent {
     // 1. Quitar marcas de encabezados markdown (###, ##, #) al inicio de línea
     str = str.replace(/^[ \t]*#{1,6}[ \t]+/gm, '');
 
-    // 2. Prefijos de fases docentes conocidos (NO deben coincidir si están entre paréntesis como "(Tiempo: 10 min)")
+    // 2. Quitar negrita markdown de asteriscos (**palabra** o ***palabra***) y cualquier asterisco repetido
+    str = str.replace(/\*{2,3}([^*]+)\*{2,3}/g, '$1');
+    str = str.replace(/\*{2,}/g, '');
+
+    // 3. Prefijos de fases docentes conocidos (NO deben coincidir si están entre paréntesis como "(Tiempo: 10 min)")
     const phasePrefixes = [
       'FASE\\s+DE\\s+(?:INICIO|DESARROLLO|CIERRE)',
       '(?:Fase\\s+de\\s+)?(?:Inicio|Desarrollo|Cierre)',
@@ -1598,17 +1602,17 @@ class PlannerComponent {
     ].join('|');
 
     // Caso A: Títulos con dos puntos que NO estén entre paréntesis
-    const phaseColonRegex = new RegExp(`(?<!^)(?<!\\()[ \\t]*(\\*{0,2}(?:${phasePrefixes})(?:[ \\t]*\\([^)]*\\))?\\*{0,2})\\s*:\\s*`, 'gi');
+    const phaseColonRegex = new RegExp(`(?<!^)(?<!\\()[ \\t]*((?:${phasePrefixes})(?:[ \\t]*\\([^)]*\\))?)\\s*:\\s*`, 'gi');
     str = str.replace(phaseColonRegex, '\n\n$1: ');
 
     // Caso B: Títulos de fase principales como "FASE DE INICIO (Tiempo: 10 minutos)" o "FASE DE DESARROLLO"
-    const phaseHeadingRegex = new RegExp(`(?<!^)[ \\t]*(\\*{0,2}(?:FASE\\s+DE\\s+(?:INICIO|DESARROLLO|CIERRE))(?:[ \\t]*\\([^)]*\\))?\\*{0,2})(?=\\n|$|[ \\t]+[A-ZÁÉÍÓÚ])`, 'gi');
+    const phaseHeadingRegex = new RegExp(`(?<!^)[ \\t]*((?:FASE\\s+DE\\s+(?:INICIO|DESARROLLO|CIERRE))(?:[ \\t]*\\([^)]*\\))?)(?=\\n|$|[ \\t]+[A-ZÁÉÍÓÚ])`, 'gi');
     str = str.replace(phaseHeadingRegex, '\n\n$1\n\n');
 
-    // 3. Dividir en líneas, recortar espacios
-    const lines = str.split('\n').map(l => l.trim());
+    // 4. Dividir en líneas, recortar espacios y limpiar asteriscos residuales
+    const lines = str.split('\n').map(l => l.trim().replace(/\*{2,}/g, ''));
 
-    // 4. Agrupar en párrafos con doble salto (\n\n) para evitar que quede apretado
+    // 5. Agrupar en párrafos con doble salto (\n\n) para evitar que quede apretado
     const paragraphs = [];
     lines.forEach(line => {
       if (line) {
