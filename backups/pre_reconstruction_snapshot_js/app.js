@@ -54,19 +54,104 @@ const App = {
       localStorage.setItem('mallas_official_folder_synced_v13', 'true');
     }
 
-    // Inicialización del repositorio centralizado con cero pérdida de datos
-    if (typeof PlanRepository !== 'undefined' && PlanRepository.init) {
-      PlanRepository.init().catch(e => console.warn('[App] Error al iniciar PlanRepository:', e));
+    // Unificación de bloques de 2 horas continuas de clase en una sola planeación (eliminación de redundancias)
+    if (!localStorage.getItem('schedule_merge_consecutive_v2')) {
+      if (typeof UserService !== 'undefined') {
+        const u = UserService.getUserById('usr_manuel');
+        if (u) {
+          u.weeklySchedule = JSON.parse(JSON.stringify(DEFAULT_WEEKLY_SCHEDULE));
+          UserService.saveUser(u);
+        }
+      }
+      const prof = StorageService.getProfile();
+      prof.weeklySchedule = JSON.parse(JSON.stringify(DEFAULT_WEEKLY_SCHEDULE));
+      StorageService.saveProfile(prof);
+
+      // Consolidar planeaciones existentes y re-secuenciar consecutivos
+      if (typeof StorageService !== 'undefined') {
+        const allPlans = StorageService.getAllPlans();
+        let changed = false;
+        Object.keys(allPlans).forEach(d => {
+          const plan = allPlans[d];
+          if (plan && Array.isArray(plan.classes)) {
+            const beforeLen = plan.classes.length;
+            plan.classes = StorageService.consolidateClasses(plan.classes);
+            if (plan.classes.length !== beforeLen) changed = true;
+          }
+        });
+        if (changed) {
+          StorageService.saveAllPlans(allPlans);
+          const startDate = StorageService.getAcademicStartDate();
+          StorageService.syncAndLoadClassesFromStartDate(startDate);
+        }
+      }
+      localStorage.setItem('schedule_merge_consecutive_v2', 'true');
     }
 
-    // Marcar banderas de versiones anteriores para prevenir ejecuciones destructivas
-    localStorage.setItem('schedule_official_updated_v5', 'true');
-    localStorage.setItem('robotics_10_curriculum_updated_v1', 'true');
-    localStorage.setItem('mallas_official_folder_synced_v13', 'true');
-    localStorage.setItem('schedule_merge_consecutive_v2', 'true');
-    localStorage.setItem('schedule_official_calibrated_v4', 'true');
+    // Intercambio de días manual: No ejecutar swapDayPlans automático en segundo plano
+    // para respetar al 100% las ediciones manuales y la autonomía del docente sin alterar sus fechas.
 
-    // Inicializar componentes visuales (solo lectura y edición controlada)
+    // Calibración y corroboración oficial del horario semanal (según imagen oficial)
+    if (!localStorage.getItem('schedule_official_calibrated_v4')) {
+      if (typeof UserService !== 'undefined') {
+        const u = UserService.getUserById('usr_manuel');
+        if (u) {
+          u.weeklySchedule = JSON.parse(JSON.stringify(DEFAULT_WEEKLY_SCHEDULE));
+          UserService.saveUser(u);
+        }
+      }
+      const prof = StorageService.getProfile();
+      prof.weeklySchedule = JSON.parse(JSON.stringify(DEFAULT_WEEKLY_SCHEDULE));
+      StorageService.saveProfile(prof);
+
+      // 2. Calibración y corroboración de etiquetas sin sobreescrituras destructivas
+      if (typeof StorageService !== 'undefined') {
+        const allPlans = StorageService.getAllPlans();
+        let changed = false;
+        Object.keys(allPlans).forEach(d => {
+          const plan = allPlans[d];
+          if (plan && Array.isArray(plan.classes)) {
+            const dateParts = d.split('-').map(Number);
+            const dateObj = new Date(dateParts[0], dateParts[1] - 1, dateParts[2]);
+            const dayIndex = dateObj.getDay();
+
+            // Corrección de Robótica 10° vs 11°
+            plan.classes.forEach(cls => {
+              if (cls.subject === 'Robótica') {
+                if (dayIndex === 2 && cls.grade === '11°') {
+                  cls.grade = '10°';
+                  changed = true;
+                } else if (dayIndex === 4 && cls.grade === '10°') {
+                  cls.grade = '11°';
+                  changed = true;
+                }
+              }
+            });
+
+            // Corrección de etiqueta dayOfWeek para que coincida con la fecha si no es un día cruzado
+            const expectedDayName = (typeof ExportService !== 'undefined' && ExportService.getDayOfWeekName)
+              ? ExportService.getDayOfWeekName(d)
+              : '';
+            const actualDays = [...new Set(plan.classes.map(c => c.dayOfWeek).filter(Boolean))];
+            const hasClonedOtherDay = actualDays.length > 0 && expectedDayName && actualDays.every(day => day.toLowerCase() !== expectedDayName.toLowerCase());
+
+            if (hasClonedOtherDay) {
+              plan.classes.forEach(c => {
+                c.dayOfWeek = expectedDayName;
+                c.date = d;
+              });
+              changed = true;
+            }
+          }
+        });
+        if (changed) {
+          StorageService.saveAllPlans(allPlans);
+          const startDate = StorageService.getAcademicStartDate();
+          StorageService.syncAndLoadClassesFromStartDate(startDate);
+        }
+      }
+      localStorage.setItem('schedule_official_calibrated_v4', 'true');
+    }
 
     // Inicializar componentes
     window.Calendar = new CalendarComponent('calendar-mount-point');

@@ -174,14 +174,13 @@ class PlannerComponent {
         }
 
         this.currentPlan = {
-          id: (typeof PlanRepository !== 'undefined' ? PlanRepository.generatePlanId(null, dateStr) : 'plan_' + dateStr),
           date: dateStr,
           period: targetPeriod,
           classes: initialClasses,
           attachments: [],
           generalNotes: ''
         };
-        // CERO GUARDADO FANTASMA: Se inicializa en memoria y solo se guarda cuando el docente edita o guarda.
+        StorageService.savePlan(dateStr, this.currentPlan);
       }
 
       this.render();
@@ -1302,13 +1301,7 @@ class PlannerComponent {
       const observations = (row.querySelector('textarea.cls-observations')?.value || '').trim();
 
       const storedClass = storedPlan?.classes?.[idx];
-      const prevClass = this.currentPlan?.classes?.[idx];
-
-      // Identidad estable para la clase
-      const planId = this.currentPlan?.id || (typeof PlanRepository !== 'undefined' ? PlanRepository.generatePlanId(null, effectiveDate) : 'plan_' + effectiveDate);
-      const classId = prevClass?.id || storedClass?.id || (typeof PlanRepository !== 'undefined' ? PlanRepository.generateClassId(planId, idx, subject, grade) : 'class_' + idx);
-
-      let prevNotebookContent = prevClass?.notebookContent || storedClass?.notebookContent || '';
+      let prevNotebookContent = this.currentPlan?.classes?.[idx]?.notebookContent || storedClass?.notebookContent || '';
       // Protección: si el índice no coincide por reordenamiento, buscar cuaderno por materia y grado
       if (!prevNotebookContent && this.currentPlan?.classes) {
         const matchSubGrd = this.currentPlan.classes.find(c =>
@@ -1319,32 +1312,23 @@ class PlannerComponent {
         if (matchSubGrd) prevNotebookContent = matchSubGrd.notebookContent;
       }
 
-      const prevTime = prevClass?.time || storedClass?.time || '';
-      const prevAttachments = (prevClass?.attachments && prevClass.attachments.length > 0)
-        ? prevClass.attachments
+      const prevTime = this.currentPlan?.classes?.[idx]?.time || storedClass?.time || '';
+      const prevAttachments = (this.currentPlan?.classes?.[idx]?.attachments && this.currentPlan.classes[idx].attachments.length > 0)
+        ? this.currentPlan.classes[idx].attachments
         : (storedClass?.attachments || []);
 
-      // Regla anti-vacíos: si el textarea en DOM vino vacío pero había texto previo, preservar
-      const safeDba = (dba || (!dba && storedClass?.dba ? storedClass.dba : ''));
-      const safeAchievement = (achievement || (!achievement && storedClass?.achievement ? storedClass.achievement : ''));
-      const safeTopic = (topic || (!topic && storedClass?.topic ? storedClass.topic : ''));
-      const safeDescription = (description || (!description && storedClass?.description ? storedClass.description : ''));
-      const safeObservations = (observations || (!observations && storedClass?.observations ? storedClass.observations : ''));
-
       classes.push({
-        id: classId,
-        planId: planId,
-        date: effectiveDate, // INMUTABLE
+        date,
         time: prevTime,
         dayNumber,
         dayOfWeek,
         subject,
         grade,
-        dba: safeDba,
-        achievement: safeAchievement,
-        topic: safeTopic,
-        description: safeDescription,
-        observations: safeObservations,
+        dba,
+        achievement,
+        topic,
+        description,
+        observations,
         attachments: prevAttachments,
         notebookContent: prevNotebookContent
       });
@@ -1352,12 +1336,10 @@ class PlannerComponent {
 
     const generalNotes = document.getElementById('planner-general-notes')?.value ?? (this.currentPlan?.generalNotes || '');
     const period = document.getElementById('planner-period-select')?.value || this.currentPlan?.period || '1°';
-    const planId = this.currentPlan?.id || (typeof PlanRepository !== 'undefined' ? PlanRepository.generatePlanId(null, effectiveDate) : 'plan_' + effectiveDate);
 
     this.currentPlan = {
       ...(this.currentPlan || {}),
-      id: planId,
-      date: effectiveDate, // INMUTABLE
+      date: effectiveDate,
       period,
       classes,
       generalNotes

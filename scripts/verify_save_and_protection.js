@@ -45,6 +45,7 @@ global.document = {
   querySelectorAll() { return []; }
 };
 
+require('../js/plan-repository.js');
 require('../js/users-service.js');
 require('../js/storage.js');
 require('../js/curriculum.js');

@@ -322,132 +322,190 @@ const UserService = {
    * Clave de almacenamiento de planeaciones para un usuario específico
    */
   getPlansStorageKey(userId) {
-    if (typeof PlanRepository !== 'undefined' && PlanRepository.getStorageKey) {
-      return PlanRepository.getStorageKey(userId);
-    }
-    return `teacher_planner_plans_${userId}_v3`;
+    return `teacher_planner_plans_${userId}_v2`;
   },
 
   _plansCache: {},
   _idbInitialized: false,
 
   /**
-   * Inicializa la sincronización con PlanRepository e IndexedDB
+   * Inicializa la sincronización en segundo plano con IndexedDB (Alta Capacidad tipo Docs)
    */
-  async initIDBSync() {
-    if (typeof PlanRepository !== 'undefined' && PlanRepository.init) {
-      await PlanRepository.init();
-      this._idbInitialized = true;
-      return;
-    }
+  initIDBSync() {
     if (typeof IDBStorage === 'undefined' || !IDBStorage.isSupported()) return;
-    try {
-      await IDBStorage.init();
+    IDBStorage.init().then(async () => {
+      const currentUserId = this.getCurrentUserId ? this.getCurrentUserId() : 'usr_manuel';
+      const key = this.getPlansStorageKey(currentUserId);
+      const storedPlans = await IDBStorage.get(key);
+      if (storedPlans && typeof storedPlans === 'object' && Object.keys(storedPlans).length > 0) {
+        if (!this._plansCache) this._plansCache = {};
+        this._plansCache[currentUserId] = {
+          ...(this._plansCache[currentUserId] || {}),
+          ...storedPlans
+        };
+      } else {
+        // Primera vez con IndexedDB: migrar datos existentes
+        const localPlans = this.getTeacherPlans(currentUserId);
+        if (localPlans && Object.keys(localPlans).length > 0) {
+          await IDBStorage.set(key, localPlans);
+        }
+      }
       this._idbInitialized = true;
-    } catch (err) {
+    }).catch(err => {
       console.warn('[UsersService] Error en sincronización inicial de IndexedDB:', err);
-    }
+    });
   },
 
   /**
-   * Obtiene todas las planeaciones de un docente específico delegando en PlanRepository
+   * Obtiene todas las planeaciones de un docente específico
    */
   getTeacherPlans(userId) {
-    const uid = userId || this.getCurrentUserId();
-    if (typeof PlanRepository !== 'undefined' && PlanRepository.getAllPlans) {
-      return PlanRepository.getAllPlans(uid);
-    }
-
     if (!this._plansCache) this._plansCache = {};
-    if (this._plansCache[uid] && Object.keys(this._plansCache[uid]).length > 0) {
-      return JSON.parse(JSON.stringify(this._plansCache[uid]));
+    if (this._plansCache[userId] && Object.keys(this._plansCache[userId]).length > 0) {
+      return JSON.parse(JSON.stringify(this._plansCache[userId]));
     }
 
     try {
-      const key = this.getPlansStorageKey(uid);
+      const key = this.getPlansStorageKey(userId);
+
+      // Priorizar respaldo completo e íntegro de sessionStorage (evita cualquier truncamiento de LocalStorage)
+      try {
+        const fromSession = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(`backup_${key}`) : null;
+        if (fromSession) {
+          const parsedSession = JSON.parse(fromSession);
+          if (parsedSession && Object.keys(parsedSession).length > 0) {
+            this._plansCache[userId] = parsedSession;
+            return JSON.parse(JSON.stringify(parsedSession));
+          }
+        }
+      } catch (eS) {}
+
       const data = localStorage.getItem(key);
       if (data) {
         const parsed = JSON.parse(data);
-        this._plansCache[uid] = parsed;
+        this._plansCache[userId] = parsed;
         return JSON.parse(JSON.stringify(parsed));
       }
+
+      // Compatibilidad con el almacenamiento legacy para Manuel Muñoz
+      if (userId === 'usr_manuel') {
+        const legacyData = localStorage.getItem('teacher_planner_plans_v1');
+        if (legacyData) {
+          const parsed = JSON.parse(legacyData);
+          this._plansCache[userId] = parsed;
+          this.saveTeacherPlans(userId, parsed);
+          return JSON.parse(JSON.stringify(parsed));
+        }
+      }
+
+      this._plansCache[userId] = {};
       return {};
     } catch (e) {
-      console.error(`Error al leer planeaciones del docente ${uid}:`, e);
+      console.error(`Error al leer planeaciones del docente ${userId}:`, e);
       return {};
     }
   },
 
   /**
-   * Guarda todas las planeaciones de un docente específico a través de PlanRepository
+   * Guarda todas las planeaciones de un docente específico (Alta Capacidad tipo Google Docs)
    */
   saveTeacherPlans(userId, plansData) {
-    const uid = userId || this.getCurrentUserId();
-    if (typeof PlanRepository !== 'undefined' && PlanRepository.savePlan) {
-      if (plansData && typeof plansData === 'object') {
-        Object.keys(plansData).forEach(date => {
-          PlanRepository.savePlan(uid, date, plansData[date]);
-        });
-      }
-      return true;
+    if (!this._plansCache) this._plansCache = {};
+    this._plansCache[userId] = JSON.parse(JSON.stringify(plansData));
+
+    const key = this.getPlansStorageKey(userId);
+
+    // 1. Guardado de Alta Capacidad en IndexedDB (Gigabytes de almacenamiento ilimitado)
+    if (typeof IDBStorage !== 'undefined' && IDBStorage.isSupported()) {
+      IDBStorage.set(key, plansData).catch(e => {
+        console.warn('[UsersService] IDB write error:', e);
+      });
     }
 
-    if (!this._plansCache) this._plansCache = {};
-    this._plansCache[uid] = JSON.parse(JSON.stringify(plansData));
-    const key = this.getPlansStorageKey(uid);
+    // 2. Liberar espacio en LocalStorage eliminando claves legacy duplicadas
+    if (userId === 'usr_manuel') {
+      try {
+        localStorage.removeItem('teacher_planner_plans_v1');
+      } catch (eClean) {}
+    }
+
+    // 3. Respaldo en LocalStorage con degradación elegante sin alertas intrusivas
     try {
       localStorage.setItem(key, JSON.stringify(plansData));
-    } catch (e) {}
+    } catch (e) {
+      // Si LocalStorage alcanza su cuota física de 5MB, almacenamos un índice ligero en LocalStorage
+      // mientras el documento COMPLETO permanece 100% íntegro en memoria y en IndexedDB.
+      try {
+        const leanPlans = {};
+        Object.keys(plansData).forEach(date => {
+          const p = plansData[date];
+          leanPlans[date] = {
+            ...p,
+            classes: (p.classes || []).map(c => ({
+              ...c,
+              notebookContent: (c.notebookContent && c.notebookContent.length > 500)
+                ? c.notebookContent.slice(0, 300) + '... <!-- [Guardado en IndexedDB] -->'
+                : c.notebookContent
+            }))
+          };
+        });
+        localStorage.setItem(key, JSON.stringify(leanPlans));
+      } catch (eLean) {
+        // Silencioso: los datos están totalmente resguardados en IndexedDB
+      }
+    }
+
+    // 4. Respaldo en sessionStorage (silencioso)
+    try {
+      sessionStorage.setItem(`backup_${key}`, JSON.stringify(plansData));
+    } catch (eBackup) {}
+
+    // 5. Respaldo en disco físico en segundo plano (Protocolo Anti-Pérdida)
+    clearTimeout(this._diskSyncTimer);
+    this._diskSyncTimer = setTimeout(() => {
+      if (typeof StorageService !== 'undefined' && typeof StorageService.syncToDisk === 'function') {
+        StorageService.syncToDisk();
+      }
+    }, 1200);
+
     return true;
   },
 
   /**
-   * Guarda o actualiza la planeación de una fecha para un docente a través de PlanRepository
+   * Guarda o actualiza la planeación de una fecha para un docente
    */
-  saveTeacherPlanForDate(userId, dateStr, planData, options = {}) {
-    const uid = userId || this.getCurrentUserId();
-    if (typeof PlanRepository !== 'undefined' && PlanRepository.savePlan) {
-      return !!PlanRepository.savePlan(uid, dateStr, planData, options);
-    }
-    const plans = this.getTeacherPlans(uid);
+  saveTeacherPlanForDate(userId, dateStr, planData) {
+    const plans = this.getTeacherPlans(userId);
     plans[dateStr] = {
       date: dateStr,
       lastUpdated: new Date().toISOString(),
       ...planData
     };
-    return this.saveTeacherPlans(uid, plans);
+    return this.saveTeacherPlans(userId, plans);
   },
 
   /**
    * Registra el Visto Bueno / Retroalimentación de Coordinación para una planeación
    */
   saveCoordinatorReview(teacherId, dateStr, reviewData) {
-    const uid = teacherId || this.getCurrentUserId();
-    let plan = (typeof PlanRepository !== 'undefined' && PlanRepository.getPlan)
-      ? PlanRepository.getPlan(uid, dateStr)
-      : this.getTeacherPlans(uid)[dateStr];
-
-    if (!plan) {
-      plan = { date: dateStr, classes: [] };
+    const plans = this.getTeacherPlans(teacherId);
+    if (!plans[dateStr]) {
+      plans[dateStr] = { date: dateStr, classes: [] };
     }
 
     const currentCoord = this.getCurrentUser();
-    plan.coordinatorReview = {
+
+    plans[dateStr].coordinatorReview = {
       reviewerId: currentCoord.id,
       reviewerName: currentCoord.name,
-      status: reviewData.status || 'approved',
+      status: reviewData.status || 'approved', // 'approved', 'approved_with_notes', 'needs_revision'
       comments: reviewData.comments || '',
       date: new Date().toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
       stamped: true
     };
 
-    if (typeof PlanRepository !== 'undefined' && PlanRepository.savePlan) {
-      PlanRepository.savePlan(uid, dateStr, plan);
-    } else {
-      this.saveTeacherPlanForDate(uid, dateStr, plan);
-    }
-
-    return plan.coordinatorReview;
+    this.saveTeacherPlans(teacherId, plans);
+    return plans[dateStr].coordinatorReview;
   },
 
   /**
@@ -489,9 +547,7 @@ const UserService = {
   }
 };
 
-if (typeof window !== 'undefined') {
-  window.UserService = UserService;
-}
+window.UserService = UserService;
 
 if (typeof window !== 'undefined') {
   if (document.readyState === 'loading') {

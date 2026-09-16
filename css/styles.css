@@ -3444,3 +3444,192 @@ body.notebook-mode .app-container {
   transform: translateY(-1px);
 }
 
+/* ==========================================================================
+   EDITOR DE CUADERNO DOCENTE UNIFICADO (DOCUMENT-BASED SINGLE CONTENTEDITABLE)
+   ========================================================================== */
+.notebook-document-scroll-wrapper {
+  background: #f1f5f9;
+  min-height: calc(100vh - 180px);
+  padding: 2rem 1rem 4rem;
+  display: flex;
+  justify-content: center;
+  overflow-y: auto;
+}
+
+.notebook-paper-container {
+  background: #ffffff;
+  width: 100%;
+  max-width: 860px;
+  min-height: 1050px;
+  padding: 2.5rem 3.5rem;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+.notebook-page-header-card {
+  margin-bottom: 1.5rem;
+}
+
+.notebook-single-editor-body {
+  flex: 1;
+  min-height: 650px;
+  outline: none;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 1.02rem;
+  line-height: 1.7;
+  color: #1e293b;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.notebook-single-editor-body:focus {
+  outline: none;
+}
+
+.notebook-single-editor-body p {
+  margin: 0.65rem 0;
+  min-height: 1.5em;
+}
+
+.notebook-single-editor-body h1 {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--slate-900);
+  margin-top: 1.5rem;
+  margin-bottom: 0.6rem;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 4px;
+}
+
+.notebook-single-editor-body h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--primary-800);
+  margin-top: 1.3rem;
+  margin-bottom: 0.5rem;
+}
+
+.notebook-single-editor-body h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--slate-800);
+  margin-top: 1.1rem;
+  margin-bottom: 0.4rem;
+}
+
+.notebook-single-editor-body ul,
+.notebook-single-editor-body ol {
+  padding-left: 1.8rem;
+  margin: 0.65rem 0;
+}
+
+.notebook-single-editor-body li {
+  margin-bottom: 0.35rem;
+}
+
+.notebook-single-editor-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.2rem 0;
+}
+
+.notebook-single-editor-body th,
+.notebook-single-editor-body td {
+  border: 1px solid #cbd5e1;
+  padding: 8px 12px;
+  font-size: 0.95rem;
+}
+
+.notebook-single-editor-body th {
+  background: #f8fafc;
+  font-weight: 700;
+  color: var(--slate-800);
+}
+
+/* Salto de página visual tipo Word / Google Docs */
+.notebook-page-break {
+  margin: 2.5rem 0;
+  position: relative;
+  user-select: none;
+  cursor: default;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.notebook-page-break .page-break-line {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  border-top: 2px dashed #94a3b8;
+  z-index: 1;
+}
+
+.notebook-page-break .page-break-label {
+  position: relative;
+  z-index: 2;
+  background: #ffffff;
+  padding: 4px 14px;
+  border-radius: 12px;
+  border: 1px solid #cbd5e1;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #64748b;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.notebook-document-footer {
+  margin-top: 2.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+/* Optimización para impresión de Cuaderno */
+@media print {
+  body.notebook-mode .main-header,
+  body.notebook-mode .notebook-sticky-header-wrapper,
+  body.notebook-mode #notebook-conflict-banner,
+  body.notebook-mode .btn,
+  body.notebook-mode .btn-secondary,
+  body.notebook-mode .btn-primary {
+    display: none !important;
+  }
+
+  .notebook-document-scroll-wrapper {
+    background: transparent !important;
+    padding: 0 !important;
+  }
+
+  .notebook-paper-container {
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .notebook-page-break {
+    page-break-after: always;
+    break-after: page;
+    height: 0;
+    margin: 0;
+    padding: 0;
+    border: none;
+  }
+
+  .notebook-page-break .page-break-line,
+  .notebook-page-break .page-break-label {
+    display: none !important;
+  }
+}
+
+

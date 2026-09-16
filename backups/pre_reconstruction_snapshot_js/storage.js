@@ -109,13 +109,6 @@ const StorageService = {
   },
 
   /**
-   * Obtiene una copia del horario semanal por defecto institucional
-   */
-  getDefaultSchedule() {
-    return JSON.parse(JSON.stringify(DEFAULT_WEEKLY_SCHEDULE));
-  },
-
-  /**
    * Une dos rangos horarios en uno solo (ej. '7:00 - 7:50' y '7:50 - 8:40' -> '7:00 - 8:40')
    */
   mergeTimeRanges(time1, time2) {
@@ -204,15 +197,6 @@ const StorageService = {
   saveProfile(profileData) {
     try {
       localStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(profileData));
-      if (typeof UserService !== 'undefined' && UserService.getAllUsers && UserService.saveAllUsers && UserService.getCurrentUserId) {
-        const uid = profileData.id || UserService.getCurrentUserId();
-        const users = UserService.getAllUsers();
-        const idx = users.findIndex(u => u.id === uid);
-        if (idx >= 0) {
-          users[idx] = { ...users[idx], ...profileData };
-          UserService.saveAllUsers(users);
-        }
-      }
       return true;
     } catch (e) {
       console.error('Error al guardar el perfil:', e);
@@ -224,21 +208,10 @@ const StorageService = {
    * Obtiene todas las planeaciones guardadas para el usuario activo
    * Formato: { "YYYY-MM-DD": { date: "YYYY-MM-DD", classes: [...], generalNotes: "" } }
    */
-  /**
-   * Obtiene todas las planeaciones guardadas para el usuario activo a través de PlanRepository
-   * Formato: { "YYYY-MM-DD": { id, teacherId, date: "YYYY-MM-DD", classes: [...], generalNotes: "" } }
-   */
   getAllPlans() {
     try {
-      const currentUserId = (typeof UserService !== 'undefined' && UserService.getCurrentUserId)
-        ? UserService.getCurrentUserId()
-        : 'usr_manuel';
-
-      if (typeof PlanRepository !== 'undefined' && PlanRepository.getAllPlans) {
-        return PlanRepository.getAllPlans(currentUserId);
-      }
       if (typeof UserService !== 'undefined' && UserService.getTeacherPlans) {
-        return UserService.getTeacherPlans(currentUserId);
+        return UserService.getTeacherPlans(UserService.getCurrentUserId());
       }
       const data = localStorage.getItem(STORAGE_KEYS.PLANS);
       return data ? JSON.parse(data) : {};
@@ -249,17 +222,9 @@ const StorageService = {
   },
 
   /**
-   * Obtiene la planeación de una fecha específica a través de PlanRepository
+   * Obtiene la planeación de una fecha específica
    */
   getPlanByDate(dateStr) {
-    if (!dateStr) return null;
-    const currentUserId = (typeof UserService !== 'undefined' && UserService.getCurrentUserId)
-      ? UserService.getCurrentUserId()
-      : 'usr_manuel';
-
-    if (typeof PlanRepository !== 'undefined' && PlanRepository.getPlan) {
-      return PlanRepository.getPlan(currentUserId, dateStr);
-    }
     const plans = this.getAllPlans();
     return plans[dateStr] || null;
   },
@@ -272,19 +237,12 @@ const StorageService = {
   },
 
   /**
-   * Limpia todas las planeaciones guardadas (con resguardo previo de seguridad)
+   * Limpia todas las planeaciones guardadas
    */
   clearAllPlans() {
     try {
-      const currentUserId = (typeof UserService !== 'undefined' && UserService.getCurrentUserId)
-        ? UserService.getCurrentUserId()
-        : 'usr_manuel';
-
-      if (typeof PlanRepository !== 'undefined' && PlanRepository.saveSnapshot) {
-        PlanRepository.saveSnapshot(currentUserId, 'pre_clear_all', this.getAllPlans());
-      }
       if (typeof UserService !== 'undefined' && UserService.saveTeacherPlans) {
-        UserService.saveTeacherPlans(currentUserId, {});
+        UserService.saveTeacherPlans(UserService.getCurrentUserId(), {});
       }
       localStorage.setItem(STORAGE_KEYS.PLANS, JSON.stringify({}));
       return true;
@@ -295,36 +253,38 @@ const StorageService = {
   },
 
   /**
-   * Limpia planeaciones anteriores al 1 de septiembre sin destruir datos existentes del docente
+   * Limpia planeaciones anteriores al 1 de septiembre
    */
   cleanPlansBeforeSeptember() {
-    // Protección contra borrado silencioso: conservamos intactos los datos
-    return true;
+    try {
+      const allPlans = this.getAllPlans();
+      const cleaned = {};
+      Object.keys(allPlans).forEach(k => {
+        if (k >= '2026-09-01') {
+          cleaned[k] = allPlans[k];
+        }
+      });
+      if (typeof UserService !== 'undefined' && UserService.saveTeacherPlans) {
+        UserService.saveTeacherPlans(UserService.getCurrentUserId(), cleaned);
+      }
+      localStorage.setItem(STORAGE_KEYS.PLANS, JSON.stringify(cleaned));
+      return true;
+    } catch (e) {
+      return false;
+    }
   },
 
   /**
-   * Guarda o actualiza la planeación de una fecha a través de PlanRepository
-   * Garantiza inmutabilidad de fecha, versionado atómico y protección anti-vacíos
+   * Guarda o actualiza la planeación de una fecha
    */
-  savePlan(dateStr, planData, isSyncing = false, options = {}) {
+  savePlan(dateStr, planData, isSyncing = false) {
     try {
-      if (!dateStr || !planData) return false;
-
-      const currentUserId = (typeof UserService !== 'undefined' && UserService.getCurrentUserId)
-        ? UserService.getCurrentUserId()
-        : 'usr_manuel';
-
-      // Asegurar consolidación de bloques continuos solo si es una nueva creación
-      if (planData && Array.isArray(planData.classes) && (!planData.version || planData.version <= 1)) {
+      if (planData && Array.isArray(planData.classes)) {
         planData.classes = this.consolidateClasses(planData.classes);
       }
-
       let success = false;
-      if (typeof PlanRepository !== 'undefined' && PlanRepository.savePlan) {
-        const saved = PlanRepository.savePlan(currentUserId, dateStr, planData, options);
-        success = !!saved;
-      } else if (typeof UserService !== 'undefined' && UserService.saveTeacherPlanForDate) {
-        success = UserService.saveTeacherPlanForDate(currentUserId, dateStr, planData, options);
+      if (typeof UserService !== 'undefined' && UserService.saveTeacherPlanForDate) {
+        success = UserService.saveTeacherPlanForDate(UserService.getCurrentUserId(), dateStr, planData);
       } else {
         const plans = this.getAllPlans();
         plans[dateStr] = {
@@ -335,10 +295,12 @@ const StorageService = {
         try {
           localStorage.setItem(STORAGE_KEYS.PLANS, JSON.stringify(plans));
           success = true;
-        } catch (eLocal) {}
+        } catch (eLocal) {
+          // Silencioso: manejado por almacenamiento de alta capacidad
+        }
       }
 
-      // Sincronización transparente de contraparte espejo (4°A / 4°B)
+      // Sincronización automática de clases paralelas espejo (ej: 4°A y 4°B de Sistemas)
       if (success && !isSyncing && planData && Array.isArray(planData.classes)) {
         planData.classes.forEach(cls => {
           this.syncParallelClasses(cls, dateStr);
@@ -656,17 +618,17 @@ const StorageService = {
   },
 
   /**
-   * Asegura la inicialización respetando al 100% la inmutabilidad de todas las planeaciones existentes.
-   * JAMÁS re-secuencia ni altera días que ya fueron guardados por el docente.
+   * Sincroniza y carga automáticamente las clases, DBAs y desempeños
+   * a partir del nuevo primer día de clases.
    */
   syncAndLoadClassesFromStartDate(startDate) {
     try {
       const profile = this.getProfile();
-      const existing = this.getPlanByDate(startDate);
+      const allPlans = this.getAllPlans();
       const targetPeriod = profile.period || '1°';
 
-      // Asegurar que startDate tenga su planeación inicial solo si no existía previamente
-      if (!existing) {
+      // Asegurar que startDate tenga su planeación inicial con Clase 1 y datos del curso cargados
+      if (!allPlans[startDate]) {
         const dateParts = startDate.split('-').map(Number);
         const dateObj = new Date(dateParts[0], dateParts[1] - 1, dateParts[2]);
         const dayIndex = dateObj.getDay();
@@ -697,16 +659,48 @@ const StorageService = {
             });
           });
 
-          this.savePlan(startDate, {
+          allPlans[startDate] = {
             date: startDate,
             period: targetPeriod,
             classes: initialClasses,
             attachments: [],
             generalNotes: ''
+          };
+        }
+      }
+
+      // Para todas las fechas a partir de startDate, re-secuenciar y auto-cargar datos del curso
+      const futureDates = Object.keys(allPlans).filter(d => d >= startDate).sort();
+      for (const d of futureDates) {
+        const plan = allPlans[d];
+        if (plan && Array.isArray(plan.classes)) {
+          plan.classes = this.consolidateClasses(plan.classes);
+          const currentDayClasses = [];
+          plan.classes.forEach((cls, i) => {
+            const classNum = this.getNextClassNumber(d, cls.subject, cls.grade, i, currentDayClasses);
+            cls.dayNumber = `${classNum}`;
+            currentDayClasses.push(cls);
+
+            // Auto-cargar tema, DBA y desempeño únicamente si están completamente vacíos
+            const isDirGroup = cls.subject && String(cls.subject).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes('direccion de grupo');
+            if (isDirGroup) {
+              cls.topic = '';
+              cls.dba = '';
+              cls.achievement = '';
+              cls.performance = '';
+            } else if (typeof CurriculumService !== 'undefined') {
+              const autoCur = CurriculumService.getAutoCurriculumItem(plan.period || targetPeriod, cls.subject, cls.grade, classNum);
+              if (autoCur) {
+                if (!cls.topic || cls.topic.trim() === '') cls.topic = autoCur.topic;
+                if (!cls.dba || cls.dba.trim() === '') cls.dba = autoCur.dba;
+                if (!cls.achievement || cls.achievement.trim() === '') cls.achievement = autoCur.achievement;
+              }
+            }
           });
         }
       }
-      // REGLA ABSOLUTA: Las fechas futuras existentes NO se tocan ni se re-secuencian automáticamente.
+
+      this.saveAllPlans(allPlans);
     } catch (e) {
       console.error('Error sincronizando clases desde fecha de inicio:', e);
     }
@@ -1151,19 +1145,11 @@ const StorageService = {
   }
 };
 
-StorageService.DEFAULT_WEEKLY_SCHEDULE = DEFAULT_WEEKLY_SCHEDULE;
-StorageService.DEFAULT_PROFILE = DEFAULT_PROFILE;
-StorageService.DEFAULT_GRADES = DEFAULT_GRADES;
+window.StorageService = StorageService;
 
-if (typeof window !== 'undefined') {
-  window.StorageService = StorageService;
-  if (typeof window.addEventListener === 'function') {
-    window.addEventListener('DOMContentLoaded', () => {
-      StorageService.startAutoSaveHeartbeat();
-    });
-  }
-}
-
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = StorageService;
+// Iniciar automáticamente el protocolo de salvaguarda de fondo
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+  window.addEventListener('DOMContentLoaded', () => {
+    StorageService.startAutoSaveHeartbeat();
+  });
 }
