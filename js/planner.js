@@ -21,6 +21,14 @@ class PlannerComponent {
     return dateStr || '';
   }
 
+  cleanAsterisks(text) {
+    if (typeof text !== 'string') return text || '';
+    return text
+      .replace(/\*{2,}/g, '')
+      .replace(/[ \t]+:/g, ':')
+      .replace(/:[ \t]{2,}/g, ': ');
+  }
+
   isDirectionOfGroup(subject) {
     if (!subject) return false;
     return String(subject).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes('direccion de grupo');
@@ -80,6 +88,11 @@ class PlannerComponent {
             }
             if (!cls.classId) cls.classId = cls.id;
             if (!cls.sequenceNumber) cls.sequenceNumber = parseInt(cls.dayNumber, 10) || (idx + 1);
+            if (cls.description) cls.description = this.cleanAsterisks(cls.description);
+            if (cls.topic) cls.topic = this.cleanAsterisks(cls.topic);
+            if (cls.achievement) cls.achievement = this.cleanAsterisks(cls.achievement);
+            if (cls.dba) cls.dba = this.cleanAsterisks(cls.dba);
+            if (cls.observations) cls.observations = this.cleanAsterisks(cls.observations);
           });
         }
         if (!this.currentPlan.period) this.currentPlan.period = profile?.period || '1°';
@@ -369,7 +382,7 @@ class PlannerComponent {
               </div>
               <textarea class="table-textarea cls-dba" style="display:none;"></textarea>
             ` : `
-              <textarea class="table-textarea cls-dba" rows="4" oninput="Planner.handleInputChange()" onchange="Planner.handleInputChange(true)" onblur="Planner.handleInputChange(true)" onpaste="Planner.handlePaste(event)" placeholder="Derechos Básicos de Aprendizaje (DBA)...">${this.escapeHtml(cls.dba || '')}</textarea>
+              <textarea class="table-textarea cls-dba" rows="4" oninput="Planner.handleInputChange()" onchange="Planner.handleInputChange(true)" onblur="Planner.handleInputChange(true)" onpaste="Planner.handlePaste(event)" placeholder="Derechos Básicos de Aprendizaje (DBA)...">${this.escapeHtml(this.cleanAsterisks(cls.dba || ''))}</textarea>
             `}
           </td>
 
@@ -382,7 +395,7 @@ class PlannerComponent {
               </div>
               <textarea class="table-textarea cls-achievement" style="display:none;"></textarea>
             ` : `
-              <textarea class="table-textarea cls-achievement" rows="4" oninput="Planner.handleInputChange()" onchange="Planner.handleInputChange(true)" onblur="Planner.handleInputChange(true)" onpaste="Planner.handlePaste(event)" placeholder="Logros e Indicadores de desempeño...">${this.escapeHtml(cls.achievement || cls.performance || '')}</textarea>
+              <textarea class="table-textarea cls-achievement" rows="4" oninput="Planner.handleInputChange()" onchange="Planner.handleInputChange(true)" onblur="Planner.handleInputChange(true)" onpaste="Planner.handlePaste(event)" placeholder="Logros e Indicadores de desempeño...">${this.escapeHtml(this.cleanAsterisks(cls.achievement || cls.performance || ''))}</textarea>
             `}
           </td>
 
@@ -395,20 +408,20 @@ class PlannerComponent {
               </div>
               <textarea class="table-textarea cls-topic" style="display:none;"></textarea>
             ` : `
-              <textarea class="table-textarea cls-topic" rows="4" oninput="Planner.handleInputChange()" onchange="Planner.handleInputChange(true)" onblur="Planner.handleInputChange(true)" onpaste="Planner.handlePaste(event)" placeholder="Tema o Eje Temático de la sesión...">${this.escapeHtml(cls.topic || '')}</textarea>
+              <textarea class="table-textarea cls-topic" rows="4" oninput="Planner.handleInputChange()" onchange="Planner.handleInputChange(true)" onblur="Planner.handleInputChange(true)" onpaste="Planner.handlePaste(event)" placeholder="Tema o Eje Temático de la sesión...">${this.escapeHtml(this.cleanAsterisks(cls.topic || ''))}</textarea>
             `}
           </td>
 
           <!-- Columna 8: Secuencia Didáctica, Observaciones, Cuaderno y Anexos -->
           <td class="col-desc" style="vertical-align: top;">
-            <textarea class="table-textarea cls-description" rows="5" oninput="Planner.handleInputChange(); Planner.autoResizeTextarea(this);" onchange="Planner.handleInputChange(true)" onblur="Planner.handleInputChange(true)" onpaste="Planner.handlePaste(event)" placeholder="${isDirGroup ? 'Asuntos generales tratados con el grupo, compromisos y orientación escolar...' : 'Inicio:\nDesarrollo:\nCierre:\nRecursos, tareas, evaluación...'}">${this.escapeHtml(cls.description || '')}</textarea>
+            <textarea class="table-textarea cls-description" rows="5" oninput="Planner.handleInputChange(); Planner.autoResizeTextarea(this);" onchange="Planner.handleInputChange(true)" onblur="Planner.handleInputChange(true)" onpaste="Planner.handlePaste(event)" placeholder="${isDirGroup ? 'Asuntos generales tratados con el grupo, compromisos y orientación escolar...' : 'Inicio:\nDesarrollo:\nCierre:\nRecursos, tareas, evaluación...'}">${this.escapeHtml(this.cleanAsterisks(cls.description || ''))}</textarea>
 
             <!-- Observaciones Pedagógicas Específicas de esta Clase -->
             <div class="class-obs-box" style="margin-top: 5px; background: #fffbeb; border: 1px solid #fef3c7; border-radius: 6px; padding: 4px 7px;">
               <label style="font-size: 0.72rem; font-weight: 700; color: #92400e; display: flex; align-items: center; gap: 4px; margin-bottom: 2px;">
                 📝 Observaciones de la clase:
               </label>
-              <textarea class="table-textarea cls-observations" rows="2" style="font-size: 0.78rem; background: #ffffff; border-color: #fde68a; width: 100%; box-sizing: border-box; border-radius: 4px; padding: 3px 6px;" oninput="Planner.handleInputChange()" onchange="Planner.handleInputChange(true)" onblur="Planner.handleInputChange(true)" onpaste="Planner.handlePaste(event)" placeholder="Observaciones pedagógicas específicas para esta sesión...">${this.escapeHtml(cls.observations || '')}</textarea>
+              <textarea class="table-textarea cls-observations" rows="2" style="font-size: 0.78rem; background: #ffffff; border-color: #fde68a; width: 100%; box-sizing: border-box; border-radius: 4px; padding: 3px 6px;" oninput="Planner.handleInputChange()" onchange="Planner.handleInputChange(true)" onblur="Planner.handleInputChange(true)" onpaste="Planner.handlePaste(event)" placeholder="Observaciones pedagógicas específicas para esta sesión...">${this.escapeHtml(this.cleanAsterisks(cls.observations || ''))}</textarea>
             </div>
 
             <div style="display:flex; justify-content:space-between; align-items:center; margin-top:5px; flex-wrap:wrap; gap:4px;">
@@ -1297,11 +1310,11 @@ class PlannerComponent {
         : (storedClass?.attachments || []);
 
       // Regla anti-vacíos: si el textarea en DOM vino vacío pero había texto previo, preservar
-      const safeDba = (dba || (!dba && storedClass?.dba ? storedClass.dba : ''));
-      const safeAchievement = (achievement || (!achievement && storedClass?.achievement ? storedClass.achievement : ''));
-      const safeTopic = (topic || (!topic && storedClass?.topic ? storedClass.topic : ''));
-      const safeDescription = (description || (!description && storedClass?.description ? storedClass.description : ''));
-      const safeObservations = (observations || (!observations && storedClass?.observations ? storedClass.observations : ''));
+      const safeDba = this.cleanAsterisks(dba || (!dba && storedClass?.dba ? storedClass.dba : ''));
+      const safeAchievement = this.cleanAsterisks(achievement || (!achievement && storedClass?.achievement ? storedClass.achievement : ''));
+      const safeTopic = this.cleanAsterisks(topic || (!topic && storedClass?.topic ? storedClass.topic : ''));
+      const safeDescription = this.cleanAsterisks(description || (!description && storedClass?.description ? storedClass.description : ''));
+      const safeObservations = this.cleanAsterisks(observations || (!observations && storedClass?.observations ? storedClass.observations : ''));
 
       classes.push({
         id: classId,
@@ -1322,7 +1335,7 @@ class PlannerComponent {
       });
     });
 
-    const generalNotes = document.getElementById('planner-general-notes')?.value ?? (this.currentPlan?.generalNotes || '');
+    const generalNotes = this.cleanAsterisks(document.getElementById('planner-general-notes')?.value ?? (this.currentPlan?.generalNotes || ''));
     const period = document.getElementById('planner-period-select')?.value || this.currentPlan?.period || '1°';
     const planId = this.currentPlan?.id || (typeof PlanRepository !== 'undefined' ? PlanRepository.generatePlanId(null, effectiveDate) : 'plan_' + effectiveDate);
 
@@ -1486,11 +1499,11 @@ class PlannerComponent {
       classData.dayOfWeek = dayOfWeek;
       classData.subject = subject;
       classData.grade = grade;
-      classData.dba = dba || (!dba && currentCls.dba ? currentCls.dba : '');
-      classData.achievement = achievement || (!achievement && currentCls.achievement ? currentCls.achievement : '');
-      classData.topic = topic || (!topic && currentCls.topic ? currentCls.topic : '');
-      classData.description = description || (!description && currentCls.description ? currentCls.description : '');
-      classData.observations = observations || (!observations && currentCls.observations ? currentCls.observations : '');
+      classData.dba = this.cleanAsterisks(dba || (!dba && currentCls.dba ? currentCls.dba : ''));
+      classData.achievement = this.cleanAsterisks(achievement || (!achievement && currentCls.achievement ? currentCls.achievement : ''));
+      classData.topic = this.cleanAsterisks(topic || (!topic && currentCls.topic ? currentCls.topic : ''));
+      classData.description = this.cleanAsterisks(description || (!description && currentCls.description ? currentCls.description : ''));
+      classData.observations = this.cleanAsterisks(observations || (!observations && currentCls.observations ? currentCls.observations : ''));
     }
 
     let success = false;
@@ -1581,9 +1594,10 @@ class PlannerComponent {
     // 1. Quitar marcas de encabezados markdown (###, ##, #) al inicio de línea
     str = str.replace(/^[ \t]*#{1,6}[ \t]+/gm, '');
 
-    // 2. Quitar negrita markdown de asteriscos (**palabra** o ***palabra***) y cualquier asterisco repetido
-    str = str.replace(/\*{2,3}([^*]+)\*{2,3}/g, '$1');
+    // 2. Quitar todos los asteriscos markdown (** o ***) y normalizar espacios en dos puntos
     str = str.replace(/\*{2,}/g, '');
+    str = str.replace(/[ \t]+:/g, ':');
+    str = str.replace(/:[ \t]{2,}/g, ': ');
 
     // 3. Prefijos de fases docentes conocidos (NO deben coincidir si están entre paréntesis como "(Tiempo: 10 min)")
     const phasePrefixes = [
@@ -1769,7 +1783,7 @@ class PlannerComponent {
     const target = event?.target;
     const clipboardData = event?.clipboardData || (typeof window !== 'undefined' ? window.clipboardData : null);
 
-    if (target && target.tagName === 'TEXTAREA' && clipboardData) {
+    if (target && (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT') && clipboardData) {
       const rawText = clipboardData.getData ? clipboardData.getData('text/plain') : '';
       const rawHtml = clipboardData.getData ? clipboardData.getData('text/html') : '';
 
@@ -1779,11 +1793,11 @@ class PlannerComponent {
         if (formatted) {
           if (event.preventDefault) event.preventDefault();
 
-          if (typeof document !== 'undefined' && document.execCommand && document.execCommand('insertText', false, formatted)) {
-            // Inserción nativa con soporte de Ctrl+Z
+          const start = target.selectionStart ?? 0;
+          const end = target.selectionEnd ?? 0;
+          if (typeof target.setRangeText === 'function') {
+            target.setRangeText(formatted, start, end, 'end');
           } else {
-            const start = target.selectionStart ?? 0;
-            const end = target.selectionEnd ?? 0;
             const val = target.value || '';
             target.value = val.substring(0, start) + formatted + val.substring(end);
             target.selectionStart = target.selectionEnd = start + formatted.length;
@@ -1802,6 +1816,23 @@ class PlannerComponent {
           }
           return;
         }
+      } else if (rawText && rawText.includes('**')) {
+        // En cualquier otra celda (Tema, Logros, DBA), limpiar asteriscos directamente
+        const cleaned = this.cleanAsterisks(rawText);
+        if (event.preventDefault) event.preventDefault();
+        const start = target.selectionStart ?? 0;
+        const end = target.selectionEnd ?? 0;
+        if (typeof target.setRangeText === 'function') {
+          target.setRangeText(cleaned, start, end, 'end');
+        } else {
+          const val = target.value || '';
+          target.value = val.substring(0, start) + cleaned + val.substring(end);
+          target.selectionStart = target.selectionEnd = start + cleaned.length;
+        }
+        this.setUnsavedChanges(true);
+        this.updateSaveIndicator('saving');
+        this.handleInputChange(true);
+        return;
       }
     }
 
@@ -1809,6 +1840,9 @@ class PlannerComponent {
     this.updateSaveIndicator('saving');
     setTimeout(() => {
       if (target && target.tagName === 'TEXTAREA') {
+        if (typeof target.value === 'string' && target.value.includes('**')) {
+          target.value = this.cleanAsterisks(target.value);
+        }
         this.autoResizeTextarea(target);
       }
       this.handleInputChange(true);
@@ -1817,6 +1851,20 @@ class PlannerComponent {
   }
 
   handleInputChange(immediate = false) {
+    if (typeof document !== 'undefined') {
+      const active = document.activeElement;
+      if (active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT')) {
+        if (typeof active.value === 'string' && active.value.includes('**')) {
+          const start = active.selectionStart;
+          active.value = this.cleanAsterisks(active.value);
+          if (typeof active.setSelectionRange === 'function' && start !== null) {
+            const newPos = Math.min(start, active.value.length);
+            active.setSelectionRange(newPos, newPos);
+          }
+        }
+      }
+    }
+
     this.setUnsavedChanges(true);
     clearTimeout(this.autoSaveTimer);
     this.updateSaveIndicator('saving');
