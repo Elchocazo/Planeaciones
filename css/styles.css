@@ -1826,29 +1826,29 @@ button {
     print-color-adjust: exact !important;
   }
 
-  /* Ocultar absolutamente todo en el DOM excepto el reporte a imprimir */
-  body > *:not(#printable-report) {
+  /* Ocultar absolutamente todo en el DOM excepto el reporte a imprimir (cuando NO es cuaderno docente) */
+  body:not(.notebook-mode):not(.printing-notebook) > *:not(#printable-report) {
     display: none !important;
   }
 
-  .app-container,
-  .main-header,
-  .calendar-page-layout,
-  #calendar-view,
-  #planner-view,
-  .planner-view-container,
-  .planner-top-bar,
-  .planning-table-container,
-  .attachments-card,
-  .general-notes-card,
-  .modal-backdrop,
-  .coordinator-modal-backdrop,
-  .notebook-modal-backdrop,
-  .toast-container {
+  body:not(.notebook-mode):not(.printing-notebook) .app-container,
+  body:not(.notebook-mode):not(.printing-notebook) .main-header,
+  body:not(.notebook-mode):not(.printing-notebook) .calendar-page-layout,
+  body:not(.notebook-mode):not(.printing-notebook) #calendar-view,
+  body:not(.notebook-mode):not(.printing-notebook) #planner-view,
+  body:not(.notebook-mode):not(.printing-notebook) .planner-view-container,
+  body:not(.notebook-mode):not(.printing-notebook) .planner-top-bar,
+  body:not(.notebook-mode):not(.printing-notebook) .planning-table-container,
+  body:not(.notebook-mode):not(.printing-notebook) .attachments-card,
+  body:not(.notebook-mode):not(.printing-notebook) .general-notes-card,
+  body:not(.notebook-mode):not(.printing-notebook) .modal-backdrop,
+  body:not(.notebook-mode):not(.printing-notebook) .coordinator-modal-backdrop,
+  body:not(.notebook-mode):not(.printing-notebook) .notebook-modal-backdrop,
+  body:not(.notebook-mode):not(.printing-notebook) .toast-container {
     display: none !important;
   }
 
-  #printable-report {
+  body:not(.notebook-mode):not(.printing-notebook) #printable-report {
     display: block !important;
     position: static !important;
     width: 100% !important;
@@ -3594,27 +3594,90 @@ body.notebook-mode .app-container {
   color: #94a3b8;
 }
 
-/* Optimización para impresión de Cuaderno */
+/* Optimización Integral para Impresión de Cuaderno / Guía Pedagógica */
 @media print {
+  body.notebook-mode,
+  body.printing-notebook {
+    background: #ffffff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  body.notebook-mode .app-container,
+  body.printing-notebook .app-container {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    background: #ffffff !important;
+  }
+
+  body.notebook-mode #notebook-view,
+  body.printing-notebook #notebook-view {
+    display: block !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  body.notebook-mode #notebook-mount-point,
+  body.printing-notebook #notebook-mount-point {
+    display: block !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
   body.notebook-mode .main-header,
+  body.printing-notebook .main-header,
+  body.notebook-mode #app-main-header,
+  body.printing-notebook #app-main-header,
   body.notebook-mode .notebook-sticky-header-wrapper,
+  body.printing-notebook .notebook-sticky-header-wrapper,
   body.notebook-mode #notebook-conflict-banner,
+  body.printing-notebook #notebook-conflict-banner,
   body.notebook-mode .btn,
+  body.printing-notebook .btn,
   body.notebook-mode .btn-secondary,
-  body.notebook-mode .btn-primary {
+  body.printing-notebook .btn-secondary,
+  body.notebook-mode .btn-primary,
+  body.printing-notebook .btn-primary,
+  body.notebook-mode .modal-backdrop,
+  body.printing-notebook .modal-backdrop,
+  body.notebook-mode .toast-container,
+  body.printing-notebook .toast-container,
+  body.notebook-mode #calendar-view,
+  body.printing-notebook #calendar-view,
+  body.notebook-mode #planner-view,
+  body.printing-notebook #planner-view,
+  body.notebook-mode #printable-report,
+  body.printing-notebook #printable-report {
     display: none !important;
   }
 
-  .notebook-document-scroll-wrapper {
+  body.notebook-mode .notebook-document-scroll-wrapper,
+  body.printing-notebook .notebook-document-scroll-wrapper {
     background: transparent !important;
     padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    display: block !important;
+    overflow: visible !important;
   }
 
-  .notebook-paper-container {
+  body.notebook-mode .notebook-paper-container,
+  body.printing-notebook .notebook-paper-container {
     box-shadow: none !important;
     border: none !important;
     padding: 0 !important;
+    margin: 0 !important;
     max-width: 100% !important;
+    width: 100% !important;
+    display: block !important;
+    min-height: auto !important;
+    background: #ffffff !important;
   }
 
   .notebook-page-break {
@@ -3637,13 +3700,28 @@ body.notebook-mode .app-container {
     margin-top: 2rem !important;
     border-top: 1px dashed #94a3b8 !important;
     padding-top: 0.8rem !important;
+    display: block !important;
   }
 
   .notebook-observations-card textarea {
     border: 1px solid #cbd5e1 !important;
     background: transparent !important;
     min-height: 80px !important;
+    height: auto !important;
+    max-height: none !important;
     font-size: 0.85rem !important;
+    width: 100% !important;
+    display: block !important;
+    resize: none !important;
+    white-space: pre-wrap !important;
+    overflow: visible !important;
+  }
+
+  .notebook-document-footer {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    margin-top: 1.5rem !important;
+    padding-top: 0.5rem !important;
   }
 }
 

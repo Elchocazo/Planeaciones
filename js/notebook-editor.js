@@ -879,7 +879,48 @@ const NotebookEditor = {
 
   printNotebook() {
     this.saveCurrentNotebookContent(false);
+
+    // Asegurar que el textarea de observaciones tenga su contenido renderizado para el motor de impresión
+    const hdrObs = document.getElementById('hdr-edit-observations');
+    if (hdrObs) {
+      hdrObs.textContent = hdrObs.value;
+    }
+
+    // Inyectar regla @page en portrait (vertical) para el cuaderno docente
+    let printStyle = document.getElementById('notebook-print-orientation-style');
+    if (!printStyle) {
+      printStyle = document.createElement('style');
+      printStyle.id = 'notebook-print-orientation-style';
+      document.head.appendChild(printStyle);
+    }
+    printStyle.textContent = `
+      @page {
+        size: letter portrait !important;
+        margin: 1.2cm 1.5cm 1.2cm 1.5cm !important;
+      }
+    `;
+
+    document.body.classList.add('notebook-mode');
+    document.body.classList.add('printing-notebook');
+
+    const printReport = document.getElementById('printable-report');
+    let prevDisplay = '';
+    if (printReport) {
+      prevDisplay = printReport.style.display;
+      printReport.style.display = 'none';
+    }
+
     window.print();
+
+    setTimeout(() => {
+      document.body.classList.remove('printing-notebook');
+      if (printReport) {
+        printReport.style.display = prevDisplay;
+      }
+      if (printStyle) {
+        printStyle.remove();
+      }
+    }, 1500);
   },
 
   generateDefaultContentFromClass(cls) {
