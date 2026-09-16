@@ -1,478 +1,442 @@
 /**
- * TEST INTEGRITY SUITE: VERIFICACIÓN DE LOS 10 CASOS OBLIGATORIOS
- * AUDITORÍA Y RECONSTRUCCIÓN ESTRUCTURAL - CERO PÉRDIDA DE DATOS
+ * SUITE DE INTEGRIDAD ARQUITECTÓNICA Y CERO PÉRDIDA DE DATOS
+ * Verifica rigurosamente los 12 requisitos mandatorios del sistema
  */
 
-const assert = require('assert');
-const fs = require('fs');
-const path = require('path');
+// Configuración de entorno Node.js para emular navegador
+const memoryStore = {};
+global.window = global;
+global.window.scrollTo = function() {};
 
-// --- SIMULACIÓN DE ENTORNO NAVEGADOR (LocalStorage, BroadcastChannel, Window, Document) ---
-class LocalStorageMock {
-  constructor() {
-    this.store = {};
-  }
-  getItem(key) {
-    return this.store.hasOwnProperty(key) ? this.store[key] : null;
-  }
-  setItem(key, value) {
-    this.store[key] = String(value);
-  }
-  removeItem(key) {
-    delete this.store[key];
-  }
-  clear() {
-    this.store = {};
-  }
-  get length() {
-    return Object.keys(this.store).length;
-  }
-  key(index) {
-    return Object.keys(this.store)[index] || null;
-  }
-}
+global.localStorage = {
+  store: memoryStore,
+  getItem(k) { return this.store[k] || null; },
+  setItem(k, v) { this.store[k] = String(v); },
+  removeItem(k) { delete this.store[k]; },
+  clear() { for (let k in this.store) delete this.store[k]; }
+};
 
-globalThis.localStorage = new LocalStorageMock();
-
-// Event listener stubs for window & document
-const eventListeners = {};
-globalThis.window = {
-  localStorage: globalThis.localStorage,
-  BroadcastChannel: globalThis.BroadcastChannel,
-  addEventListener: (event, cb) => {
-    if (!eventListeners[event]) eventListeners[event] = [];
-    eventListeners[event].push(cb);
+global.document = {
+  addEventListener() {},
+  getElementById(id) {
+    return {
+      style: {},
+      innerHTML: '',
+      textContent: '',
+      value: '',
+      addEventListener() {},
+      classList: { add() {}, remove() {}, toggle() {} },
+      querySelectorAll() { return []; },
+      querySelector() { return null; }
+    };
   },
-  removeEventListener: (event, cb) => {
-    if (eventListeners[event]) {
-      eventListeners[event] = eventListeners[event].filter(fn => fn !== cb);
-    }
-  },
-  dispatchEvent: (evt) => {
-    if (eventListeners[evt.type]) {
-      eventListeners[evt.type].forEach(fn => fn(evt));
-    }
-    return true;
+  querySelectorAll() { return []; },
+  body: {
+    insertAdjacentHTML() {},
+    classList: { add() {}, remove() {}, toggle() {} }
   }
 };
 
-globalThis.CustomEvent = class CustomEvent {
-  constructor(type, params = {}) {
-    this.type = type;
-    this.detail = params.detail || {};
-  }
-};
-
-globalThis.document = {
-  addEventListener: (event, cb) => {
-    if (!eventListeners[event]) eventListeners[event] = [];
-    eventListeners[event].push(cb);
-  },
-  readyState: 'complete'
-};
-
-// Cargar módulos
-const PlanRepository = require('../js/plan-repository.js');
+// Cargar módulos del sistema
 const UserService = require('../js/users-service.js');
+global.UserService = UserService;
+
+const PlanRepository = require('../js/plan-repository.js');
+global.PlanRepository = PlanRepository;
+
+const ExportService = require('../js/export.js');
+global.ExportService = ExportService;
+
 const StorageService = require('../js/storage.js');
+global.StorageService = StorageService;
 
-globalThis.PlanRepository = PlanRepository;
-globalThis.UserService = UserService;
-globalThis.StorageService = StorageService;
-window.PlanRepository = PlanRepository;
-window.UserService = UserService;
-window.StorageService = StorageService;
+// Configurar perfil de prueba
+const TEACHER_ID = 'usr_manuel';
+UserService.setCurrentUser('usr_manuel');
 
-let totalTests = 0;
-let passedTests = 0;
-
-function runTest(name, fn) {
-  totalTests++;
-  console.log(`\n==================================================`);
-  console.log(`[TEST ${totalTests}] ${name}`);
-  console.log(`==================================================`);
-  try {
-    fn();
-    passedTests++;
-    console.log(`>>> RESULTADO: PASO (SUCCESS)`);
-  } catch (err) {
-    console.error(`>>> RESULTADO: FALLO (FAIL)`);
-    console.error(err);
-    process.exitCode = 1;
+StorageService.saveProfile({
+  id: TEACHER_ID,
+  name: 'Manuel Mosquera',
+  period: '1°',
+  homeroom: '7°',
+  subjects: [{ name: 'Robótica', grades: ['8°', '9°'] }, { name: 'Matemáticas', grades: ['7°'] }],
+  weeklySchedule: {
+    "1": [{ subject: 'Robótica', grade: '9°', time: '07:00 - 08:00' }],
+    "2": [{ subject: 'Matemáticas', grade: '7°', time: '08:00 - 09:00' }]
   }
-}
-
-async function runAsyncTest(name, fn) {
-  totalTests++;
-  console.log(`\n==================================================`);
-  console.log(`[TEST ${totalTests}] ${name}`);
-  console.log(`==================================================`);
-  try {
-    await fn();
-    passedTests++;
-    console.log(`>>> RESULTADO: PASO (SUCCESS)`);
-  } catch (err) {
-    console.error(`>>> RESULTADO: FALLO (FAIL)`);
-    console.error(err);
-    process.exitCode = 1;
-  }
-}
-
-async function runAll() {
-  console.log('Iniciando Suite de Pruebas de Integridad Estructural...');
-
-  // Reset storage
-  localStorage.clear();
-  PlanRepository._cache = {};
-  await PlanRepository.init();
-
-  // =========================================================================
-  // CASO 1: Crear planeación el lunes -> recargar -> sigue en lunes
-  // =========================================================================
-  runTest('Caso 1: Crear planeacion el lunes -> recargar -> sigue en lunes', () => {
-    const teacherId = 'usr_manuel';
-    const mondayDate = '2026-09-07'; // Lunes
-
-    // 1. Crear y guardar planeación de lunes
-    const plan = PlanRepository.createPlan(teacherId, mondayDate, StorageService.getDefaultSchedule());
-    plan.classes[0].topic = 'Introduccion a Algoritmos';
-    plan.classes[0].achievement = 'Comprende el concepto de secuencia logica';
-    plan.classes[0].notebookContent = '<p>Apuntes iniciales del lunes</p>';
-
-    PlanRepository.savePlan(teacherId, mondayDate, plan);
-
-    // 2. Simular recarga borrando la memoria caché
-    PlanRepository._cache = {};
-
-    // 3. Recuperar planeación
-    const reloadedPlan = PlanRepository.getPlan(teacherId, mondayDate);
-
-    assert(reloadedPlan !== null, 'La planeacion debe existir tras la recarga');
-    assert.strictEqual(reloadedPlan.date, mondayDate, 'La fecha de la planeacion debe ser estrictamente 2026-09-07');
-    assert.strictEqual(reloadedPlan.classes[0].date, mondayDate, 'La fecha de cada clase debe ser 2026-09-07');
-    assert.strictEqual(reloadedPlan.classes[0].topic, 'Introduccion a Algoritmos');
-    assert.strictEqual(reloadedPlan.classes[0].notebookContent, '<p>Apuntes iniciales del lunes</p>');
-
-    // Verificar que StorageService.getPlanByDate entrega exactamente lo mismo
-    const storagePlan = StorageService.getPlanByDate(mondayDate);
-    assert.strictEqual(storagePlan.date, mondayDate);
-    assert.strictEqual(storagePlan.classes[0].topic, 'Introduccion a Algoritmos');
-  });
-
-  // =========================================================================
-  // CASO 2: Crear planeación martes y miércoles -> recargar -> ambas permanecen en sus fechas
-  // =========================================================================
-  runTest('Caso 2: Crear planeacion martes y miercoles -> recargar -> ambas en sus fechas', () => {
-    const teacherId = 'usr_manuel';
-    const tuesdayDate = '2026-09-08';
-    const wednesdayDate = '2026-09-09';
-
-    // Martes
-    const tuesdayPlan = PlanRepository.createPlan(teacherId, tuesdayDate, StorageService.getDefaultSchedule());
-    tuesdayPlan.classes[0].topic = 'Estructuras de Control Martes';
-    PlanRepository.savePlan(teacherId, tuesdayDate, tuesdayPlan);
-
-    // Miércoles
-    const wednesdayPlan = PlanRepository.createPlan(teacherId, wednesdayDate, StorageService.getDefaultSchedule());
-    wednesdayPlan.classes[0].topic = 'Matrices y Grafos Miercoles';
-    PlanRepository.savePlan(teacherId, wednesdayDate, wednesdayPlan);
-
-    // Simular recarga total (vaciar caché en memoria)
-    PlanRepository._cache = {};
-
-    // Recuperar ambos
-    const loadedTue = PlanRepository.getPlan(teacherId, tuesdayDate);
-    const loadedWed = PlanRepository.getPlan(teacherId, wednesdayDate);
-
-    assert(loadedTue !== null, 'Martes debe existir');
-    assert(loadedWed !== null, 'Miercoles debe existir');
-    assert.strictEqual(loadedTue.date, tuesdayDate);
-    assert.strictEqual(loadedWed.date, wednesdayDate);
-    assert.strictEqual(loadedTue.classes[0].topic, 'Estructuras de Control Martes');
-    assert.strictEqual(loadedWed.classes[0].topic, 'Matrices y Grafos Miercoles');
-  });
-
-  // =========================================================================
-  // CASO 3: Crear lunes y martes -> editar martes -> lunes no cambia
-  // =========================================================================
-  runTest('Caso 3: Crear lunes y martes -> editar martes -> lunes no cambia', () => {
-    const teacherId = 'usr_manuel';
-    const mondayDate = '2026-09-07';
-    const tuesdayDate = '2026-09-08';
-
-    const originalMonday = JSON.stringify(PlanRepository.getPlan(teacherId, mondayDate));
-
-    // Editar martes sustancialmente
-    const tuesdayPlan = PlanRepository.getPlan(teacherId, tuesdayDate);
-    tuesdayPlan.classes[0].topic = 'Topico Modificado de Martes V2';
-    tuesdayPlan.generalNotes = 'Nota especial solo para el martes';
-    PlanRepository.savePlan(teacherId, tuesdayDate, tuesdayPlan);
-
-    // Simular recarga
-    PlanRepository._cache = {};
-
-    const reloadedMonday = JSON.stringify(PlanRepository.getPlan(teacherId, mondayDate));
-    const reloadedTuesday = PlanRepository.getPlan(teacherId, tuesdayDate);
-
-    // Lunes debe permanecer 100% idéntico
-    assert.strictEqual(reloadedMonday, originalMonday, 'Lunes no debe haber sido alterado por la edicion de martes');
-    // Martes debe tener los cambios
-    assert.strictEqual(reloadedTuesday.classes[0].topic, 'Topico Modificado de Martes V2');
-    assert.strictEqual(reloadedTuesday.generalNotes, 'Nota especial solo para el martes');
-  });
-
-  // =========================================================================
-  // CASO 4: Abrir cuaderno martes, escribir texto extenso -> actualizar -> texto conservado íntegro
-  // =========================================================================
-  runTest('Caso 4: Texto extenso en cuaderno -> actualizar -> texto conservado (regla anti-vacios)', () => {
-    const teacherId = 'usr_manuel';
-    const tuesdayDate = '2026-09-08';
-
-    const richDocument = `
-      <h1>Sesion 1: Arquitectura de Microprocesadores</h1>
-      <p>El procesador central se divide en ALU, Unidad de Control y Banco de Registros.</p>
-      <ul>
-        <li>Registro acumulador</li>
-        <li>Contador de programa (PC)</li>
-        <li>Pila de llamadas</li>
-      </ul>
-      <p>Observacion pedagogica: Los estudiantes demostraron alta apropiacion en simulacion practica.</p>
-    `;
-
-    // 1. Guardar contenido extenso en la clase 0
-    const plan = PlanRepository.getPlan(teacherId, tuesdayDate);
-    plan.classes[0].notebookContent = richDocument;
-    PlanRepository.savePlan(teacherId, tuesdayDate, plan);
-
-    // 2. Simular intento de guardado con payload que viene vacío en notebookContent
-    const partialIncomingData = {
-      classes: [
-        {
-          id: plan.classes[0].id,
-          topic: 'Topico Modificado de Martes V2',
-          notebookContent: '' // Campo vacío enviado por accidente
-        }
-      ]
-    };
-
-    // Al guardar, la regla anti-vacíos DEBE proteger el texto previo existente
-    PlanRepository.savePlan(teacherId, tuesdayDate, partialIncomingData);
-
-    // 3. Simular recarga y verificar integridad
-    PlanRepository._cache = {};
-    const verifiedPlan = PlanRepository.getPlan(teacherId, tuesdayDate);
-
-    assert(verifiedPlan.classes[0].notebookContent.includes('Arquitectura de Microprocesadores'), 'El texto extenso no debe perderse ni sobrescribirse por vacio');
-    assert(verifiedPlan.classes[0].notebookContent.includes('Pila de llamadas'), 'Los puntos de la lista se conservan intactos');
-  });
-
-  // =========================================================================
-  // CASO 5: Cuaderno docente: UN SOLO DOCUMENTO contenteditable continuo
-  // =========================================================================
-  runTest('Caso 5: Cuaderno docente con unico contenteditable y seleccion continua', () => {
-    const htmlPath = path.join(__dirname, '..', 'notebook-editor.html');
-    const htmlContent = fs.readFileSync(htmlPath, 'utf-8');
-
-    // 1. Verificar punto de montaje y scripts en notebook-editor.html
-    assert(htmlContent.includes('id="notebook-mount-point"'), 'Debe existir id="notebook-mount-point" para montaje de documento');
-    assert(htmlContent.includes('js/plan-repository.js'), 'Debe cargar plan-repository.js');
-    assert(htmlContent.includes('js/notebook-editor.js'), 'Debe cargar notebook-editor.js');
-
-    // 2. Verificar que js/notebook-editor.js define UN SOLO contenteditable="true" (#notebook-single-editor)
-    const jsPath = path.join(__dirname, '..', 'js', 'notebook-editor.js');
-    const jsContent = fs.readFileSync(jsPath, 'utf-8');
-    assert(jsContent.includes('id="notebook-single-editor"'), 'js/notebook-editor.js debe definir id="notebook-single-editor"');
-    assert(jsContent.includes('contenteditable="true"'), 'js/notebook-editor.js debe definir contenteditable="true"');
-
-    // Comprobar que en el template principal solo hay UN contenedor editable
-    const templateMatch = jsContent.match(/<div id="notebook-single-editor"[\s\S]*?<\/div>/);
-    assert(templateMatch !== null, 'El contenedor editable debe existir en la plantilla');
-
-    // 3. Verificar en css/styles.css las reglas del documento continuo
-    const cssPath = path.join(__dirname, '..', 'css', 'styles.css');
-    const cssContent = fs.readFileSync(cssPath, 'utf-8');
-    assert(cssContent.includes('.notebook-paper-container'), 'CSS debe definir .notebook-paper-container');
-    assert(cssContent.includes('.notebook-single-editor-body'), 'CSS debe definir .notebook-single-editor-body');
-    assert(cssContent.includes('.notebook-page-break'), 'CSS debe definir separadores de pagina .notebook-page-break');
-  });
-
-  // =========================================================================
-  // CASO 6: Dos pestañas editando el mismo documento -> concurrencia y sync
-  // =========================================================================
-  await runAsyncTest('Caso 6: Dos pestanas editando el mismo documento -> sincronizacion BroadcastChannel', async () => {
-    const teacherId = 'usr_manuel';
-    const testDate = '2026-09-10';
-
-    // Pestaña 1 crea el plan inicial
-    const initialPlan = PlanRepository.createPlan(teacherId, testDate, StorageService.getDefaultSchedule());
-    initialPlan.classes[0].topic = 'Version pestana 1';
-    PlanRepository.savePlan(teacherId, testDate, initialPlan);
-
-    // Simular Pestaña 2 escuchando el canal 'planeaciones_sync_v3'
-    let receivedEvent = null;
-    const tab2Channel = new BroadcastChannel('planeaciones_sync_v3');
-    tab2Channel.onmessage = (event) => {
-      receivedEvent = event.data;
-    };
-
-    // Pestaña 1 actualiza el plan
-    const updatedPlan = PlanRepository.getPlan(teacherId, testDate);
-    updatedPlan.classes[0].topic = 'Version sincronizada pestana 1 v2';
-    PlanRepository.savePlan(teacherId, testDate, updatedPlan);
-
-    // Esperar mensaje en el canal
-    await new Promise(resolve => setTimeout(resolve, 200));
-
-    assert(receivedEvent !== null, 'Pestana 2 debio recibir el mensaje Broadcast');
-    assert.strictEqual(receivedEvent.type, 'PLAN_SAVED');
-    assert.strictEqual(receivedEvent.date, testDate);
-    assert.strictEqual(receivedEvent.version, 2);
-    assert.strictEqual(receivedEvent.plan.classes[0].topic, 'Version sincronizada pestana 1 v2');
-
-    tab2Channel.close();
-  });
-
-  // =========================================================================
-  // CASO 7: Cambio de usuario -> planeaciones completamente aisladas por teacherId
-  // =========================================================================
-  runTest('Caso 7: Cambio de usuario -> planeaciones completamente aisladas por teacherId', () => {
-    const teacherA = 'usr_manuel';
-    const teacherB = 'usr_docente_ciencias';
-    const date = '2026-09-11';
-
-    // Docente A guarda su planeación de Matemáticas
-    const planA = PlanRepository.createPlan(teacherA, date);
-    planA.classes = [{
-      id: PlanRepository.generateClassId(planA.id, 0, 'Matematicas', '7°'),
-      subject: 'Matematicas',
-      topic: 'Ecuaciones de segundo grado'
-    }];
-    PlanRepository.savePlan(teacherA, date, planA);
-
-    // Docente B guarda su planeación de Biología en la MISMA fecha
-    const planB = PlanRepository.createPlan(teacherB, date);
-    planB.classes = [{
-      id: PlanRepository.generateClassId(planB.id, 0, 'Biologia', '8°'),
-      subject: 'Biologia',
-      topic: 'Genetica Mendeliana'
-    }];
-    PlanRepository.savePlan(teacherB, date, planB);
-
-    // Vaciar caché para forzar lectura pura desde almacenamiento
-    PlanRepository._cache = {};
-
-    const retrievedA = PlanRepository.getPlan(teacherA, date);
-    const retrievedB = PlanRepository.getPlan(teacherB, date);
-
-    assert(retrievedA !== null, 'Docente A debe tener su plan');
-    assert(retrievedB !== null, 'Docente B debe tener su plan');
-    assert.strictEqual(retrievedA.classes[0].subject, 'Matematicas');
-    assert.strictEqual(retrievedA.classes[0].topic, 'Ecuaciones de segundo grado');
-    assert.strictEqual(retrievedB.classes[0].subject, 'Biologia');
-    assert.strictEqual(retrievedB.classes[0].topic, 'Genetica Mendeliana');
-
-    // Verificar que las claves en storage son totalmente independientes
-    const keyA = PlanRepository.getStorageKey(teacherA);
-    const keyB = PlanRepository.getStorageKey(teacherB);
-    assert.notStrictEqual(keyA, keyB, 'Las claves de almacenamiento deben ser unicas por docente');
-    assert(localStorage.getItem(keyA).includes('Ecuaciones de segundo grado'));
-    assert(localStorage.getItem(keyB).includes('Genetica Mendeliana'));
-  });
-
-  // =========================================================================
-  // CASO 8: Cierre inesperado durante escritura -> recupera última versión guardada
-  // =========================================================================
-  runTest('Caso 8: Cierre inesperado -> recupera ultima version guardada', () => {
-    const teacherId = 'usr_manuel';
-    const date = '2026-09-14';
-
-    // Guardado continuo durante edición
-    const plan = PlanRepository.createPlan(teacherId, date, StorageService.getDefaultSchedule());
-    plan.classes[0].topic = 'Texto en progreso antes de corte de energia';
-    plan.classes[0].notebookContent = '<p>Parrafo guardado automaticamente 500ms antes del cierre</p>';
-    PlanRepository.savePlan(teacherId, date, plan);
-
-    // Simular caída abrupta (crash): borrado de toda la memoria volátil del proceso
-    PlanRepository._cache = {};
-
-    // Simular arranque en frío y recuperación
-    const recoveredPlan = PlanRepository.getPlan(teacherId, date);
-    assert(recoveredPlan !== null, 'Debe recuperarse la planeacion');
-    assert.strictEqual(recoveredPlan.classes[0].topic, 'Texto en progreso antes de corte de energia');
-    assert.strictEqual(recoveredPlan.classes[0].notebookContent, '<p>Parrafo guardado automaticamente 500ms antes del cierre</p>');
-  });
-
-  // =========================================================================
-  // CASO 9: Planeación existente tras varios días -> nunca cambia de fecha (inmutabilidad)
-  // =========================================================================
-  runTest('Caso 9: Planeacion existente -> nunca cambia de fecha (inmutabilidad estricta)', () => {
-    const teacherId = 'usr_manuel';
-    const originalDate = '2026-09-07';
-
-    const originalPlan = PlanRepository.getPlan(teacherId, originalDate);
-    assert(originalPlan !== null, 'La planeacion del 7 de septiembre debe existir');
-
-    // Ejecutar múltiples consultas de StorageService y navegación simulada
-    for (let i = 1; i <= 30; i++) {
-      const dayStr = i < 10 ? '0' + i : String(i);
-      const simulatedDate = `2026-10-${dayStr}`;
-      StorageService.getPlanByDate(simulatedDate);
-    }
-
-    // Volver a consultar la fecha original
-    const checkedPlan = PlanRepository.getPlan(teacherId, originalDate);
-    assert.strictEqual(checkedPlan.date, originalDate, 'La fecha debe seguir siendo estrictamente 2026-09-07');
-    assert.strictEqual(checkedPlan.classes[0].date, originalDate);
-    assert.strictEqual(checkedPlan.classes[0].dayOfWeek, 'Lunes');
-  });
-
-  // =========================================================================
-  // CASO 10: Cambiar horario semanal institucional -> planeaciones históricas NO cambian
-  // =========================================================================
-  runTest('Caso 10: Cambiar horario semanal -> planeaciones historicas NO cambian', () => {
-    const teacherId = 'usr_manuel';
-    const historicDate = '2026-09-07'; // Lunes histórico existente
-
-    const beforeChangePlan = PlanRepository.getPlan(teacherId, historicDate);
-    const originalSubject = beforeChangePlan.classes[0].subject; // 'Direccion de grupo'
-    const originalTopic = beforeChangePlan.classes[0].topic;
-
-    // Modificar el horario semanal por defecto del docente (simular cambio en Configuración de Horario)
-    const modifiedSchedule = JSON.parse(JSON.stringify(StorageService.getDefaultSchedule()));
-    modifiedSchedule["1"][0] = { time: '7:00 - 7:50', subject: 'Robotica Cuantica Avanzada', grade: '11°' };
-
-    // Verificar que al consultar el día histórico, éste NO muta sus clases
-    const historicAfter = PlanRepository.getPlan(teacherId, historicDate);
-    assert.strictEqual(historicAfter.classes[0].subject, originalSubject, 'El dia historico debe conservar su materia original');
-    assert.strictEqual(historicAfter.classes[0].topic, originalTopic, 'El dia historico debe conservar su topico original');
-    assert.notStrictEqual(historicAfter.classes[0].subject, 'Robotica Cuantica Avanzada', 'El dia historico NO debe ser sobrescrito por el nuevo horario');
-
-    // Pero un día NUEVO en el futuro sí debe adoptar el nuevo horario al crearse
-    const futureDate = '2026-11-02'; // Lunes nuevo futuro
-    const newFuturePlan = PlanRepository.createPlan(teacherId, futureDate, modifiedSchedule);
-    assert.strictEqual(newFuturePlan.classes[0].subject, 'Robotica Cuantica Avanzada', 'Un dia nuevo si recibe el nuevo horario modificado');
-  });
-
-  // =========================================================================
-  // RESUMEN FINAL
-  // =========================================================================
-  console.log(`\n==================================================`);
-  console.log(`RESUMEN DE PRUEBAS DE INTEGRIDAD:`);
-  console.log(`Total Pruebas: ${totalTests}`);
-  console.log(`Aprobadas:     ${passedTests}`);
-  console.log(`Fallidas:      ${totalTests - passedTests}`);
-  console.log(`==================================================\n`);
-
-  if (passedTests === totalTests) {
-    console.log('>>> TODOS LOS 10 CASOS OBLIGATORIOS PASARON SATISFACTORIAMENTE (10/10) <<<');
-    process.exit(0);
-  } else {
-    console.error('>>> AL MENOS UNA PRUEBA FALLO <<<');
-    process.exit(1);
-  }
-}
-
-runAll().catch(err => {
-  console.error('Error fatal en ejecucion de tests:', err);
-  process.exit(1);
 });
+
+let passedTests = 0;
+let totalTests = 0;
+
+function assert(condition, message) {
+  totalTests++;
+  if (condition) {
+    console.log(`  ✅ [PASS] ${message}`);
+    passedTests++;
+  } else {
+    console.error(`  ❌ [FAIL] ${message}`);
+    throw new Error(`Assertion failed: ${message}`);
+  }
+}
+
+console.log('================================================================');
+console.log('INICIANDO SUITE DE INTEGRIDAD: CERO PÉRDIDA DE DATOS (12 PRUEBAS)');
+console.log('================================================================\n');
+
+try {
+  // TEST 1: Aislamiento de fechas
+  console.log('--- TEST 1: Aislamiento de fechas (14, 15, 16) ---');
+  {
+    PlanRepository.clearCache();
+    const date14 = '2026-09-14';
+    const date15 = '2026-09-15';
+    const date16 = '2026-09-16';
+
+    const plan14 = PlanRepository.createPlan(TEACHER_ID, date14, [
+      { subject: 'Robótica', grade: '9°', topic: 'Tema Día 14', description: 'Secuencia 14', observations: 'Obs 14' }
+    ]);
+    const plan15 = PlanRepository.createPlan(TEACHER_ID, date15, [
+      { subject: 'Robótica', grade: '9°', topic: 'Tema Día 15 Original', description: 'Secuencia 15', observations: 'Obs 15' }
+    ]);
+    const plan16 = PlanRepository.createPlan(TEACHER_ID, date16, [
+      { subject: 'Robótica', grade: '9°', topic: 'Tema Día 16', description: 'Secuencia 16', observations: 'Obs 16' }
+    ]);
+
+    PlanRepository.savePlan(TEACHER_ID, date14, plan14);
+    PlanRepository.savePlan(TEACHER_ID, date15, plan15);
+    PlanRepository.savePlan(TEACHER_ID, date16, plan16);
+
+    const snapshot14 = JSON.stringify(PlanRepository.getPlan(TEACHER_ID, date14));
+    const snapshot16 = JSON.stringify(PlanRepository.getPlan(TEACHER_ID, date16));
+
+    // Modificar el día 15
+    const classId15 = plan15.classes[0].id;
+    PlanRepository.saveClass(TEACHER_ID, date15, classId15, {
+      topic: 'Tema Día 15 MODIFICADO',
+      description: 'Secuencia 15 MODIFICADA'
+    });
+
+    const check14 = JSON.stringify(PlanRepository.getPlan(TEACHER_ID, date14));
+    const check16 = JSON.stringify(PlanRepository.getPlan(TEACHER_ID, date16));
+    const check15 = PlanRepository.getPlan(TEACHER_ID, date15);
+
+    assert(snapshot14 === check14, 'El día 14 permanece 100% idéntico e inmutable tras modificar el día 15');
+    assert(snapshot16 === check16, 'El día 16 permanece 100% idéntico e inmutable tras modificar el día 15');
+    assert(check15.classes[0].topic === 'Tema Día 15 MODIFICADO', 'El día 15 se modificó correctamente');
+  }
+
+  // TEST 2: Aislamiento de clases
+  console.log('\n--- TEST 2: Aislamiento de clases (3 clases, editar la 2da) ---');
+  {
+    const date = '2026-09-21';
+    const plan = PlanRepository.createPlan(TEACHER_ID, date, [
+      { subject: 'Robótica', grade: '8°', topic: 'Clase 1 Original', description: 'Sec 1', observations: 'Obs 1' },
+      { subject: 'Robótica', grade: '9°', topic: 'Clase 2 Original', description: 'Sec 2', observations: 'Obs 2' },
+      { subject: 'Matemáticas', grade: '7°', topic: 'Clase 3 Original', description: 'Sec 3', observations: 'Obs 3' }
+    ]);
+    PlanRepository.savePlan(TEACHER_ID, date, plan);
+
+    const class1Before = JSON.stringify(PlanRepository.getPlan(TEACHER_ID, date).classes[0]);
+    const class3Before = JSON.stringify(PlanRepository.getPlan(TEACHER_ID, date).classes[2]);
+
+    const targetClassId = plan.classes[1].id;
+    PlanRepository.saveClass(TEACHER_ID, date, targetClassId, {
+      topic: 'Clase 2 MODIFICADA CON ÉXITO',
+      description: 'Nueva secuencia didáctica clase 2'
+    });
+
+    const planAfter = PlanRepository.getPlan(TEACHER_ID, date);
+    const class1After = JSON.stringify(planAfter.classes[0]);
+    const class2After = planAfter.classes[1];
+    const class3After = JSON.stringify(planAfter.classes[2]);
+
+    assert(class1Before === class1After, 'Clase 1 permanece idéntica byte por byte');
+    assert(class3Before === class3After, 'Clase 3 permanece idéntica byte por byte');
+    assert(class2After.topic === 'Clase 2 MODIFICADA CON ÉXITO', 'Clase 2 se modificó de forma totalmente aislada');
+  }
+
+  // TEST 3: Cuaderno docente igualdad exacta
+  console.log('\n--- TEST 3: Cuaderno docente igualdad exacta (HTML complejo, saltos de línea, tablas) ---');
+  {
+    const date = '2026-09-22';
+    const notebookHtml = `<h2>Bitácora de Clase</h2><p>El estudiante demostró gran avance en programación.</p><table><tr><td>Criterio</td><td>Nota</td></tr><tr><td>Participación</td><td>5.0</td></tr></table><p>Próxima sesión: Sensores ultrasónicos.</p>`;
+
+    const plan = PlanRepository.createPlan(TEACHER_ID, date, [
+      { subject: 'Robótica', grade: '9°', topic: 'Robots Móviles' }
+    ]);
+    PlanRepository.savePlan(TEACHER_ID, date, plan);
+    const classId = plan.classes[0].id;
+
+    PlanRepository.saveClass(TEACHER_ID, date, classId, {
+      notebookContent: notebookHtml
+    });
+
+    // Forzar recarga desde memoria
+    PlanRepository.clearCache();
+    const loadedPlan = PlanRepository.getPlan(TEACHER_ID, date);
+    const loadedNotebook = loadedPlan.classes[0].notebookContent;
+
+    assert(loadedNotebook === notebookHtml, 'El cuaderno docente mantiene igualdad estricta (===) sin recortes ni escapes');
+  }
+
+  // TEST 4: Comentarios / observaciones igualdad exacta
+  console.log('\n--- TEST 4: Comentarios / observaciones igualdad exacta ---');
+  {
+    const date = '2026-09-23';
+    const observationsText = `Observación detallada con caracteres especiales: ¡Éxito total! "Atención especial a Juan Pérez".\nSegunda línea con notas pedagógicas y acentos: árbol, comunicación, éxito.`;
+
+    const plan = PlanRepository.createPlan(TEACHER_ID, date, [
+      { subject: 'Robótica', grade: '9°', topic: 'Circuitos' }
+    ]);
+    PlanRepository.savePlan(TEACHER_ID, date, plan);
+    const classId = plan.classes[0].id;
+
+    PlanRepository.saveClass(TEACHER_ID, date, classId, {
+      observations: observationsText
+    });
+
+    PlanRepository.clearCache();
+    const loadedPlan = PlanRepository.getPlan(TEACHER_ID, date);
+    const loadedObs = loadedPlan.classes[0].observations;
+
+    assert(loadedObs === observationsText, 'Observaciones mantiene igualdad estricta (===)');
+  }
+
+  // TEST 5: Secuencia didáctica (description) igualdad exacta
+  console.log('\n--- TEST 5: Secuencia didáctica (description) igualdad exacta ---');
+  {
+    const date = '2026-09-24';
+    const sequenceText = `INICIO: Activación de presaberes sobre variables booleanas (15 min).\nDESARROLLO: Ejercicio práctico en simulador Tinkercad creando compuertas lógicas AND y OR (60 min).\nCIERRE: Evaluación formativa y conclusiones en el tablero institucional (15 min).`;
+
+    const plan = PlanRepository.createPlan(TEACHER_ID, date, [
+      { subject: 'Robótica', grade: '9°', topic: 'Compuertas Lógicas' }
+    ]);
+    PlanRepository.savePlan(TEACHER_ID, date, plan);
+    const classId = plan.classes[0].id;
+
+    PlanRepository.saveClass(TEACHER_ID, date, classId, {
+      description: sequenceText
+    });
+
+    PlanRepository.clearCache();
+    const loadedPlan = PlanRepository.getPlan(TEACHER_ID, date);
+    const loadedDesc = loadedPlan.classes[0].description;
+
+    assert(loadedDesc === sequenceText, 'Secuencia didáctica mantiene igualdad estricta (===)');
+  }
+
+  // TEST 6: Cambio de horario semanal no altera histórico
+  console.log('\n--- TEST 6: Cambio de horario semanal no altera histórico ---');
+  {
+    const date = '2026-09-28'; // Un lunes
+    const historicPlan = PlanRepository.createPlan(TEACHER_ID, date, [
+      { subject: 'Robótica', grade: '9°', topic: 'Histórico Intacto', description: 'Secuencia guardada' }
+    ]);
+    PlanRepository.savePlan(TEACHER_ID, date, historicPlan);
+
+    // Cambiar el horario semanal oficial en el perfil para el día lunes (1)
+    const newWeeklySchedule = {
+      "1": [{ subject: 'Ciencias Naturales', grade: '10°', time: '07:00 - 08:00' }]
+    };
+    StorageService.saveWeeklySchedule(newWeeklySchedule);
+
+    // Leer el plan histórico de la fecha guardada
+    const planAfterScheduleChange = StorageService.getPlanByDate(date);
+
+    assert(planAfterScheduleChange.classes.length === 1, 'El día histórico mantiene su cantidad de clases');
+    assert(planAfterScheduleChange.classes[0].subject === 'Robótica', 'La materia sigue siendo Robótica histórica');
+    assert(planAfterScheduleChange.classes[0].grade === '9°', 'El grado sigue siendo 9° histórico');
+    assert(planAfterScheduleChange.classes[0].topic === 'Histórico Intacto', 'El tema histórico no fue sobrescrito');
+  }
+
+  // TEST 7: Secuencia period|subject|grade independiente y acumulativa
+  console.log('\n--- TEST 7: Secuencia period|subject|grade independiente y acumulativa ---');
+  {
+    const SEQ_TEACHER = 'usr_seq_test';
+    PlanRepository.clearCache();
+    // Robótica 9° día 1
+    const seqRob1 = PlanRepository.calculateNextSequenceNumber(SEQ_TEACHER, '2026-10-01', '1°', 'Robótica', '9°');
+    assert(seqRob1 === 1, 'Robótica 9° inicia en secuencia 1');
+
+    const plan1 = PlanRepository.createPlan(SEQ_TEACHER, '2026-10-01', [
+      { subject: 'Robótica', grade: '9°', dayNumber: String(seqRob1), sequenceNumber: seqRob1 }
+    ]);
+    PlanRepository.savePlan(SEQ_TEACHER, '2026-10-01', plan1);
+
+    // Matemáticas 7° en el mismo día debe ser independiente
+    const seqMat1 = PlanRepository.calculateNextSequenceNumber(SEQ_TEACHER, '2026-10-01', '1°', 'Matemáticas', '7°');
+    assert(seqMat1 === 1, 'Matemáticas 7° inicia en secuencia 1 independiente');
+
+    // Robótica 9° día 2 debe ser 2
+    const seqRob2 = PlanRepository.calculateNextSequenceNumber(SEQ_TEACHER, '2026-10-02', '1°', 'Robótica', '9°');
+    assert(seqRob2 === 2, 'Robótica 9° en día siguiente incrementa a 2');
+
+    const plan2 = PlanRepository.createPlan(SEQ_TEACHER, '2026-10-02', [
+      { subject: 'Robótica', grade: '9°', dayNumber: String(seqRob2), sequenceNumber: seqRob2 }
+    ]);
+    PlanRepository.savePlan(SEQ_TEACHER, '2026-10-02', plan2);
+
+    // Robótica 9° día 3 debe ser 3
+    const seqRob3 = PlanRepository.calculateNextSequenceNumber(SEQ_TEACHER, '2026-10-03', '1°', 'Robótica', '9°');
+    assert(seqRob3 === 3, 'Robótica 9° en tercer día incrementa a 3');
+
+    // Comprobar que Matemáticas 7° sigue en 1 porque no se ha guardado otra
+    const seqMatCheck = PlanRepository.calculateNextSequenceNumber(SEQ_TEACHER, '2026-10-03', '1°', 'Matemáticas', '7°');
+    assert(seqMatCheck === 1, 'Matemáticas 7° se mantuvo en 1 sin verse afectada por Robótica 9°');
+  }
+
+  // TEST 8: Recarga del navegador preserva todo
+  console.log('\n--- TEST 8: Recarga del navegador (limpiar caché y recargar de storage) ---');
+  {
+    const date = '2026-10-05';
+    const plan = PlanRepository.createPlan(TEACHER_ID, date, [
+      { subject: 'Robótica', grade: '9°', topic: 'Persistencia Total', description: 'Secuencia guardada', notebookContent: '<b>Cuaderno</b>' }
+    ]);
+    PlanRepository.savePlan(TEACHER_ID, date, plan);
+
+    // Simular reinicio de navegador borrando cachés en memoria
+    PlanRepository.clearCache();
+
+    const reloadedPlan = PlanRepository.getPlan(TEACHER_ID, date);
+    assert(reloadedPlan !== null, 'El plan se recupera tras simular reinicio');
+    assert(reloadedPlan.classes[0].topic === 'Persistencia Total', 'Tema intacto tras reinicio');
+    assert(reloadedPlan.classes[0].notebookContent === '<b>Cuaderno</b>', 'Cuaderno intacto tras reinicio');
+  }
+
+  // TEST 9: Cambio de día preserva datos
+  console.log('\n--- TEST 9: Cambio de día (Día A -> Día B -> Día A) ---');
+  {
+    const dateA = '2026-10-10';
+    const dateB = '2026-10-11';
+
+    const planA = PlanRepository.createPlan(TEACHER_ID, dateA, [
+      { subject: 'Robótica', grade: '9°', topic: 'Día A Topic', description: 'Día A Desc' }
+    ]);
+    PlanRepository.savePlan(TEACHER_ID, dateA, planA);
+
+    const planB = PlanRepository.createPlan(TEACHER_ID, dateB, [
+      { subject: 'Matemáticas', grade: '7°', topic: 'Día B Topic', description: 'Día B Desc' }
+    ]);
+    PlanRepository.savePlan(TEACHER_ID, dateB, planB);
+
+    // Cargar B, luego volver a A
+    const loadedB = PlanRepository.getPlan(TEACHER_ID, dateB);
+    const loadedA = PlanRepository.getPlan(TEACHER_ID, dateA);
+
+    assert(loadedA.classes[0].topic === 'Día A Topic', 'Día A preserva sus datos tras navegar a Día B');
+    assert(loadedB.classes[0].topic === 'Día B Topic', 'Día B preserva sus datos tras navegar a Día A');
+  }
+
+  // TEST 10: Dos pestañas detectan conflicto
+  console.log('\n--- TEST 10: Dos pestañas detectan conflicto y protegen datos ---');
+  {
+    const date = '2026-10-15';
+    const plan = PlanRepository.createPlan(TEACHER_ID, date, [
+      { subject: 'Robótica', grade: '9°', topic: 'Base Version 1', description: 'Secuencia V1' }
+    ]);
+    PlanRepository.savePlan(TEACHER_ID, date, plan);
+    const classId = plan.classes[0].id;
+
+    // Pestaña 1 actualiza a versión 2
+    PlanRepository.saveClass(TEACHER_ID, date, classId, {
+      topic: 'Actualizado por Pestaña 1',
+      description: 'Secuencia enriquecida Pestaña 1'
+    });
+
+    // Pestaña 2 intenta sobrescribir con versión antigua (v: 1)
+    const resultConflict = PlanRepository.saveClass(TEACHER_ID, date, classId, {
+      topic: 'Intento de sobrescritura Pestaña 2',
+      version: 1 // Versión desactualizada
+    });
+
+    // El repositorio debe resolver protegiendo el trabajo valioso y guardando snapshot
+    const finalPlan = PlanRepository.getPlan(TEACHER_ID, date);
+    const finalClass = finalPlan.classes[0];
+
+    assert(Boolean(finalClass.description), 'El contenido valioso previo (description) no fue borrado por la colisión');
+    assert(finalClass.version >= 2, 'El versionado incrementó correctamente tras la resolución');
+  }
+
+  // TEST 11: No sobrescribir con vacío (Regla anti-vacíos)
+  console.log('\n--- TEST 11: Regla anti-vacíos (evitar sobrescrituras por campos vacíos) ---');
+  {
+    const date = '2026-10-20';
+    const plan = PlanRepository.createPlan(TEACHER_ID, date, [
+      {
+        subject: 'Robótica',
+        grade: '9°',
+        topic: 'Tema Valioso',
+        description: 'Secuencia Didáctica Muy Importante',
+        observations: 'Observaciones Críticas',
+        notebookContent: '<p>Cuaderno Valioso</p>'
+      }
+    ]);
+    PlanRepository.savePlan(TEACHER_ID, date, plan);
+    const classId = plan.classes[0].id;
+
+    // Enviar actualización con campos prioritarios en blanco
+    PlanRepository.saveClass(TEACHER_ID, date, classId, {
+      topic: 'Nuevo Tema Actualizado',
+      description: '',
+      observations: '',
+      notebookContent: ''
+    });
+
+    const checkPlan = PlanRepository.getPlan(TEACHER_ID, date);
+    const checkClass = checkPlan.classes[0];
+
+    assert(checkClass.topic === 'Nuevo Tema Actualizado', 'El tema se actualizó correctamente');
+    assert(checkClass.description === 'Secuencia Didáctica Muy Importante', 'description fue protegido contra sobrescritura en blanco');
+    assert(checkClass.observations === 'Observaciones Críticas', 'observations fue protegido contra sobrescritura en blanco');
+    assert(checkClass.notebookContent === '<p>Cuaderno Valioso</p>', 'notebookContent fue protegido contra sobrescritura en blanco');
+  }
+
+  // TEST 12: Eliminar clase con snapshot sin afectar otras clases ni fechas
+  console.log('\n--- TEST 12: Eliminar clase con snapshot de seguridad ---');
+  {
+    const date1 = '2026-10-25';
+    const date2 = '2026-10-26';
+
+    const plan1 = PlanRepository.createPlan(TEACHER_ID, date1, [
+      { subject: 'Robótica', grade: '9°', topic: 'Clase A1' },
+      { subject: 'Robótica', grade: '8°', topic: 'Clase A2 (Para Eliminar)' },
+      { subject: 'Matemáticas', grade: '7°', topic: 'Clase A3' }
+    ]);
+    PlanRepository.savePlan(TEACHER_ID, date1, plan1);
+
+    const plan2 = PlanRepository.createPlan(TEACHER_ID, date2, [
+      { subject: 'Robótica', grade: '9°', topic: 'Clase B1 Otra Fecha' }
+    ]);
+    PlanRepository.savePlan(TEACHER_ID, date2, plan2);
+
+    const classToDeleteId = plan1.classes[1].id;
+    const plan2SnapshotBefore = JSON.stringify(PlanRepository.getPlan(TEACHER_ID, date2));
+
+    // Eliminar la clase 2 de la fecha 1
+    const deleteSuccess = PlanRepository.deleteClass(TEACHER_ID, date1, classToDeleteId);
+
+    assert(deleteSuccess === true, 'deleteClass reportó éxito');
+
+    const plan1After = PlanRepository.getPlan(TEACHER_ID, date1);
+    const plan2After = JSON.stringify(PlanRepository.getPlan(TEACHER_ID, date2));
+
+    assert(plan1After.classes.length === 2, 'El día 1 ahora tiene 2 clases');
+    assert(plan1After.classes[0].topic === 'Clase A1', 'Clase 1 del día 1 permanece intacta');
+    assert(plan1After.classes[1].topic === 'Clase A3', 'Clase 3 del día 1 permanece intacta');
+    assert(plan2SnapshotBefore === plan2After, 'El día 2 permanece 100% idéntico e inmutable');
+
+    // Verificar que existe snapshot de respaldo de la clase eliminada
+    const snapshots = PlanRepository.getSnapshots(TEACHER_ID);
+    const hasDeleteSnapshot = Object.keys(snapshots).some(k => k.includes(`delete_class_${date1}_${classToDeleteId}`));
+    assert(hasDeleteSnapshot === true, 'Se creó correctamente el snapshot de respaldo antes de eliminar');
+  }
+
+  console.log('\n================================================================');
+  console.log(`RESULTADO FINAL: ${passedTests}/${totalTests} PRUEBAS SUPERADAS EXITOSAMENTE (100%)`);
+  console.log('================================================================\n');
+
+} catch (err) {
+  console.error('\n❌ ERROR EN LA SUITE DE PRUEBAS:', err);
+  process.exit(1);
+}

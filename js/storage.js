@@ -161,6 +161,18 @@ const StorageService = {
    */
   consolidateClasses(classes) {
     if (!Array.isArray(classes) || classes.length <= 1) return classes || [];
+    
+    // Si alguna clase ya tiene trabajo o contenido pedagógico redactado, NO consolidar
+    const hasCustomWork = classes.some(c => 
+      (c.topic && c.topic.trim()) || 
+      (c.description && c.description.trim()) || 
+      (c.observations && c.observations.trim()) || 
+      (c.notebookContent && c.notebookContent.trim())
+    );
+    if (hasCustomWork) {
+      return classes;
+    }
+
     const merged = [];
     const norm = (s) => String(s || '').trim().toLowerCase();
 
@@ -196,6 +208,33 @@ const StorageService = {
       merged.push(curr);
     }
     return merged;
+  },
+
+  /**
+   * Guarda o actualiza una única clase de forma aislada a través de PlanRepository
+   */
+  saveClass(dateStr, classId, classData, options = {}) {
+    try {
+      const currentUserId = (typeof UserService !== 'undefined' && UserService.getCurrentUserId)
+        ? UserService.getCurrentUserId()
+        : 'usr_manuel';
+      if (typeof PlanRepository !== 'undefined' && PlanRepository.saveClass) {
+        return PlanRepository.saveClass(currentUserId, dateStr, classId, classData, options);
+      }
+      return null;
+    } catch (e) {
+      console.error('Error al guardar clase:', e);
+      return null;
+    }
+  },
+
+  /**
+   * Guarda o actualiza el horario semanal del docente
+   */
+  saveWeeklySchedule(weeklySchedule) {
+    const prof = this.getProfile();
+    prof.weeklySchedule = weeklySchedule;
+    return this.saveProfile(prof);
   },
 
   /**
@@ -467,141 +506,25 @@ const StorageService = {
       }
 
       const weekDates = ExportService.getWeekDates(dateStr);
-      const targetDayIdxNum = parseInt(matchInfo.bestDayIndex, 10);
-      const targetDateStr = weekDates[targetDayIdxNum - 1];
-
-      if (!targetDateStr || targetDateStr === dateStr) return null;
-
-      const targetPlan = this.getPlanByDate(targetDateStr);
-      if (!targetPlan || !Array.isArray(targetPlan.classes) || targetPlan.classes.length === 0) {
-        return {
-          isSwappedPair: false,
-          mismatchOnly: true,
-          detectedDayIndex: matchInfo.bestDayIndex,
-          detectedDayName: matchInfo.bestDayName,
-          targetDate: targetDateStr
-        };
-      }
-
-      const targetMatchInfo = this.getScheduleDayMatch(targetPlan.classes);
-      if (targetMatchInfo && targetMatchInfo.bestDayIndex === currentDayIndex && targetMatchInfo.matchRatio >= 0.6) {
-        return {
-          isSwappedPair: true,
-          currentDate: dateStr,
-          currentDayName: currentDayName,
-          targetDate: targetDateStr,
-          targetDayName: matchInfo.bestDayName
-        };
-      }
-
-      return {
-        isSwappedPair: false,
-        mismatchOnly: true,
-        detectedDayIndex: matchInfo.bestDayIndex,
-        detectedDayName: matchInfo.bestDayName,
-        targetDate: targetDateStr
-      };
+      return null;
     } catch (e) {
-      console.warn('Error detectando par intercambiado:', e);
       return null;
     }
   },
 
   /**
-   * Escanea todas las planeaciones para identificar pares de días intercambiados
+   * DESACTIVADO: Escaneo de pares intercambiados neutralizado por inmutabilidad de fecha
    */
   detectAllSwappedPairs() {
-    try {
-      const allPlans = this.getAllPlans();
-      const dates = Object.keys(allPlans).sort();
-      const pairs = [];
-      const processed = new Set();
-
-      dates.forEach(d => {
-        if (processed.has(d)) return;
-        const res = this.detectSwappedPair(d);
-        if (res && res.isSwappedPair && res.targetDate) {
-          if (!processed.has(res.targetDate)) {
-            pairs.push({
-              date1: d,
-              day1: res.currentDayName,
-              date2: res.targetDate,
-              day2: res.targetDayName
-            });
-            processed.add(d);
-            processed.add(res.targetDate);
-          }
-        }
-      });
-      return pairs;
-    } catch (e) {
-      return [];
-    }
+    return [];
   },
 
   /**
-   * Intercambia de forma segura y completa dos planeaciones entre dos fechas,
-   * preservando el 100% de los textos, notas, temas, DBAs y cuadernos de cada una.
+   * DESACTIVADO: Intercambio de planeaciones deshabilitado para garantizar que cada día es 100% independiente
    */
   swapDayPlans(dateStr1, dateStr2) {
-    try {
-      const allPlans = this.getAllPlans();
-      const plan1 = allPlans[dateStr1];
-      const plan2 = allPlans[dateStr2];
-
-      if (!plan1 && !plan2) return false;
-
-      // Guardar snapshots para permitir revertir
-      if (plan1) this.savePlanSnapshot(dateStr1, plan1);
-      if (plan2) this.savePlanSnapshot(dateStr2, plan2);
-
-      const day1Name = typeof ExportService !== 'undefined' ? ExportService.getDayOfWeekName(dateStr1) : '';
-      const day2Name = typeof ExportService !== 'undefined' ? ExportService.getDayOfWeekName(dateStr2) : '';
-
-      const newPlan1 = plan2 ? JSON.parse(JSON.stringify(plan2)) : null;
-      const newPlan2 = plan1 ? JSON.parse(JSON.stringify(plan1)) : null;
-
-      if (newPlan1) {
-        newPlan1.date = dateStr1;
-        (newPlan1.classes || []).forEach(c => {
-          c.date = dateStr1;
-          c.dayOfWeek = day1Name;
-        });
-        allPlans[dateStr1] = newPlan1;
-      } else {
-        delete allPlans[dateStr1];
-      }
-
-      if (newPlan2) {
-        newPlan2.date = dateStr2;
-        (newPlan2.classes || []).forEach(c => {
-          c.date = dateStr2;
-          c.dayOfWeek = day2Name;
-        });
-        allPlans[dateStr2] = newPlan2;
-      } else {
-        delete allPlans[dateStr2];
-      }
-
-      // Re-secuenciar consecutividad únicamente en los días involucrados sin alterar el resto del calendario
-      [dateStr1, dateStr2].sort().forEach(d => {
-        const plan = allPlans[d];
-        if (plan && Array.isArray(plan.classes)) {
-          const currentDayClasses = [];
-          plan.classes.forEach((cls, i) => {
-            const classNum = this.getNextClassNumber(d, cls.subject, cls.grade, i, currentDayClasses);
-            cls.dayNumber = `${classNum}`;
-            currentDayClasses.push(cls);
-          });
-        }
-      });
-      this.saveAllPlans(allPlans);
-
-      return true;
-    } catch (e) {
-      console.error('Error intercambiando planeaciones:', e);
-      return false;
-    }
+    console.warn('[StorageService] swapDayPlans neutralizado: las fechas de planeación son estrictamente inmutables.');
+    return false;
   },
 
   /**
@@ -729,8 +652,16 @@ const StorageService = {
    * La consecutividad es específica por asignatura y curso (ej. Matemáticas 7°: Clase 1, Clase 2, Clase 3...),
    * comenzando a contar desde la fecha configurada como Primer Día de Clases (academicStartDate).
    */
-  getNextClassNumber(dateStr, subject = null, grade = null, excludeIndex = -1, currentDayClasses = []) {
+  getNextClassNumber(dateStr, subject = null, grade = null, excludeIndex = -1, currentDayClasses = [], period = '1°') {
     try {
+      const currentUserId = (typeof UserService !== 'undefined' && UserService.getCurrentUserId)
+        ? UserService.getCurrentUserId()
+        : 'usr_manuel';
+
+      if (typeof PlanRepository !== 'undefined' && PlanRepository.calculateNextSequenceNumber) {
+        return PlanRepository.calculateNextSequenceNumber(currentUserId, dateStr, period, subject, grade, currentDayClasses);
+      }
+
       const startDate = this.getAcademicStartDate();
       const allPlans = this.getAllPlans();
 

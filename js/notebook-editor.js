@@ -514,13 +514,25 @@ const NotebookEditor = {
       cls.observations = obsVal;
     }
 
-    // Persistir atómicamente a través de PlanRepository o StorageService
+    // Persistir atómicamente a través de StorageService.saveClass por clase aislada
     let success = false;
-    const planToSave = window.Planner?.currentPlan || StorageService.getPlanByDate(dateStr);
-    if (planToSave) {
-      success = StorageService.savePlan(dateStr, planToSave);
+    const classId = this.currentClassData?.id || window.Planner?.currentPlan?.classes?.[this.currentClassIndex]?.id;
+    if (classId && typeof StorageService !== 'undefined' && StorageService.saveClass) {
+      const updatedClass = {
+        notebookContent: this.hasContent(currentHtml) ? currentHtml : (this.currentClassData?.notebookContent || ''),
+        observations: obsVal
+      };
+      const res = StorageService.saveClass(dateStr, classId, updatedClass);
+      success = Boolean(res && res.plan);
       this._lastSavedContent = currentHtml;
       this._recordVersionSnapshot(currentHtml);
+    } else {
+      const planToSave = window.Planner?.currentPlan || StorageService.getPlanByDate(dateStr);
+      if (planToSave) {
+        success = StorageService.savePlan(dateStr, planToSave);
+        this._lastSavedContent = currentHtml;
+        this._recordVersionSnapshot(currentHtml);
+      }
     }
 
     const badge = document.getElementById('notebook-autosave-badge');

@@ -10,6 +10,8 @@ class PlannerComponent {
     this.currentPlan = null;
     this.autoSaveTimer = null;
     this._dismissedDayBanners = {};
+    this._hasUnsavedChanges = false;
+    this._setupMultiTabSync();
   }
 
   formatFullDate(dateStr) {
@@ -32,12 +34,21 @@ class PlannerComponent {
     if (this.currentDateStr && this.currentPlan) {
       this.collectDataFromDOM(this.currentDateStr);
       StorageService.savePlan(this.currentDateStr, this.currentPlan);
+      this._hasUnsavedChanges = false;
     }
   }
 
-  loadDate(dateStr) {
+  loadDate(dateStr, bypassUnsavedCheck = false) {
     if (!this.container) {
       this.container = document.getElementById('planner-mount-point');
+    }
+
+    // Advertencia de cambios sin guardar al cambiar de día
+    if (!bypassUnsavedCheck && this.currentDateStr && this.currentDateStr !== dateStr && this.hasUnsavedChanges()) {
+      this.promptNavigateIfUnsaved(() => {
+        this.loadDate(dateStr, true);
+      });
+      return;
     }
 
     // Vaciar y guardar cualquier cambio pendiente del día anterior de forma aislada
@@ -50,6 +61,7 @@ class PlannerComponent {
     }
 
     this.currentDateStr = dateStr;
+    this._hasUnsavedChanges = false;
 
     try {
       const profile = StorageService.getProfile();
@@ -58,6 +70,18 @@ class PlannerComponent {
       if (existingPlan) {
         this.currentPlan = JSON.parse(JSON.stringify(existingPlan));
         if (!this.currentPlan.attachments) this.currentPlan.attachments = [];
+        if (!this.currentPlan.period) this.currentPlan.period = profile?.period || '1°';
+
+        // Asegurar que cada clase tenga id permanente y sequenceNumber
+        if (Array.isArray(this.currentPlan.classes)) {
+          this.currentPlan.classes.forEach((cls, idx) => {
+            if (!cls.id) {
+              cls.id = cls.classId || (typeof PlanRepository !== 'undefined' ? PlanRepository.generateClassId(this.currentPlan.id) : `cls_${Date.now()}_${idx}_${Math.random().toString(36).slice(2, 6)}`);
+            }
+            if (!cls.classId) cls.classId = cls.id;
+            if (!cls.sequenceNumber) cls.sequenceNumber = parseInt(cls.dayNumber, 10) || (idx + 1);
+          });
+        }
         if (!this.currentPlan.period) this.currentPlan.period = profile?.period || '1°';
 
         // Consolidar únicamente en memoria clases contiguas de 2 horas si existen
@@ -124,11 +148,17 @@ class PlannerComponent {
             const autoCur = (!isDirGroup && typeof CurriculumService !== 'undefined') 
               ? CurriculumService.getAutoCurriculumItem(targetPeriod, schedItem.subject, schedItem.grade, classNum)
               : null;
+            const classId = typeof PlanRepository !== 'undefined'
+              ? PlanRepository.generateClassId()
+              : `cls_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 6)}`;
 
             initialClasses.push({
+              id: classId,
+              classId: classId,
               date: dateStr,
               time: schedItem.time || '',
               dayNumber: `${classNum}`,
+              sequenceNumber: parseInt(classNum, 10) || (i + 1),
               dayOfWeek: dayOfWeek,
               subject: schedItem.subject,
               grade: schedItem.grade,
@@ -155,10 +185,16 @@ class PlannerComponent {
             const autoCur = typeof CurriculumService !== 'undefined'
               ? CurriculumService.getAutoCurriculumItem(targetPeriod, defaultSubject, defaultGrade, classNum)
               : null;
+            const classId = typeof PlanRepository !== 'undefined'
+              ? PlanRepository.generateClassId()
+              : `cls_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 6)}`;
 
             initialClasses.push({
+              id: classId,
+              classId: classId,
               date: dateStr,
               dayNumber: `${classNum}`,
+              sequenceNumber: parseInt(classNum, 10) || (i + 1),
               dayOfWeek: dayOfWeek,
               subject: defaultSubject,
               grade: defaultGrade,
@@ -279,7 +315,7 @@ class PlannerComponent {
       };
 
       return `
-        <tr class="planning-row">
+        <tr class="planning-row" data-class-id="${this.escapeHtml(cls.id || '')}" data-row-idx="${idx}">
           <!-- Columna 1: Fecha (d/m/a) y Horario -->
           <td class="col-date" style="vertical-align: middle; text-align: center;">
             <input type="text" class="table-input" value="${this.escapeHtml(shortDate)}" style="font-size: 0.8rem; text-align: center; padding: 0.4rem 0.2rem;" readonly />
@@ -395,14 +431,18 @@ class PlannerComponent {
             </div>
           </td>
 
-          <!-- Acciones de Fila: Descarga directa y Eliminar -->
+          <!-- Acciones de Fila: Guardar clase, Descarga directa y Eliminar -->
           <td class="col-action" style="vertical-align: middle; text-align: center;">
             <div style="display: flex; flex-direction: column; gap: 4px; align-items: center; justify-content: center; width: 100%;">
-              <button type="button" class="btn btn-sm" onclick="Planner.exportSingleClass(${idx}, 'docx')" title="Descargar únicamente esta clase en Word (.docx) oficial" style="font-size: 0.72rem; font-weight: 700; color: #1d4ed8; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 4px; padding: 2px 4px; width: 100%; display: flex; align-items: center; justify-content: center; gap: 2px; cursor: pointer; white-space: nowrap;">
-                📄 Word
+              <button type="button" class="btn btn-sm btn-save-class" onclick="Planner.saveSingleClass(${idx})" title="Guardar únicamente los datos de esta clase" id="btn-save-class-${idx}" style="font-size: 0.72rem; font-weight: 700; color: #065f46; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 4px; padding: 3px 5px; width: 100%; display: flex; align-items: center; justify-content: center; gap: 3px; cursor: pointer; white-space: nowrap;">
+                💾 Guardar
               </button>
+              <div id="class-save-indicator-${idx}" style="font-size: 0.65rem; font-weight: 600; color: #059669; display: none; line-height: 1.1;"></div>
               <button type="button" class="btn btn-sm" onclick="Planner.exportSingleClass(${idx}, 'pdf')" title="Descargar / Imprimir PDF oficial de esta sola clase" style="font-size: 0.72rem; font-weight: 700; color: #b91c1c; background: #fef2f2; border: 1px solid #fecaca; border-radius: 4px; padding: 2px 4px; width: 100%; display: flex; align-items: center; justify-content: center; gap: 2px; cursor: pointer; white-space: nowrap;">
                 📑 PDF
+              </button>
+              <button type="button" class="btn btn-sm" onclick="Planner.exportSingleClass(${idx}, 'docx')" title="Descargar únicamente esta clase en Word (.docx) oficial" style="font-size: 0.72rem; font-weight: 700; color: #1d4ed8; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 4px; padding: 2px 4px; width: 100%; display: flex; align-items: center; justify-content: center; gap: 2px; cursor: pointer; white-space: nowrap;">
+                📄 Word
               </button>
               <button type="button" class="btn-table-action delete" onclick="Planner.removeRow(${idx})" title="Eliminar esta fila" style="margin-top: 1px;">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
@@ -563,86 +603,8 @@ class PlannerComponent {
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
             </button>
 
-            <!-- Botón Intercambiar Día -->
-            <button class="btn btn-secondary btn-icon" onclick="Planner.promptSwapPlan()" title="Intercambiar planeación completa con otra fecha (conservando todo tu texto)">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
-            </button>
           </div>
         </div>
-
-        <!-- Alerta visual inteligente si las clases guardadas tienen horario de otro día o par cruzado -->
-        ${(() => {
-          if (this._dismissedDayBanners && this._dismissedDayBanners[this.currentDateStr]) return '';
-          const expectedDay = ExportService.getDayOfWeekName(this.currentDateStr);
-          const actualDays = [...new Set((this.currentPlan.classes || []).map(c => c.dayOfWeek).filter(Boolean))];
-          const normalizeDay = (d) => String(d || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-          
-          // 1. Detección profunda de par intercambiado (ej. Jueves 10 con clases de Viernes y Viernes 11 con clases de Jueves)
-          const swappedInfo = (typeof StorageService !== 'undefined' && StorageService.detectSwappedPair)
-            ? StorageService.detectSwappedPair(this.currentDateStr)
-            : null;
-
-          if (swappedInfo && swappedInfo.isSwappedPair && swappedInfo.targetDate) {
-            const targetDayName = swappedInfo.targetDayName;
-            const targetDateStr = swappedInfo.targetDate;
-            const targetDateFormatted = this.formatFullDate(targetDateStr);
-            return `
-              <div class="day-mismatch-banner" style="background:#fef2f2; border:1px solid #ef4444; border-radius:8px; padding:12px 18px; margin-bottom:1.25rem; display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; box-shadow:0 1px 3px rgba(0,0,0,0.06);">
-                <div style="display:flex; align-items:center; gap:12px; color:#991b1b; font-size:0.92rem; max-width:650px;">
-                  <span style="font-size:1.6rem; line-height:1;">🔄</span>
-                  <div>
-                    <strong style="color:#7f1d1d;">Aviso de horario cruzado:</strong> Las clases de este día (${formattedDate}) corresponden al horario oficial de <strong>${this.escapeHtml(targetDayName)}</strong>, mientras que el día <strong>${this.escapeHtml(targetDayName)} (${targetDateFormatted})</strong> tiene las clases de <strong>${this.escapeHtml(expectedDay)}</strong>.
-                    <div style="font-size:0.8rem; color:#b91c1c; margin-top:2px;">Todo tu texto, temas, DBAs y secuencias redactadas se conservarán intactos al sincronizar.</div>
-                  </div>
-                </div>
-                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-                  <button type="button" class="btn btn-primary" style="font-size:0.84rem; padding:8px 14px; background:#059669; border-color:#047857; font-weight:700; display:inline-flex; align-items:center; gap:6px; cursor:pointer;" onclick="Planner.swapWithDate('${targetDateStr}')" title="Intercambiar planeaciones entre ${this.escapeHtml(expectedDay)} y ${this.escapeHtml(targetDayName)} conservando 100% de los textos">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
-                    ✓ Intercambiar (${this.escapeHtml(expectedDay)} ⇄ ${this.escapeHtml(targetDayName)})
-                  </button>
-                  <button type="button" class="btn btn-secondary" style="font-size:0.82rem; padding:8px 12px; background:#fff; border-color:#d97706; color:#92400e; font-weight:600; display:inline-flex; align-items:center; gap:6px; cursor:pointer;" onclick="Planner.applyOfficialSchedule()" title="Adaptar materias al horario oficial conservando tus textos redactados">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path></svg>
-                    Adaptar a Horario Oficial
-                  </button>
-                  <button type="button" class="btn btn-secondary" style="font-size:0.8rem; padding:8px 10px; background:#f8fafc; color:#64748b; border-color:#cbd5e1; cursor:pointer;" onclick="Planner.dismissMismatchBanner()" title="Conservar las clases tal como están y ocultar este aviso">
-                    ✕ Descartar
-                  </button>
-                </div>
-              </div>
-            `;
-          }
-
-          // 2. Detección estándar por etiqueta o por materias no coincidentes
-          const isLabelMismatch = actualDays.length > 0 && actualDays.some(d => normalizeDay(d) !== normalizeDay(expectedDay));
-          const isScheduleMismatch = swappedInfo && swappedInfo.mismatchOnly;
-          if (!isLabelMismatch && !isScheduleMismatch) return '';
-
-          const detectedDay = isLabelMismatch ? actualDays[0] : (swappedInfo?.detectedDayName || expectedDay);
-          return `
-            <div class="day-mismatch-banner" style="background:#fffbeb; border:1px solid #f59e0b; border-radius:8px; padding:12px 18px; margin-bottom:1.25rem; display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; box-shadow:0 1px 3px rgba(0,0,0,0.06);">
-              <div style="display:flex; align-items:center; gap:12px; color:#92400e; font-size:0.92rem; max-width:650px;">
-                <span style="font-size:1.6rem; line-height:1;">💡</span>
-                <div>
-                  <strong style="color:#78350f;">Aviso de día:</strong> Esta planeación (${formattedDate}) tiene clases que corresponden a <strong>${this.escapeHtml(detectedDay)}</strong> en lugar de <strong>${this.escapeHtml(expectedDay)}</strong>.
-                  <div style="font-size:0.8rem; color:#a16207; margin-top:2px;">Tus textos, temas y secuencias están protegidos. Elige cómo deseas sincronizar:</div>
-                </div>
-              </div>
-              <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-                <button type="button" class="btn btn-primary" style="font-size:0.84rem; padding:8px 14px; background:#059669; border-color:#047857; font-weight:700; display:inline-flex; align-items:center; gap:6px; cursor:pointer;" onclick="Planner.fixDayLabelOnly()" title="Ajusta el nombre del día a ${this.escapeHtml(expectedDay)} conservando intactos todos tus textos y materias">
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                  ✓ Ajustar día a ${this.escapeHtml(expectedDay)} (Conservar todo)
-                </button>
-                <button type="button" class="btn btn-secondary" style="font-size:0.82rem; padding:8px 12px; background:#fff; border-color:#d97706; color:#92400e; font-weight:600; display:inline-flex; align-items:center; gap:6px; cursor:pointer;" onclick="Planner.applyOfficialSchedule()" title="Alinea las materias con el horario oficial conservando tus textos redactados">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path></svg>
-                  Adaptar a Horario Oficial
-                </button>
-                <button type="button" class="btn btn-secondary" style="font-size:0.8rem; padding:8px 10px; background:#f8fafc; color:#64748b; border-color:#cbd5e1; cursor:pointer;" onclick="Planner.dismissMismatchBanner()" title="Conservar las clases tal como están y ocultar este aviso">
-                  ✕ Descartar
-                </button>
-              </div>
-            </div>
-          `;
-        })()}
 
         <!-- Tabla Pedagógica de Planeación -->
         <div class="planning-table-container">
@@ -1382,7 +1344,200 @@ class PlannerComponent {
     }
   }
 
+  _setupMultiTabSync() {
+    if (typeof BroadcastChannel === 'undefined') return;
+    try {
+      this._syncChannel = new BroadcastChannel('planeaciones_repo_channel');
+      this._syncChannel.onmessage = (event) => {
+        const msg = event?.data;
+        if (!msg) return;
+        if (msg.type === 'CLASS_SAVED' && msg.date === this.currentDateStr) {
+          const classIdx = this.currentPlan?.classes?.findIndex(c => c.id === msg.classId || c.classId === msg.classId);
+          if (classIdx !== -1 && classIdx !== undefined) {
+            console.warn(`[Multi-pestaña] Clase ${msg.classId} actualizada en otra ventana.`);
+            if (typeof App !== 'undefined' && App.showToast) {
+              App.showToast(`⚠️ La clase #${classIdx + 1} fue actualizada en otra pestaña`, 'info');
+            }
+          }
+        }
+      };
+    } catch (e) {
+      console.warn('BroadcastChannel no soportado:', e);
+    }
+  }
+
+  hasUnsavedChanges() {
+    return Boolean(this._hasUnsavedChanges);
+  }
+
+  setUnsavedChanges(val = true) {
+    this._hasUnsavedChanges = Boolean(val);
+    const el = document.getElementById('planner-save-indicator');
+    if (el && val) {
+      el.style.color = '#b45309';
+      el.style.background = '#fffbeb';
+      el.style.borderColor = '#fde68a';
+      el.innerHTML = '<span style="font-size:0.95rem;">●</span> <span>Cambios sin guardar</span>';
+    }
+  }
+
+  promptNavigateIfUnsaved(onProceed) {
+    if (!this.hasUnsavedChanges()) {
+      if (typeof onProceed === 'function') onProceed();
+      return;
+    }
+
+    const existing = document.getElementById('unsaved-changes-modal');
+    if (existing) existing.remove();
+
+    const modalHtml = `
+      <div id="unsaved-changes-modal" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15,23,42,0.65); backdrop-filter:blur(2px); display:flex; align-items:center; justify-content:center; z-index:99999;">
+        <div style="background:#ffffff; border-radius:14px; padding:24px; max-width:440px; width:92%; box-shadow:0 25px 50px -12px rgba(0,0,0,0.25); font-family:inherit;">
+          <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
+            <div style="width:40px; height:40px; border-radius:10px; background:#fef3c7; display:flex; align-items:center; justify-content:center; font-size:1.3rem; flex-shrink:0;">
+              ⚠️
+            </div>
+            <div>
+              <h3 style="margin:0; font-size:1.15rem; color:#1e293b; font-weight:700;">Cambios sin guardar</h3>
+              <p style="margin:2px 0 0 0; font-size:0.8rem; color:#64748b;">Hay modificaciones pendientes en esta planeación</p>
+            </div>
+          </div>
+          <p style="margin:14px 0 20px 0; font-size:0.9rem; color:#334155; line-height:1.5;">
+            ¿Deseas guardar los cambios antes de continuar a otra vista o fecha?
+          </p>
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <button id="btn-unsaved-save" style="background:#059669; color:white; border:none; padding:11px 16px; border-radius:8px; font-weight:700; cursor:pointer; font-size:0.92rem; display:flex; align-items:center; justify-content:center; gap:6px;">
+              💾 Guardar y salir
+            </button>
+            <button id="btn-unsaved-discard" style="background:#fef2f2; color:#b91c1c; border:1px solid #fecaca; padding:10px 16px; border-radius:8px; font-weight:600; cursor:pointer; font-size:0.88rem; display:flex; align-items:center; justify-content:center; gap:6px;">
+              🏃 Salir sin guardar
+            </button>
+            <button id="btn-unsaved-cancel" style="background:transparent; color:#64748b; border:1px solid #cbd5e1; padding:9px 16px; border-radius:8px; font-weight:600; cursor:pointer; font-size:0.85rem;">
+              ❌ Cancelar
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    const modalEl = document.getElementById('unsaved-changes-modal');
+    const closeModal = () => { if (modalEl) modalEl.remove(); };
+
+    document.getElementById('btn-unsaved-save')?.addEventListener('click', () => {
+      closeModal();
+      this.saveCurrentPlan(false);
+      this._hasUnsavedChanges = false;
+      if (typeof onProceed === 'function') onProceed();
+    });
+
+    document.getElementById('btn-unsaved-discard')?.addEventListener('click', () => {
+      closeModal();
+      this._hasUnsavedChanges = false;
+      if (typeof onProceed === 'function') onProceed();
+    });
+
+    document.getElementById('btn-unsaved-cancel')?.addEventListener('click', () => {
+      closeModal();
+    });
+  }
+
+  saveSingleClass(rowIndex, showFeedback = true) {
+    if (!this.currentPlan || !Array.isArray(this.currentPlan.classes) || !this.currentPlan.classes[rowIndex]) {
+      if (showFeedback && typeof App !== 'undefined' && App.showToast) {
+        App.showToast('No se encontró la clase especificada', 'error');
+      }
+      return false;
+    }
+
+    const tableBody = document.getElementById('planner-table-body');
+    const rows = tableBody ? tableBody.querySelectorAll('tr') : [];
+    const rowEl = rows[rowIndex];
+
+    const currentCls = this.currentPlan.classes[rowIndex];
+    const classId = currentCls.id || (typeof PlanRepository !== 'undefined' ? PlanRepository.generateClassId(this.currentPlan.id) : `cls_${Date.now()}_${rowIndex}`);
+    currentCls.id = classId;
+    currentCls.classId = classId;
+
+    let classData = { ...currentCls };
+    if (rowEl) {
+      const dayNumber = (rowEl.querySelector('input.cls-day-number, input.col-daynumber')?.value || currentCls.dayNumber || `${rowIndex + 1}`).trim();
+      const dayOfWeek = (rowEl.querySelector('input.cls-day-of-week, input.col-dayofweek')?.value || currentCls.dayOfWeek || ExportService.getDayOfWeekName(this.currentDateStr)).trim();
+      const subject = (rowEl.querySelector('select.cls-subject, select.col-subject')?.value || currentCls.subject || '').trim();
+      const grade = (rowEl.querySelector('select.cls-grade, select.col-grade')?.value || currentCls.grade || '').trim();
+      const dba = (rowEl.querySelector('textarea.cls-dba, textarea.col-dba')?.value || '').trim();
+      const achievement = (rowEl.querySelector('textarea.cls-achievement, textarea.col-achievement')?.value || '').trim();
+      const topic = (rowEl.querySelector('textarea.cls-topic, textarea.col-topic')?.value || '').trim();
+      const description = (rowEl.querySelector('textarea.cls-description, textarea.col-description')?.value || '').trim();
+      const observations = (rowEl.querySelector('textarea.cls-observations')?.value || '').trim();
+
+      classData.dayNumber = dayNumber;
+      classData.sequenceNumber = parseInt(dayNumber, 10) || currentCls.sequenceNumber || (rowIndex + 1);
+      classData.dayOfWeek = dayOfWeek;
+      classData.subject = subject;
+      classData.grade = grade;
+      classData.dba = dba || (!dba && currentCls.dba ? currentCls.dba : '');
+      classData.achievement = achievement || (!achievement && currentCls.achievement ? currentCls.achievement : '');
+      classData.topic = topic || (!topic && currentCls.topic ? currentCls.topic : '');
+      classData.description = description || (!description && currentCls.description ? currentCls.description : '');
+      classData.observations = observations || (!observations && currentCls.observations ? currentCls.observations : '');
+    }
+
+    let success = false;
+    if (typeof PlanRepository !== 'undefined' && PlanRepository.saveClass) {
+      const teacherId = (typeof UserService !== 'undefined' && UserService.getCurrentTeacherId) ? UserService.getCurrentTeacherId() : null;
+      const res = PlanRepository.saveClass(teacherId, this.currentDateStr, classId, classData);
+      success = Boolean(res && (res.id || res.classId));
+      if (success) {
+        this.currentPlan.classes[rowIndex] = res;
+      }
+    } else if (typeof StorageService !== 'undefined' && StorageService.saveClass) {
+      const res = StorageService.saveClass(this.currentDateStr, classId, classData);
+      success = Boolean(res && (res.id || res.classId));
+      if (success) {
+        this.currentPlan.classes[rowIndex] = res;
+      }
+    } else {
+      this.currentPlan.classes[rowIndex] = classData;
+      success = StorageService.savePlan(this.currentDateStr, this.currentPlan);
+    }
+
+    const indicator = document.getElementById(`class-save-indicator-${rowIndex}`);
+    const btn = document.getElementById(`btn-save-class-${rowIndex}`);
+    if (indicator) {
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      indicator.innerHTML = `✓ Guardada<br><span style="font-size:0.6rem; color:#64748b;">${timeStr}</span>`;
+      indicator.style.display = 'block';
+    }
+    if (btn) {
+      btn.style.background = '#d1fae5';
+      btn.style.borderColor = '#34d399';
+      setTimeout(() => {
+        if (btn) {
+          btn.style.background = '#ecfdf5';
+          btn.style.borderColor = '#a7f3d0';
+        }
+      }, 1500);
+    }
+
+    if (showFeedback && typeof App !== 'undefined' && App.showToast) {
+      if (success) {
+        App.showToast(`✓ Clase de ${classData.subject} (${classData.grade}) guardada individualmente`, 'success');
+      } else {
+        App.showToast('Error al guardar la clase', 'warning');
+      }
+    }
+
+    if (window.Calendar && typeof window.Calendar.updateDayIndicators === 'function') {
+      window.Calendar.updateDayIndicators();
+    }
+
+    return success;
+  }
+
   handlePaste(event) {
+    this.setUnsavedChanges(true);
     this.updateSaveIndicator('saving');
     setTimeout(() => {
       this.handleInputChange(true);
@@ -1391,17 +1546,20 @@ class PlannerComponent {
   }
 
   handleInputChange(immediate = false) {
+    this.setUnsavedChanges(true);
     clearTimeout(this.autoSaveTimer);
     this.updateSaveIndicator('saving');
     if (immediate) {
       this.saveCurrentPlan(false);
+      this._hasUnsavedChanges = false;
       this.updateSaveIndicator('saved');
       return;
     }
     this.autoSaveTimer = setTimeout(() => {
       this.saveCurrentPlan(false);
+      this._hasUnsavedChanges = false;
       this.updateSaveIndicator('saved');
-    }, 300);
+    }, 400);
   }
 
   saveCurrentPlan(showFeedback = true, targetDate = null) {
@@ -1414,6 +1572,9 @@ class PlannerComponent {
     if (!this.currentPlan || !saveDate) return false;
 
     const success = StorageService.savePlan(saveDate, this.currentPlan);
+    if (success) {
+      this._hasUnsavedChanges = false;
+    }
     this.updateSaveIndicator(success ? 'saved' : 'saving');
 
     if (window.Calendar && typeof window.Calendar.updateDayIndicators === 'function') {
@@ -1441,6 +1602,7 @@ class PlannerComponent {
     const startNum = parseInt(String(val).replace(/[^0-9]/g, ''), 10);
     if (!isNaN(startNum) && this.currentPlan.classes[idx]) {
       this.currentPlan.classes[idx].dayNumber = String(startNum);
+      this.currentPlan.classes[idx].sequenceNumber = startNum;
       const targetSub = String(this.currentPlan.classes[idx].subject || '').toLowerCase().trim();
       const targetGrd = String(this.currentPlan.classes[idx].grade || '').toLowerCase().trim();
 
@@ -1451,6 +1613,7 @@ class PlannerComponent {
         const grd = String(this.currentPlan.classes[i].grade || '').toLowerCase().trim();
         if (sub === targetSub && grd === targetGrd) {
           this.currentPlan.classes[i].dayNumber = String(startNum + offset);
+          this.currentPlan.classes[i].sequenceNumber = startNum + offset;
           offset++;
         }
       }
@@ -1463,7 +1626,9 @@ class PlannerComponent {
   autoRenumberSequence() {
     this.collectDataFromDOM();
     this.currentPlan.classes.forEach((cls, i) => {
-      cls.dayNumber = String(StorageService.getNextClassNumber(this.currentDateStr, cls.subject, cls.grade, i, this.currentPlan.classes));
+      const nextNum = StorageService.getNextClassNumber(this.currentDateStr, cls.subject, cls.grade, i, this.currentPlan.classes);
+      cls.dayNumber = String(nextNum);
+      cls.sequenceNumber = parseInt(nextNum, 10) || (i + 1);
     });
     this.render();
     this.saveCurrentPlan(true);
@@ -1490,9 +1655,16 @@ class PlannerComponent {
       ? CurriculumService.getAutoCurriculumItem(targetPeriod, defaultSubject, defaultGrade, nextClassNum)
       : null;
 
+    const classId = typeof PlanRepository !== 'undefined'
+      ? PlanRepository.generateClassId()
+      : `cls_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+
     this.currentPlan.classes.push({
+      id: classId,
+      classId: classId,
       date: this.currentDateStr,
       dayNumber: `${nextClassNum}`,
+      sequenceNumber: parseInt(nextClassNum, 10) || (this.currentPlan.classes.length + 1),
       dayOfWeek: dayOfWeek,
       subject: defaultSubject,
       grade: defaultGrade,
@@ -1500,7 +1672,9 @@ class PlannerComponent {
       achievement: autoCur?.achievement || '',
       topic: autoCur?.topic || '',
       description: '',
-      notebookContent: ''
+      observations: '',
+      notebookContent: '',
+      attachments: []
     });
 
     this.render();
@@ -1509,12 +1683,33 @@ class PlannerComponent {
 
   deleteRow(index) {
     this.collectDataFromDOM();
+    if (!this.currentPlan || !Array.isArray(this.currentPlan.classes) || !this.currentPlan.classes[index]) return;
+
     if (this.currentPlan.classes.length <= 1) {
       if (!confirm('¿Deseas eliminar la única clase registrada para este día?')) return;
     }
-    this.currentPlan.classes.splice(index, 1);
+
+    const targetClass = this.currentPlan.classes[index];
+    const classId = targetClass.id || targetClass.classId;
+
+    // Guardar snapshot de respaldo antes de eliminar
+    if (typeof StorageService !== 'undefined' && StorageService.savePlanSnapshot) {
+      StorageService.savePlanSnapshot(this.currentDateStr, this.currentPlan);
+    }
+
+    if (classId && typeof PlanRepository !== 'undefined' && PlanRepository.deleteClass) {
+      const teacherId = (typeof UserService !== 'undefined' && UserService.getCurrentTeacherId) ? UserService.getCurrentTeacherId() : null;
+      PlanRepository.deleteClass(teacherId, this.currentDateStr, classId);
+      this.currentPlan.classes.splice(index, 1);
+    } else {
+      this.currentPlan.classes.splice(index, 1);
+      this.saveCurrentPlan(false);
+    }
+
     this.render();
-    this.saveCurrentPlan(false);
+    if (typeof App !== 'undefined' && App.showToast) {
+      App.showToast('Clase eliminada. Se creó un respaldo automático.', 'info');
+    }
   }
 
   clearAllRows() {

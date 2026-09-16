@@ -200,7 +200,9 @@ const DEFAULT_SYSTEM_USERS = [
   }
 ];
 
-window.USER_ROLES = USER_ROLES;
+if (typeof window !== 'undefined') {
+  window.USER_ROLES = USER_ROLES;
+}
 
 const UserService = {
   /**

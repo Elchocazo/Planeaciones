@@ -26,12 +26,12 @@ const PlanRepository = {
   },
 
   /**
-   * Genera un ID estable para una clase dentro de una planeacion
+   * Genera un ID permanente, aleatorio y único para una clase (completamente desacoplado del índice)
    */
-  generateClassId(planId, classIndex, subject, grade) {
-    const cleanSub = String(subject || 'gen').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 5);
-    const cleanGrd = String(grade || '0').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 3);
-    return 'class_' + planId + '_' + classIndex + '_' + cleanSub + '_' + cleanGrd;
+  generateClassId(planId = null) {
+    const ts = Date.now().toString(36);
+    const rand = Math.random().toString(36).substring(2, 9);
+    return `cls_${ts}_${rand}`;
   },
 
   /**
@@ -110,6 +110,30 @@ const PlanRepository = {
         window.dispatchEvent(evt);
       }
     }
+
+    if (msg.type === 'CLASS_SAVED') {
+      const { teacherId, date, classId, classData, version } = msg;
+      if (!this._cache[teacherId]) this._cache[teacherId] = {};
+      const currentPlan = this._cache[teacherId][date];
+      if (currentPlan && Array.isArray(currentPlan.classes)) {
+        const idx = currentPlan.classes.findIndex(c => c.id === classId);
+        if (idx >= 0) {
+          currentPlan.classes[idx] = JSON.parse(JSON.stringify(classData));
+          currentPlan.version = Math.max(currentPlan.version || 1, version || 1);
+        }
+      }
+
+      if (typeof window !== 'undefined' && window.dispatchEvent) {
+        const evt = new CustomEvent('class_remote_update', {
+          detail: { teacherId, date, classId, version, sourceTabId: msg.sourceTabId }
+        });
+        window.dispatchEvent(evt);
+      }
+    }
+  },
+
+  clearCache() {
+    this._cache = {};
   },
 
   /**
@@ -193,11 +217,61 @@ const PlanRepository = {
   },
 
   /**
+   * Calcula el consecutivo persistente para la combinación PERIODO + MATERIA + GRADO
+   * sequenceKey = `${period}|${subject}|${grade}`
+   * Busca en todas las planeaciones guardadas en fechas anteriores (< date).
+   */
+  calculateNextSequenceNumber(teacherId, date, period = '1°', subject = '', grade = '', currentDayClasses = []) {
+    if (!subject || !grade) return 1;
+    const tid = teacherId || this._getCurrentTeacherId();
+    const allPlans = this.getAllPlans(tid);
+
+    const norm = (s) => String(s || '').trim().toLowerCase();
+    const targetSub = norm(subject);
+    const targetGrd = norm(grade);
+    const targetPer = norm(period || '1°');
+
+    let maxFound = 0;
+
+    // 1. Fechas cronológicas anteriores estrictas (< date)
+    const prevDates = Object.keys(allPlans).filter(d => d < date).sort();
+    for (const d of prevDates) {
+      const p = allPlans[d];
+      if (!p || !Array.isArray(p.classes)) continue;
+      const planPer = norm(p.period || '1°');
+      if (planPer !== targetPer) continue;
+
+      for (const cls of p.classes) {
+        if (norm(cls.subject) === targetSub && norm(cls.grade) === targetGrd) {
+          const num = cls.sequenceNumber || parseInt(String(cls.dayNumber || '').replace(/[^0-9]/g, ''), 10) || 0;
+          if (num > maxFound) {
+            maxFound = num;
+          }
+        }
+      }
+    }
+
+    // 2. Clases del mismo día ya agregadas en esta misma inicialización
+    if (Array.isArray(currentDayClasses)) {
+      for (const cls of currentDayClasses) {
+        if (norm(cls.subject) === targetSub && norm(cls.grade) === targetGrd) {
+          const num = cls.sequenceNumber || parseInt(String(cls.dayNumber || '').replace(/[^0-9]/g, ''), 10) || 0;
+          if (num > maxFound) {
+            maxFound = num;
+          }
+        }
+      }
+    }
+
+    return maxFound + 1;
+  },
+
+  /**
    * Crea una nueva planeacion inicial para una fecha a partir del horario semanal
    * IMPORTANTE: Esta operacion SOLO se invoca para una fecha que NO existe previamente.
    * JAMAS se aplica sobre una fecha ya guardada.
    */
-  createPlan(teacherId, date, weeklySchedule = null, period = '1°') {
+  createPlan(teacherId, date, weeklyScheduleOrClasses = null, period = '1°') {
     const tid = teacherId || this._getCurrentTeacherId();
     const planId = this.generatePlanId(tid, date);
 
@@ -210,17 +284,44 @@ const PlanRepository = {
 
     let initialClasses = [];
 
-    // Si se proporciona horario semanal, poblar las clases iniciales
-    if (weeklySchedule && weeklySchedule[String(dayIndex)] && Array.isArray(weeklySchedule[String(dayIndex)])) {
-      const daySlots = weeklySchedule[String(dayIndex)];
+    // Si se proporciona un arreglo directo de clases iniciales
+    if (Array.isArray(weeklyScheduleOrClasses)) {
+      weeklyScheduleOrClasses.forEach((item, idx) => {
+        const clsId = item.id || this.generateClassId(planId);
+        const seqNum = item.sequenceNumber || parseInt(item.dayNumber, 10) || this.calculateNextSequenceNumber(tid, date, period, item.subject, item.grade, initialClasses);
+        initialClasses.push({
+          id: clsId,
+          planId: planId,
+          date: date,
+          dayOfWeek: item.dayOfWeek || dayOfWeek,
+          dayNumber: String(item.dayNumber || seqNum),
+          sequenceNumber: seqNum,
+          time: item.time || '',
+          subject: item.subject || '',
+          grade: item.grade || '',
+          dba: item.dba || '',
+          achievement: item.achievement || '',
+          topic: item.topic || '',
+          description: item.description || '',
+          observations: item.observations || '',
+          notebookContent: item.notebookContent || '',
+          attachments: item.attachments || [],
+          version: item.version || 1
+        });
+      });
+    } else if (weeklyScheduleOrClasses && weeklyScheduleOrClasses[String(dayIndex)] && Array.isArray(weeklyScheduleOrClasses[String(dayIndex)])) {
+      // Si se proporciona horario semanal, poblar las clases iniciales
+      const daySlots = weeklyScheduleOrClasses[String(dayIndex)];
       daySlots.forEach((slot, idx) => {
-        const clsId = this.generateClassId(planId, idx, slot.subject, slot.grade);
+        const clsId = this.generateClassId(planId);
+        const seqNum = this.calculateNextSequenceNumber(tid, date, period, slot.subject, slot.grade, initialClasses);
         initialClasses.push({
           id: clsId,
           planId: planId,
           date: date,
           dayOfWeek: dayOfWeek,
-          dayNumber: String(idx + 1),
+          dayNumber: String(seqNum),
+          sequenceNumber: seqNum,
           time: slot.time || '',
           subject: slot.subject || '',
           grade: slot.grade || '',
@@ -230,7 +331,8 @@ const PlanRepository = {
           description: '',
           observations: '',
           notebookContent: '',
-          attachments: []
+          attachments: [],
+          version: 1
         });
       });
     }
@@ -378,25 +480,267 @@ const PlanRepository = {
   },
 
   /**
+   * Guarda o actualiza atómicamente una ÚNICA CLASE de una fecha.
+   * Modifica ÚNICAMENTE esa clase. Las demás clases de la fecha y de otras fechas
+   * permanecen 100% inalteradas (byte por byte).
+   * Aplica la regla ANTI-VACÍOS estricta sobre:
+   * 1. Secuencia didáctica (description)
+   * 2. Comentarios / observaciones (observations)
+   * 3. Cuaderno docente (notebookContent)
+   * Así como sobre topic, dba, achievement.
+   */
+  saveClass(teacherId, date, classId, incomingClassData, options = {}) {
+    if (!date || !classId || !incomingClassData) {
+      console.warn('[PlanRepository] saveClass error: parámetros inválidos', { date, classId });
+      return null;
+    }
+
+    const tid = teacherId || this._getCurrentTeacherId();
+    let currentPlan = this.getPlan(tid, date);
+
+    if (!currentPlan) {
+      currentPlan = this.createPlan(tid, date);
+    }
+
+    if (!Array.isArray(currentPlan.classes)) {
+      currentPlan.classes = [];
+    }
+
+    // Buscar la clase existente por classId
+    let classIndex = currentPlan.classes.findIndex(c => c.id === classId);
+    let existingClass = classIndex >= 0 ? currentPlan.classes[classIndex] : null;
+
+    if (!existingClass) {
+      // Si no existe por ID, buscar si hay una con coincidencia por subject y grade
+      existingClass = {
+        id: classId,
+        planId: currentPlan.id,
+        date: date,
+        dayOfWeek: incomingClassData.dayOfWeek || '',
+        dayNumber: incomingClassData.dayNumber || '1',
+        sequenceNumber: incomingClassData.sequenceNumber || parseInt(incomingClassData.dayNumber, 10) || 1,
+        time: incomingClassData.time || '',
+        subject: incomingClassData.subject || '',
+        grade: incomingClassData.grade || '',
+        dba: '',
+        achievement: '',
+        topic: '',
+        description: '',
+        observations: '',
+        notebookContent: '',
+        attachments: [],
+        version: 1
+      };
+      currentPlan.classes.push(existingClass);
+      classIndex = currentPlan.classes.length - 1;
+    }
+
+    // Guardar versión histórica previa de la clase antes de sobreescribir
+    this._saveClassVersionHistory(tid, date, classId, existingClass);
+
+    // Incrementar versión de la clase
+    const prevClassVersion = existingClass.version || 1;
+    const nextClassVersion = prevClassVersion + 1;
+
+    // Campos de texto protegidos por la regla anti-vacíos:
+    // description (secuencia didáctica), observations (comentarios), notebookContent (cuaderno docente)
+    // además de topic, dba, achievement
+    const textFields = ['topic', 'dba', 'achievement', 'description', 'observations', 'notebookContent'];
+    const forceEmpty = options.forceEmpty === true;
+
+    const updatedClass = {
+      ...existingClass,
+      id: classId, // INMUTABLE
+      planId: currentPlan.id,
+      date: date, // INMUTABLE
+      dayOfWeek: incomingClassData.dayOfWeek || existingClass.dayOfWeek || '',
+      dayNumber: incomingClassData.dayNumber !== undefined ? String(incomingClassData.dayNumber) : existingClass.dayNumber,
+      sequenceNumber: incomingClassData.sequenceNumber !== undefined ? incomingClassData.sequenceNumber : (existingClass.sequenceNumber || parseInt(existingClass.dayNumber, 10) || 1),
+      time: incomingClassData.time || existingClass.time || '',
+      subject: incomingClassData.subject || existingClass.subject || '',
+      grade: incomingClassData.grade || existingClass.grade || '',
+      attachments: Array.isArray(incomingClassData.attachments) ? incomingClassData.attachments : (existingClass.attachments || []),
+      version: nextClassVersion,
+      updatedAt: new Date().toISOString()
+    };
+
+    textFields.forEach(field => {
+      const incVal = incomingClassData[field];
+      const existVal = existingClass[field];
+
+      if (forceEmpty) {
+        updatedClass[field] = incVal || '';
+      } else {
+        if (this._hasRealContent(incVal)) {
+          updatedClass[field] = incVal;
+        } else if (this._hasRealContent(existVal)) {
+          // El campo entrante vino vacío pero existía texto previo: PROTEGER Y PRESERVAR
+          updatedClass[field] = existVal;
+        } else {
+          updatedClass[field] = (incVal !== undefined && incVal !== null) ? incVal : (existVal || '');
+        }
+      }
+    });
+
+    // Modificar ÚNICAMENTE esta clase en el arreglo del día
+    currentPlan.classes[classIndex] = updatedClass;
+
+    // Incrementar versión del plan
+    currentPlan.version = (currentPlan.version || 1) + 1;
+    currentPlan.updatedAt = new Date().toISOString();
+    currentPlan.updatedBy = tid;
+
+    // Actualizar cache en memoria
+    if (!this._cache[tid]) this._cache[tid] = {};
+    this._cache[tid][date] = currentPlan;
+
+    // Persistir en LocalStorage v3
+    const key = this.getStorageKey(tid);
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(key, JSON.stringify(this._cache[tid]));
+      }
+    } catch (eLS) {
+      console.warn('[PlanRepository] LocalStorage lleno o error al guardar clase. Se prioriza IndexedDB.');
+    }
+
+    // Persistir en IndexedDB
+    if (typeof IDBStorage !== 'undefined' && IDBStorage.set) {
+      IDBStorage.set(key, this._cache[tid]).catch(err => {
+        console.warn('[PlanRepository] Error al escribir en IndexedDB:', err);
+      });
+    }
+
+    // Notificar a otras pestañas via BroadcastChannel
+    if (this._channel) {
+      try {
+        this._channel.postMessage({
+          type: 'CLASS_SAVED',
+          teacherId: tid,
+          date: date,
+          classId: classId,
+          classData: updatedClass,
+          version: nextClassVersion,
+          sourceTabId: this._tabId
+        });
+      } catch (eChan) {}
+    }
+
+    // Respaldo físico en disco en segundo plano
+    clearTimeout(this._diskSyncTimer);
+    this._diskSyncTimer = setTimeout(() => {
+      this._syncToDisk(tid);
+    }, 1500);
+
+    // Registro de auditoría
+    console.log(`[CLASS] classId: ${classId} date: ${date} seq: ${updatedClass.dayNumber} v: ${nextClassVersion}`);
+    console.log(`[SAVE] sequence: ${Boolean(updatedClass.description)} observations: ${Boolean(updatedClass.observations)} notebook: ${Boolean(updatedClass.notebookContent)}`);
+
+    return updatedClass;
+  },
+
+  /**
+   * Elimina una clase específica de un día (con snapshot de seguridad)
+   */
+  deleteClass(teacherId, date, classId) {
+    const tid = teacherId || this._getCurrentTeacherId();
+    const currentPlan = this.getPlan(tid, date);
+    if (!currentPlan || !Array.isArray(currentPlan.classes)) return false;
+
+    const classToDelete = currentPlan.classes.find(c => c.id === classId);
+    if (!classToDelete) return false;
+
+    // Snapshot de seguridad antes de eliminar
+    this.saveSnapshot(tid, `delete_class_${date}_${classId}`, classToDelete);
+
+    currentPlan.classes = currentPlan.classes.filter(c => c.id !== classId);
+    currentPlan.version = (currentPlan.version || 1) + 1;
+    currentPlan.updatedAt = new Date().toISOString();
+
+    const saved = this.savePlan(tid, date, currentPlan, { forceEmpty: true });
+    return Boolean(saved);
+  },
+
+  // Historial de versiones de clases
+  _classHistory: {},
+  _saveClassVersionHistory(teacherId, date, classId, classData) {
+    if (!classData) return;
+    const histKey = `${teacherId}_${date}_${classId}`;
+    if (!this._classHistory[histKey]) this._classHistory[histKey] = [];
+    this._classHistory[histKey].push({
+      timestamp: new Date().toISOString(),
+      version: classData.version || 1,
+      classData: JSON.parse(JSON.stringify(classData))
+    });
+    if (this._classHistory[histKey].length > 10) {
+      this._classHistory[histKey].shift();
+    }
+  },
+
+  getClassVersionHistory(teacherId, date, classId) {
+    const tid = teacherId || this._getCurrentTeacherId();
+    const histKey = `${tid}_${date}_${classId}`;
+    return this._classHistory[histKey] ? JSON.parse(JSON.stringify(this._classHistory[histKey])) : [];
+  },
+
+  restoreClassVersion(teacherId, date, classId, historyIndex = -1) {
+    const history = this.getClassVersionHistory(teacherId, date, classId);
+    if (!history || history.length === 0) return null;
+    const targetIdx = historyIndex >= 0 && historyIndex < history.length ? historyIndex : history.length - 1;
+    const snapshot = history[targetIdx];
+    if (!snapshot || !snapshot.classData) return null;
+
+    return this.saveClass(teacherId, date, classId, snapshot.classData, { forceEmpty: true });
+  },
+
+  /**
    * Guarda una instantanea historica de una planeacion o de todas las planeaciones
    */
-  async saveSnapshot(teacherId, label, data) {
+  saveSnapshot(teacherId, label, data) {
     const tid = teacherId || this._getCurrentTeacherId();
+    const snapKey = 'snapshot_' + tid + '_' + label;
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(snapKey, JSON.stringify({
+          label,
+          timestamp: new Date().toISOString(),
+          data
+        }));
+      }
+    } catch (e) {}
+
     if (typeof IDBStorage !== 'undefined' && IDBStorage.saveSnapshot) {
-      return IDBStorage.saveSnapshot(tid + '_' + label, data);
+      IDBStorage.saveSnapshot(tid + '_' + label, data).catch(() => {});
     }
-    return false;
+    return true;
   },
 
   /**
    * Obtiene la lista de instantaneas de recuperacion
    */
-  async getSnapshots(teacherId) {
+  getSnapshots(teacherId) {
     const tid = teacherId || this._getCurrentTeacherId();
-    if (typeof IDBStorage !== 'undefined' && IDBStorage.getSnapshots) {
-      return IDBStorage.getSnapshots(tid);
-    }
-    return [];
+    const snapshots = {};
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const prefix = 'snapshot_' + tid + '_';
+        const allKeys = typeof localStorage.key === 'function'
+          ? Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i))
+          : Object.keys(localStorage.store || {});
+
+        allKeys.forEach(k => {
+          if (k && k.startsWith(prefix)) {
+            const raw = localStorage.getItem(k);
+            if (raw) {
+              try {
+                snapshots[k] = JSON.parse(raw);
+              } catch (e) {}
+            }
+          }
+        });
+      }
+    } catch (e) {}
+    return snapshots;
   },
 
   // =========================================================================
@@ -445,20 +789,29 @@ const PlanRepository = {
     const safeClasses = [];
 
     incomingClasses.forEach((inc, idx) => {
-      // Buscar la clase existente correspondiente por indice o por id
-      const exist = (Array.isArray(existingClasses) && existingClasses[idx]) ? existingClasses[idx] : null;
+      // 1. Buscar la clase existente correspondiente prioritariamente por ID permanente
+      let exist = null;
+      if (inc.id && Array.isArray(existingClasses)) {
+        exist = existingClasses.find(c => c.id === inc.id);
+      }
+      if (!exist && Array.isArray(existingClasses) && existingClasses[idx]) {
+        exist = existingClasses[idx];
+      }
 
-      const classId = inc.id || exist?.id || this.generateClassId(planId, idx, inc.subject, inc.grade);
+      const classId = inc.id || exist?.id || this.generateClassId(planId);
+      const seqNum = inc.sequenceNumber || exist?.sequenceNumber || parseInt(inc.dayNumber || exist?.dayNumber || (idx + 1), 10) || 1;
       const safeClass = {
         id: classId,
         planId: planId,
         date: date, // INMUTABLE
         dayOfWeek: inc.dayOfWeek || exist?.dayOfWeek || '',
-        dayNumber: String(inc.dayNumber || exist?.dayNumber || (idx + 1)),
+        dayNumber: String(inc.dayNumber || exist?.dayNumber || seqNum),
+        sequenceNumber: seqNum,
         time: inc.time || exist?.time || '',
         subject: inc.subject || exist?.subject || '',
         grade: inc.grade || exist?.grade || '',
-        attachments: Array.isArray(inc.attachments) ? inc.attachments : (exist?.attachments || [])
+        attachments: Array.isArray(inc.attachments) ? inc.attachments : (exist?.attachments || []),
+        version: Math.max(inc.version || 1, exist?.version || 1)
       };
 
       // Campos de texto protegidos por la regla anti-vacios:
@@ -501,13 +854,15 @@ const PlanRepository = {
 
     const planId = rawPlan.id || this.generatePlanId(teacherId, date);
     const normalizedClasses = (rawPlan.classes || []).map((cls, idx) => {
-      const clsId = cls.id || this.generateClassId(planId, idx, cls.subject, cls.grade);
+      const clsId = cls.id || this.generateClassId(planId);
+      const seqNum = cls.sequenceNumber || parseInt(cls.dayNumber || (idx + 1), 10) || (idx + 1);
       return {
         id: clsId,
         planId: planId,
         date: date, // INMUTABLE
         dayOfWeek: cls.dayOfWeek || '',
-        dayNumber: String(cls.dayNumber || (idx + 1)),
+        dayNumber: String(cls.dayNumber || seqNum),
+        sequenceNumber: seqNum,
         time: cls.time || '',
         subject: cls.subject || '',
         grade: cls.grade || '',
@@ -517,7 +872,8 @@ const PlanRepository = {
         description: cls.description || '',
         observations: cls.observations || '',
         notebookContent: cls.notebookContent || '',
-        attachments: Array.isArray(cls.attachments) ? cls.attachments : []
+        attachments: Array.isArray(cls.attachments) ? cls.attachments : [],
+        version: cls.version || 1
       };
     });
 

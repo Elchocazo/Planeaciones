@@ -244,6 +244,16 @@ const App = {
   },
 
   showCalendarView() {
+    if (this.activeView === 'planner' && window.Planner && typeof window.Planner.hasUnsavedChanges === 'function' && window.Planner.hasUnsavedChanges()) {
+      window.Planner.promptNavigateIfUnsaved(() => {
+        this._executeShowCalendarView();
+      });
+      return;
+    }
+    this._executeShowCalendarView();
+  },
+
+  _executeShowCalendarView() {
     if (this.activeView === 'planner' && window.Planner && typeof window.Planner.flushPendingSave === 'function') {
       window.Planner.flushPendingSave();
     }
