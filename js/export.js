@@ -123,8 +123,15 @@ const ExportService = {
         return paragraphs.map(pText => {
           let escaped = this.escapeHtml(pText);
           escaped = escaped.replace(/&lt;br\/&gt;/g, '<br/>');
-          escaped = escaped.replace(/^([●•\s]*(?:FASE DE (?:INICIO|DESARROLLO|CIERRE)|Inicio|Desarrollo|Cierre|Recursos|Evaluaci[oó]n formativa|Estándar|Pregunta problematizadora|Tarea(?:\s*\/\s*Compromiso)?):?)/i, '<strong>$1</strong>');
-          const isPhase = /^(?:<strong>)?\s*(?:FASE DE (?:INICIO|DESARROLLO|CIERRE)|Inicio|Desarrollo|Cierre):?/i.test(escaped);
+
+          // Soporte nativo para negritas markdown **texto**
+          escaped = escaped.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+          // Resaltar prefijos y títulos de fases pedagógicas
+          escaped = escaped.replace(/^([●•\s]*(?:(?:<strong>)?FASE\s+DE\s+(?:INICIO|DESARROLLO|CIERRE)(?:<\/strong>)?|(?:Fase\s+de\s+)?(?:Inicio|Desarrollo|Cierre)|Recursos(?: didácticos)?|Evaluaci[oó]n(?: formativa)?|Estándar|Pregunta problematizadora|Tareas?(?:\s*\/\s*Compromisos?)?|Eje\s+temático|Metodología|Tiempo\s+disponible|Clase)(?:\s*\([^)]*\))?:?)/i, '<strong>$1</strong>');
+          escaped = escaped.replace(/<strong><strong>(.*?)<\/strong><\/strong>/g, '<strong>$1</strong>');
+
+          const isPhase = /^(?:<strong>)?\s*(?:FASE\s+DE\s+(?:INICIO|DESARROLLO|CIERRE)|(?:Fase\s+de\s+)?(?:Inicio|Desarrollo|Cierre)):?/i.test(escaped);
           if (isPhase) {
             return `<div class="preparador-cell-p preparador-phase-title">${escaped}</div>`;
           }
@@ -154,7 +161,10 @@ const ExportService = {
       const dba = isDirGroup ? '<span style="color:#64748b; font-style:italic;">No aplica</span>' : formatCellText(dbaRaw);
       const achievement = isDirGroup ? '<span style="color:#64748b; font-style:italic;">No aplica</span>' : formatCellText(achievementRaw);
       const topic = isDirGroup ? '<span style="color:#64748b; font-style:italic;">Asesoría general</span>' : this.escapeHtml(topicRaw);
-      const sequence = formatCellText((cls.description || '').replace(/(?<!^)\s*(?<!fase\s+de\s+)((?:fase\s+de\s+)?(?:inicio|desarrollo|cierre|recursos|evaluaci[oó]n\s+formativa|estándar|pregunta\s+problematizadora|tarea(?:\s*\/\s*compromiso)?))\s*:\s*/gi, '\n\n$1: ').trim());
+      let descFormatted = (cls.description || '')
+        .replace(/(?<!^)(?<!\()[ \t]*(\*{0,2}(?:FASE\s+DE\s+(?:INICIO|DESARROLLO|CIERRE)|(?:Fase\s+de\s+)?(?:Inicio|Desarrollo|Cierre)|Recursos(?: didácticos)?|Evaluaci[oó]n(?: formativa)?|Estándar|Pregunta problematizadora|Tareas?(?:\s*\/\s*Compromisos?)?)\*{0,2})\s*:\s*/gi, '\n\n$1: ')
+        .replace(/(?<!^)[ \t]*(\*{0,2}(?:FASE\s+DE\s+(?:INICIO|DESARROLLO|CIERRE))(?:[ \t]*\([^)]*\))?\*{0,2})(?=\n|$|[ \t]+[A-ZÁÉÍÓÚ])/gi, '\n\n$1\n\n');
+      const sequence = formatCellText(descFormatted.trim());
 
 
 
@@ -580,3 +590,6 @@ const ExportService = {
 };
 
 window.ExportService = ExportService;
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = ExportService;
+}

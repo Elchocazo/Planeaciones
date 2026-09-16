@@ -875,9 +875,9 @@ button {
   width: 100%;
   border: 1px solid var(--slate-300);
   border-radius: var(--radius-sm);
-  padding: 0.45rem 0.55rem;
-  font-size: 0.82rem;
-  line-height: 1.35;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.84rem;
+  line-height: 1.5;
   background: #ffffff;
   color: var(--slate-800);
   transition: var(--transition-fast);
@@ -885,10 +885,11 @@ button {
 
 .table-textarea {
   resize: vertical;
-  min-height: 80px;
+  min-height: 95px;
   font-family: inherit;
   word-break: normal;
   overflow-wrap: break-word;
+  line-height: 1.55;
 }
 
 .table-input:focus, .table-select:focus, .table-textarea:focus {
@@ -910,14 +911,23 @@ button {
   cursor: default;
 }
 
-.table-textarea {
-  min-height: 85px;
-  resize: vertical;
-  line-height: 1.4;
+/* Secuencia Didáctica: Espacio amplio, interlineado cómodo y excelente legibilidad */
+.table-textarea.cls-description,
+.table-textarea.desc-field {
+  min-height: 160px;
+  font-size: 0.86rem;
+  line-height: 1.65;
+  padding: 0.75rem 0.85rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #1e293b;
+  background: #ffffff;
+  border-color: #cbd5e1;
 }
 
-.table-textarea.desc-field {
-  min-height: 110px;
+.table-textarea.cls-description:focus {
+  border-color: var(--primary-500);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
 }
 
 .btn-table-action {

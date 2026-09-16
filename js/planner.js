@@ -401,7 +401,7 @@ class PlannerComponent {
 
           <!-- Columna 8: Secuencia Didáctica, Observaciones, Cuaderno y Anexos -->
           <td class="col-desc" style="vertical-align: top;">
-            <textarea class="table-textarea cls-description" rows="3" oninput="Planner.handleInputChange()" onchange="Planner.handleInputChange(true)" onblur="Planner.handleInputChange(true)" onpaste="Planner.handlePaste(event)" placeholder="${isDirGroup ? 'Asuntos generales tratados con el grupo, compromisos y orientación escolar...' : 'Inicio:\nDesarrollo:\nCierre:\nRecursos, tareas, evaluación...'}">${this.escapeHtml(cls.description || '')}</textarea>
+            <textarea class="table-textarea cls-description" rows="5" oninput="Planner.handleInputChange(); Planner.autoResizeTextarea(this);" onchange="Planner.handleInputChange(true)" onblur="Planner.handleInputChange(true)" onpaste="Planner.handlePaste(event)" placeholder="${isDirGroup ? 'Asuntos generales tratados con el grupo, compromisos y orientación escolar...' : 'Inicio:\nDesarrollo:\nCierre:\nRecursos, tareas, evaluación...'}">${this.escapeHtml(cls.description || '')}</textarea>
 
             <!-- Observaciones Pedagógicas Específicas de esta Clase -->
             <div class="class-obs-box" style="margin-top: 5px; background: #fffbeb; border: 1px solid #fef3c7; border-radius: 6px; padding: 4px 7px;">
@@ -422,6 +422,9 @@ class PlannerComponent {
                 </button>
                 <button type="button" class="btn btn-secondary btn-sm btn-class-att" style="font-size:0.75rem; padding:3px 8px; color:#4338ca; border-color:#c7d2fe; background:#eef2ff;" onclick="Planner.openClassAttachmentsModal(${idx})" title="Adjuntar guías en PDF o imágenes directamente a esta clase">
                   📎 Anexos (${(cls.attachments || []).length})
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" style="font-size:0.75rem; padding:3px 8px; color:#0f766e; border-color:#99f6e4; background:#f0fdfa;" onclick="Planner.formatSequenceText(${idx})" title="Añadir saltos de línea automáticos y separar párrafos para que no se vea apretado">
+                  ✨ Espaciar Párrafos
                 </button>
               </div>
               <div style="display:flex; align-items:center; gap:4px;">
@@ -705,6 +708,7 @@ class PlannerComponent {
     `;
 
     this.bindInputEvents();
+    setTimeout(() => this.autoResizeAllDescriptions(), 30);
   }
 
   bindInputEvents() {
@@ -1536,10 +1540,157 @@ class PlannerComponent {
     return success;
   }
 
+  formatSequenceSpacing(text, rawHtml = '') {
+    let str = (typeof text === 'string') ? text : '';
+    const html = (typeof rawHtml === 'string') ? rawHtml : '';
+
+    // Si viene HTML con etiquetas de párrafo o marcas de negrita (Word, Docs, ChatGPT)
+    if (html && (html.includes('<p') || html.includes('<br') || html.includes('<div') || html.includes('<strong>') || html.includes('<b>') || html.includes('<li'))) {
+      try {
+        let h = html
+          .replace(/<strong[^>]*>(.*?)<\/strong>/gi, '**$1**')
+          .replace(/<b[^>]*>(.*?)<\/b>/gi, '**$1**')
+          .replace(/<br\s*[\/]?>/gi, '\n')
+          .replace(/<\/p>/gi, '\n\n')
+          .replace(/<\/div>/gi, '\n\n')
+          .replace(/<li[^>]*>(.*?)<\/li>/gi, '• $1\n\n')
+          .replace(/<[^>]+>/g, '');
+
+        h = h.replace(/&nbsp;/g, ' ')
+             .replace(/&amp;/g, '&')
+             .replace(/&lt;/g, '<')
+             .replace(/&gt;/g, '>')
+             .replace(/&quot;/g, '"');
+
+        if (!str.trim() || h.trim().length >= str.trim().length * 0.7) {
+          str = h;
+        }
+      } catch (e) {}
+    }
+
+    if (!str || !str.trim()) return '';
+
+    str = str.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+    // 1. Quitar marcas de encabezados markdown (###, ##, #) al inicio de línea
+    str = str.replace(/^[ \t]*#{1,6}[ \t]+/gm, '');
+
+    // 2. Prefijos de fases docentes conocidos (NO deben coincidir si están entre paréntesis como "(Tiempo: 10 min)")
+    const phasePrefixes = [
+      'FASE\\s+DE\\s+(?:INICIO|DESARROLLO|CIERRE)',
+      '(?:Fase\\s+de\\s+)?(?:Inicio|Desarrollo|Cierre)',
+      'Recursos(?:\\s+didácticos)?',
+      'Evaluaci[oó]n(?:\\s+formativa)?',
+      'Tareas?(?:\\s*\\/\\s*Compromisos?)?',
+      'Compromisos?',
+      'Eje\\s+temático(?:\\s+principal)?',
+      'Metodolog[ií]a',
+      'Tiempo(?:\\s+disponible)?',
+      'Pregunta\\s+problematizadora',
+      'Estándar(?:\\s+básico)?',
+      'Paso\\s+\\d+'
+    ].join('|');
+
+    // Caso A: Títulos con dos puntos que NO estén entre paréntesis
+    const phaseColonRegex = new RegExp(`(?<!^)(?<!\\()[ \\t]*(\\*{0,2}(?:${phasePrefixes})(?:[ \\t]*\\([^)]*\\))?\\*{0,2})\\s*:\\s*`, 'gi');
+    str = str.replace(phaseColonRegex, '\n\n$1: ');
+
+    // Caso B: Títulos de fase principales como "FASE DE INICIO (Tiempo: 10 minutos)" o "FASE DE DESARROLLO"
+    const phaseHeadingRegex = new RegExp(`(?<!^)[ \\t]*(\\*{0,2}(?:FASE\\s+DE\\s+(?:INICIO|DESARROLLO|CIERRE))(?:[ \\t]*\\([^)]*\\))?\\*{0,2})(?=\\n|$|[ \\t]+[A-ZÁÉÍÓÚ])`, 'gi');
+    str = str.replace(phaseHeadingRegex, '\n\n$1\n\n');
+
+    // 3. Dividir en líneas, recortar espacios
+    const lines = str.split('\n').map(l => l.trim());
+
+    // 4. Agrupar en párrafos con doble salto (\n\n) para evitar que quede apretado
+    const paragraphs = [];
+    lines.forEach(line => {
+      if (line) {
+        paragraphs.push(line);
+      }
+    });
+
+    return paragraphs.join('\n\n');
+  }
+
+  autoResizeTextarea(el) {
+    if (!el || !el.style) return;
+    el.style.height = 'auto';
+    const newHeight = Math.max(150, el.scrollHeight + 4);
+    el.style.height = newHeight + 'px';
+  }
+
+  autoResizeAllDescriptions() {
+    if (!this.container) return;
+    const areas = this.container.querySelectorAll('.table-textarea.cls-description');
+    areas.forEach(el => this.autoResizeTextarea(el));
+  }
+
+  formatSequenceText(rowIndex) {
+    const tableBody = document.getElementById('planner-table-body');
+    const rows = tableBody ? tableBody.querySelectorAll('tr') : [];
+    const rowEl = rows[rowIndex];
+    const textarea = rowEl?.querySelector('textarea.cls-description, textarea.col-description');
+    if (!textarea) return;
+
+    const currentVal = textarea.value || '';
+    if (!currentVal.trim()) {
+      if (typeof App !== 'undefined' && App.showToast) {
+        App.showToast('El campo de secuencia didáctica está vacío', 'info');
+      }
+      return;
+    }
+
+    const formatted = this.formatSequenceSpacing(currentVal);
+    textarea.value = formatted;
+    this.autoResizeTextarea(textarea);
+
+    this.saveSingleClass(rowIndex);
+
+    if (typeof App !== 'undefined' && App.showToast) {
+      App.showToast(`✨ Clase #${rowIndex + 1}: Saltos de línea y párrafos espaciados correctamente`, 'success');
+    }
+  }
+
   handlePaste(event) {
+    const target = event?.target;
+    const clipboardData = event?.clipboardData || (typeof window !== 'undefined' ? window.clipboardData : null);
+
+    if (target && target.tagName === 'TEXTAREA' && clipboardData) {
+      const rawText = clipboardData.getData ? clipboardData.getData('text/plain') : '';
+      const rawHtml = clipboardData.getData ? clipboardData.getData('text/html') : '';
+
+      // Si es la celda de descripción / secuencia didáctica u observaciones generales, aplicar espaciado inteligente
+      if (target.classList?.contains('cls-description') || target.classList?.contains('desc-field') || target.id === 'planner-general-notes') {
+        const formatted = this.formatSequenceSpacing(rawText, rawHtml);
+        if (formatted) {
+          if (event.preventDefault) event.preventDefault();
+
+          if (typeof document !== 'undefined' && document.execCommand && document.execCommand('insertText', false, formatted)) {
+            // Inserción nativa con soporte de Ctrl+Z
+          } else {
+            const start = target.selectionStart ?? 0;
+            const end = target.selectionEnd ?? 0;
+            const val = target.value || '';
+            target.value = val.substring(0, start) + formatted + val.substring(end);
+            target.selectionStart = target.selectionEnd = start + formatted.length;
+          }
+
+          this.autoResizeTextarea(target);
+          this.setUnsavedChanges(true);
+          this.updateSaveIndicator('saving');
+          this.handleInputChange(true);
+          return;
+        }
+      }
+    }
+
     this.setUnsavedChanges(true);
     this.updateSaveIndicator('saving');
     setTimeout(() => {
+      if (target && target.tagName === 'TEXTAREA') {
+        this.autoResizeTextarea(target);
+      }
       this.handleInputChange(true);
       this.updateSaveIndicator('saved');
     }, 40);

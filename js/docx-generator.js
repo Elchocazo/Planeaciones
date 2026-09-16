@@ -128,15 +128,50 @@ const DocxTemplateEngine = {
           return '<w:p><w:pPr><w:jc w:val="' + (isCentered ? 'center' : 'left') + '"/><w:rPr><w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/><w:sz w:val="20"/></w:rPr></w:pPr></w:p>';
         }
         const lines = String(text).split('\n');
+
+        function renderInlineRuns(rawStr, forceBold = false) {
+          if (!rawStr) return '';
+          if (forceBold) {
+            return `
+              <w:r>
+                <w:rPr>
+                  <w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/>
+                  <w:b/>
+                  <w:sz w:val="20"/>
+                </w:rPr>
+                <w:t xml:space="preserve">${escapeXml(rawStr)}</w:t>
+              </w:r>
+            `;
+          }
+
+          const parts = rawStr.split(/(\*\*.*?\*\*)/g);
+          return parts.map(part => {
+            if (!part) return '';
+            const isPartBold = part.startsWith('**') && part.endsWith('**') && part.length >= 4;
+            const content = isPartBold ? part.slice(2, -2) : part;
+            return `
+              <w:r>
+                <w:rPr>
+                  <w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/>
+                  ${isPartBold ? '<w:b/>' : ''}
+                  <w:sz w:val="20"/>
+                </w:rPr>
+                <w:t xml:space="preserve">${escapeXml(content)}</w:t>
+              </w:r>
+            `;
+          }).join('');
+        }
+
         return lines.map(line => {
           const trimmed = line.trim();
           if (!trimmed) {
             return '<w:p><w:pPr><w:jc w:val="' + (isCentered ? 'center' : 'left') + '"/><w:rPr><w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/><w:sz w:val="20"/></w:rPr></w:pPr></w:p>';
           }
 
-          const prefixMatch = line.match(/^([●•\s]*(?:FASE DE (?:INICIO|DESARROLLO|CIERRE)|Inicio|Desarrollo|Cierre|Recursos|Evaluaci[oó]n formativa|Estándar|Pregunta problematizadora):?)(.*)$/i);
+          const prefixMatch = trimmed.match(/^([●•\s]*(?:\*{0,2}(?:FASE\s+DE\s+(?:INICIO|DESARROLLO|CIERRE)|(?:Fase\s+de\s+)?(?:Inicio|Desarrollo|Cierre)|Recursos(?: didácticos)?|Evaluaci[oó]n(?: formativa)?|Estándar|Pregunta problematizadora|Tareas?(?:\s*\/\s*Compromisos?)?|Eje\s+temático|Metodología|Tiempo\s+disponible|Clase)(?:\s*\([^)]*\))?\*{0,2}):?)(.*)$/i);
+
           if (prefixMatch && !isBold) {
-            const prefix = prefixMatch[1];
+            let prefix = prefixMatch[1].replace(/\*\*/g, '');
             const rest = prefixMatch[2];
             return `
               <w:p>
@@ -155,13 +190,7 @@ const DocxTemplateEngine = {
                   </w:rPr>
                   <w:t xml:space="preserve">${escapeXml(prefix)}</w:t>
                 </w:r>
-                <w:r>
-                  <w:rPr>
-                    <w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/>
-                    <w:sz w:val="20"/>
-                  </w:rPr>
-                  <w:t xml:space="preserve">${escapeXml(rest)}</w:t>
-                </w:r>
+                ${renderInlineRuns(rest, false)}
               </w:p>
             `;
           }
@@ -176,14 +205,7 @@ const DocxTemplateEngine = {
                   <w:sz w:val="20"/>
                 </w:rPr>
               </w:pPr>
-              <w:r>
-                <w:rPr>
-                  <w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/>
-                  ${isBold ? '<w:b/>' : ''}
-                  <w:sz w:val="20"/>
-                </w:rPr>
-                <w:t xml:space="preserve">${escapeXml(line)}</w:t>
-              </w:r>
+              ${renderInlineRuns(trimmed, isBold)}
             </w:p>
           `;
         }).join('');
@@ -213,7 +235,10 @@ const DocxTemplateEngine = {
           }
         }
 
-        const sequence = (cls.description || '').replace(/(?<!^)\s*(Inicio|Desarrollo|Cierre|Recursos|Evaluaci[oó]n formativa)\s*:\s*/gi, '\n$1: ').trim();
+        let descRaw = (cls.description || '');
+        descRaw = descRaw.replace(/(?<!^)(?<!\()[ \t]*(\*{0,2}(?:FASE\s+DE\s+(?:INICIO|DESARROLLO|CIERRE)|(?:Fase\s+de\s+)?(?:Inicio|Desarrollo|Cierre)|Recursos(?: didácticos)?|Evaluaci[oó]n(?: formativa)?|Estándar|Pregunta problematizadora|Tareas?(?:\s*\/\s*Compromisos?)?)\*{0,2})\s*:\s*/gi, '\n\n$1: ');
+        descRaw = descRaw.replace(/(?<!^)[ \t]*(\*{0,2}(?:FASE\s+DE\s+(?:INICIO|DESARROLLO|CIERRE))(?:[ \t]*\([^)]*\))?\*{0,2})(?=\n|$|[ \t]+[A-ZÁÉÍÓÚ])/gi, '\n\n$1\n\n');
+        const sequence = descRaw.trim();
 
         return `
           <w:tr w:rsidR="00523ABE" w:rsidTr="00786631">
