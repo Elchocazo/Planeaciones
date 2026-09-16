@@ -3630,6 +3630,21 @@ body.notebook-mode .app-container {
   .notebook-page-break .page-break-label {
     display: none !important;
   }
+
+  .notebook-observations-card {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    margin-top: 2rem !important;
+    border-top: 1px dashed #94a3b8 !important;
+    padding-top: 0.8rem !important;
+  }
+
+  .notebook-observations-card textarea {
+    border: 1px solid #cbd5e1 !important;
+    background: transparent !important;
+    min-height: 80px !important;
+    font-size: 0.85rem !important;
+  }
 }
 
 

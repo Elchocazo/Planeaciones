@@ -304,14 +304,6 @@ const NotebookEditor = {
                 <div><strong>Periodo:</strong> ${this.escapeHtml(period)}</div>
                 <div><strong>Día:</strong> ${this.escapeHtml(cls.dayOfWeek || '')}</div>
               </div>
-
-              <!-- Observaciones Pedagógicas Específicas de la Sesión -->
-              <div style="margin-top:0.6rem; border-top:1px solid var(--slate-200); padding-top:0.5rem;">
-                <label style="font-size:0.82rem; font-weight:700; color:#92400e; display:flex; align-items:center; gap:4px; margin-bottom:3px;">
-                  📝 Observaciones Pedagógicas de la Clase:
-                </label>
-                <textarea id="hdr-edit-observations" class="table-textarea" rows="2" style="width:100%; box-sizing:border-box; font-size:0.82rem; background:#fffbeb; border-color:#fde68a; border-radius:4px; padding:4px 8px;" placeholder="Redacta aquí observaciones específicas para esta sesión...">${this.escapeHtml(cls.observations || '')}</textarea>
-              </div>
             </div>
 
             <!-- ========================================================================= -->
@@ -323,6 +315,17 @@ const NotebookEditor = {
                  spellcheck="true"
                  placeholder="Escribe aquí el desarrollo de la clase, explicaciones, preguntas orientadoras, actividades o guías...">
               ${this._prepareInitialHtml(cls)}
+            </div>
+
+            <!-- Observaciones Pedagógicas Específicas de la Sesión (Al final del cuaderno / Última hoja) -->
+            <div class="notebook-observations-card" style="margin-top:2.5rem; border-top:2px dashed #cbd5e1; padding-top:1.25rem; page-break-inside:avoid; break-inside:avoid;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <label style="font-size:0.88rem; font-weight:700; color:#92400e; display:flex; align-items:center; gap:6px;">
+                  📝 Observaciones Pedagógicas de la Clase:
+                </label>
+                <span style="font-size:0.75rem; color:#64748b; font-weight:500;">(Cierre pedagógico / Última hoja)</span>
+              </div>
+              <textarea id="hdr-edit-observations" class="table-textarea" rows="3" style="width:100%; box-sizing:border-box; font-size:0.85rem; line-height:1.5; background:#fffbeb; border:1px solid #fde68a; border-radius:6px; padding:8px 10px; font-family:inherit; color:#1e293b; resize:vertical;" placeholder="Redacta aquí observaciones específicas para esta sesión...">${this.escapeHtml(cls.observations || '')}</textarea>
             </div>
 
             <!-- Pie de Página Institucional -->
