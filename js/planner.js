@@ -317,7 +317,7 @@ class PlannerComponent {
       return `
         <tr class="planning-row" data-class-id="${this.escapeHtml(cls.id || '')}" data-row-idx="${idx}">
           <!-- Columna 1: Fecha (d/m/a) y Horario -->
-          <td class="col-date" style="vertical-align: middle; text-align: center;">
+          <td class="col-date" style="vertical-align: top; text-align: center; padding-top: 0.6rem;">
             <input type="text" class="table-input" value="${this.escapeHtml(shortDate)}" style="font-size: 0.8rem; text-align: center; padding: 0.4rem 0.2rem;" readonly />
             ${cls.time ? `
               <div style="font-size: 0.7rem; color: var(--primary-700); font-weight: 700; margin-top: 3px; background: var(--primary-50); border: 1px solid var(--primary-200); border-radius: 4px; padding: 2px 4px; display: inline-flex; align-items: center; justify-content: center; gap: 4px;" title="Franja horaria oficial de la clase">
@@ -328,12 +328,12 @@ class PlannerComponent {
           </td>
 
           <!-- Columna 2: # Clase (Consecutivo Inteligente) -->
-          <td class="col-day-num" style="vertical-align: middle; text-align: center;">
+          <td class="col-day-num" style="vertical-align: top; text-align: center; padding-top: 0.6rem;">
             <input type="text" class="table-input cls-day-number" value="${this.escapeHtml(cls.dayNumber || String(idx + 1))}" style="font-size: 0.95rem; font-weight: bold; text-align: center; color: var(--primary-700); padding: 0.4rem 0.2rem;" onchange="Planner.onClassNumberChange(${idx}, this.value); Planner.handleInputChange(true);" oninput="Planner.handleInputChange()" onblur="Planner.handleInputChange(true)" title="Número de clase consecutivo. Al cambiarlo, las siguientes clases se ajustan en secuencia." />
           </td>
 
           <!-- Columna 3: Día de la Semana -->
-          <td class="col-day-name" style="vertical-align: middle; text-align: center;">
+          <td class="col-day-name" style="vertical-align: top; text-align: center; padding-top: 0.6rem;">
             <input type="text" class="table-input cls-day-of-week" value="${this.escapeHtml(cls.dayOfWeek || defaultDayOfWeek)}" oninput="Planner.handleInputChange()" onchange="Planner.handleInputChange(true)" onblur="Planner.handleInputChange(true)" style="font-size: 0.8rem; text-align: center; padding: 0.4rem 0.2rem;" />
           </td>
 
@@ -423,8 +423,14 @@ class PlannerComponent {
                 <button type="button" class="btn btn-secondary btn-sm btn-class-att" style="font-size:0.75rem; padding:3px 8px; color:#4338ca; border-color:#c7d2fe; background:#eef2ff;" onclick="Planner.openClassAttachmentsModal(${idx})" title="Adjuntar guías en PDF o imágenes directamente a esta clase">
                   📎 Anexos (${(cls.attachments || []).length})
                 </button>
+                <button type="button" class="btn btn-secondary btn-sm" style="font-size:0.75rem; padding:3px 8px; color:#b45309; border-color:#fde68a; background:#fffbeb;" onclick="Planner.cleanPreambleOnly(${idx})" title="Eliminar encabezados repetidos (Asignatura, Temas, Desempeños) que ya van en las otras columnas, dejando únicamente la secuencia">
+                  🧹 Solo Secuencia
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" style="font-size:0.75rem; padding:3px 8px; color:#4338ca; border-color:#c7d2fe; background:#eef2ff;" onclick="Planner.distributeAiPlan(${idx})" title="Distribuir automáticamente Tema, Desempeños y Secuencia en sus columnas correspondientes">
+                  🪄 Distribuir Plan IA
+                </button>
                 <button type="button" class="btn btn-secondary btn-sm" style="font-size:0.75rem; padding:3px 8px; color:#0f766e; border-color:#99f6e4; background:#f0fdfa;" onclick="Planner.formatSequenceText(${idx})" title="Añadir saltos de línea automáticos y separar párrafos para que no se vea apretado">
-                  ✨ Espaciar Párrafos
+                  ✨ Espaciar
                 </button>
               </div>
               <div style="display:flex; align-items:center; gap:4px;">
@@ -435,7 +441,7 @@ class PlannerComponent {
           </td>
 
           <!-- Acciones de Fila: Guardar clase, Descarga directa y Eliminar -->
-          <td class="col-action" style="vertical-align: middle; text-align: center;">
+          <td class="col-action" style="vertical-align: top; text-align: center; padding-top: 0.6rem;">
             <div style="display: flex; flex-direction: column; gap: 4px; align-items: center; justify-content: center; width: 100%;">
               <button type="button" class="btn btn-sm btn-save-class" onclick="Planner.saveSingleClass(${idx})" title="Guardar únicamente los datos de esta clase" id="btn-save-class-${idx}" style="font-size: 0.72rem; font-weight: 700; color: #065f46; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 4px; padding: 3px 5px; width: 100%; display: flex; align-items: center; justify-content: center; gap: 3px; cursor: pointer; white-space: nowrap;">
                 💾 Guardar
@@ -1616,14 +1622,117 @@ class PlannerComponent {
   autoResizeTextarea(el) {
     if (!el || !el.style) return;
     el.style.height = 'auto';
-    const newHeight = Math.max(150, el.scrollHeight + 4);
-    el.style.height = newHeight + 'px';
+    const targetHeight = Math.min(380, Math.max(160, el.scrollHeight + 4));
+    el.style.height = targetHeight + 'px';
+    el.style.maxHeight = '380px';
+    el.style.overflowY = (el.scrollHeight > 380) ? 'auto' : 'hidden';
   }
 
   autoResizeAllDescriptions() {
     if (!this.container) return;
-    const areas = this.container.querySelectorAll('.table-textarea.cls-description');
+    const areas = this.container.querySelectorAll('.table-textarea.cls-description, .table-textarea.desc-field');
     areas.forEach(el => this.autoResizeTextarea(el));
+  }
+
+  cleanPreambleOnly(rowIndex) {
+    const tableBody = document.getElementById('planner-table-body');
+    const rows = tableBody ? tableBody.querySelectorAll('tr') : [];
+    const rowEl = rows[rowIndex];
+    const textarea = rowEl?.querySelector('textarea.cls-description, textarea.col-description');
+    if (!textarea) return;
+
+    const currentVal = textarea.value || '';
+    if (!currentVal.trim()) return;
+
+    // Localizar dónde comienza la secuencia didáctica pedagógica real (FASE DE INICIO, Inicio:)
+    const phaseIndex = currentVal.search(/(?:FASE\s+DE\s+INICIO|(?<![a-záéíóú])Inicio\s*:)/i);
+    if (phaseIndex !== -1 && phaseIndex > 0) {
+      const cleanSeq = currentVal.substring(phaseIndex).trim();
+      textarea.value = this.formatSequenceSpacing(cleanSeq);
+      this.autoResizeTextarea(textarea);
+      this.saveSingleClass(rowIndex);
+      if (typeof App !== 'undefined' && App.showToast) {
+        App.showToast(`🧹 Clase #${rowIndex + 1}: Encabezados redundantes eliminados. Secuencia pedagógica limpia.`, 'success');
+      }
+    } else {
+      this.formatSequenceText(rowIndex);
+    }
+  }
+
+  distributeAiPlan(rowIndex) {
+    const tableBody = document.getElementById('planner-table-body');
+    const rows = tableBody ? tableBody.querySelectorAll('tr') : [];
+    const rowEl = rows[rowIndex];
+    const descEl = rowEl?.querySelector('textarea.cls-description, textarea.col-description');
+    if (!descEl) return;
+
+    const currentVal = descEl.value || '';
+    if (!currentVal.trim()) {
+      if (typeof App !== 'undefined' && App.showToast) {
+        App.showToast('Pega primero el texto generado por la IA en la celda', 'info');
+      }
+      return;
+    }
+
+    const topicEl = rowEl.querySelector('textarea.cls-topic, textarea.col-topic');
+    const achEl = rowEl.querySelector('textarea.cls-achievement, textarea.col-achievement');
+    const subjEl = rowEl.querySelector('select.cls-subject, select.col-subject');
+    const gradeEl = rowEl.querySelector('select.cls-grade, select.col-grade');
+
+    let distributed = false;
+
+    // 1. Extraer Tema o Eje Temático
+    const topicMatch = currentVal.match(/(?:Eje\s+temático(?:\s+principal)?|TEMAS(?:\s+DEL\s+[^\n\r]+)?)\s*:\s*([^\n\r]+(?:\n(?!(?:DESEMPEÑOS|FASE\s+DE\s+INICIO|Inicio:))[^\n\r]+)*)/i);
+    let extractedTopic = topicMatch ? topicMatch[1].trim() : '';
+    if (!extractedTopic) {
+      const temasSection = currentVal.match(/TEMAS(?:\s+DEL\s+[^\n\r]+)?\s*\n([\s\S]*?)(?=\n[ \t]*(?:DESEMPEÑOS|FASE\s+DE\s+INICIO|Inicio:)|$)/i);
+      if (temasSection) extractedTopic = temasSection[1].trim();
+    }
+    if (extractedTopic && topicEl) {
+      topicEl.value = extractedTopic;
+      distributed = true;
+    }
+
+    // 2. Extraer Desempeños / Logros
+    const perfMatch = currentVal.match(/(?:DESEMPEÑOS(?:\s+DE\s+APRENDIZAJE)?|Logros?)\s*:\s*([\s\S]*?)(?=\n[ \t]*(?:FASE\s+DE\s+INICIO|Inicio:)|$)/i);
+    let extractedPerf = perfMatch ? perfMatch[1].trim() : '';
+    if (!extractedPerf) {
+      const perfSection = currentVal.match(/(?:DESEMPEÑOS(?:\s+DE\s+APRENDIZAJE)?|LOGROS(?:\s+DEL\s+[^\n\r]+)?)\s*\n([\s\S]*?)(?=\n[ \t]*(?:FASE\s+DE\s+INICIO|Inicio:)|$)/i);
+      if (perfSection) extractedPerf = perfSection[1].trim();
+    }
+    if (extractedPerf && achEl) {
+      achEl.value = extractedPerf;
+      distributed = true;
+    }
+
+    // 3. Extraer Asignatura y Grado si coinciden con los selects
+    const subjMatch = currentVal.match(/Asignatura\s*:\s*([^\n\r]+)/i);
+    if (subjMatch && subjEl) {
+      const sVal = subjMatch[1].trim().toLowerCase();
+      for (let opt of subjEl.options) {
+        if (opt.value.toLowerCase().includes(sVal) || sVal.includes(opt.value.toLowerCase())) {
+          subjEl.value = opt.value;
+          break;
+        }
+      }
+    }
+
+    // 4. Limpiar Secuencia Didáctica para dejar únicamente las fases pedagógicas
+    const phaseIndex = currentVal.search(/(?:FASE\s+DE\s+INICIO|(?<![a-záéíóú])Inicio\s*:)/i);
+    if (phaseIndex !== -1) {
+      const cleanSeq = currentVal.substring(phaseIndex).trim();
+      descEl.value = this.formatSequenceSpacing(cleanSeq);
+      distributed = true;
+    } else {
+      descEl.value = this.formatSequenceSpacing(currentVal);
+    }
+
+    this.autoResizeTextarea(descEl);
+    this.saveSingleClass(rowIndex);
+
+    if (typeof App !== 'undefined' && App.showToast) {
+      App.showToast(`🪄 ¡Clase #${rowIndex + 1} organizada! Tema, Desempeños y Secuencia en sus respectivas columnas.`, 'success');
+    }
   }
 
   formatSequenceText(rowIndex) {
@@ -1680,6 +1789,13 @@ class PlannerComponent {
           this.setUnsavedChanges(true);
           this.updateSaveIndicator('saving');
           this.handleInputChange(true);
+
+          if (typeof App !== 'undefined' && App.showToast) {
+            const hasPreamble = /(?:Asignatura|Eje\s+temático|TEMAS|DESEMPEÑOS)\s*:/i.test(formatted) && /(?:FASE\s+DE\s+INICIO|Inicio:)/i.test(formatted);
+            if (hasPreamble) {
+              App.showToast("💡 Plan de IA detectado: Usa '🪄 Distribuir Plan IA' para separar Tema, Desempeños y Secuencia, o '🧹 Solo Secuencia' para limpiar encabezados.", "info", 6000);
+            }
+          }
           return;
         }
       }
