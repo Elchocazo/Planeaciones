@@ -709,7 +709,8 @@ const NotebookEditor = {
   },
 
   /**
-   * Prepara el HTML inicial garantizando que nunca quede en blanco, roto o en texto plano/Markdown colapsado
+   * Prepara el HTML inicial garantizando que nunca quede en blanco, roto o en texto plano/Markdown colapsado.
+   * Integra armónicamente la guía de contenido y el taller/actividad práctica sin truncamientos.
    */
   _prepareInitialHtml(cls) {
     let raw = '';
@@ -720,6 +721,32 @@ const NotebookEditor = {
         raw = cls.teacherNotebook.studentNotebookContent;
       } else if (this.hasContent(cls.teacherNotebook?.detailedContent)) {
         raw = cls.teacherNotebook.detailedContent;
+      }
+    }
+
+    // Comprobar si existe actividad práctica / taller registrada en la clase
+    const practical = (cls?.teacherNotebook?.practicalActivity || cls?.practicalActivity || cls?.actividadPractica || cls?.taller || '').trim();
+
+    // Limpiar posibles cabeceras truncadas o huérfanas como "TALLER / " o "TALLER:" al final del contenido
+    if (raw) {
+      raw = raw.replace(/(?:<p>\s*)?(?:•\s*)?TALLER\s*[\/:\-]?\s*(?:<\/p>)?\s*$/i, '').trim();
+    }
+
+    if (practical) {
+      // Verificar si el contenido práctico ya está presente dentro de raw
+      const practicalSnippet = practical.replace(/<[^>]+>/g, '').trim().slice(0, 40);
+      const rawText = (raw || '').replace(/<[^>]+>/g, '');
+      const alreadyIncluded = practicalSnippet && rawText.includes(practicalSnippet);
+
+      if (!alreadyIncluded) {
+        const practicalFormatted = this.formatNotebookHtml(practical);
+        const sectionHeading = '<h2>✍️ Taller / Actividad Práctica</h2>';
+
+        if (raw && raw.trim()) {
+          raw = raw + '\n\n' + sectionHeading + '\n' + practicalFormatted;
+        } else {
+          raw = sectionHeading + '\n' + practicalFormatted;
+        }
       }
     }
 
@@ -1833,6 +1860,7 @@ const NotebookEditor = {
     clean = clean.replace(/(?:^|\n)\s*(Recursos\s+did[aá]cticos)\s*:\s*(?:y\s+)?materiales\b/gi, '\nRecursos didácticos y materiales:');
     clean = clean.replace(/(?:^|\n)\s*(Recursos\s+did[aá]cticos)\s*\n+\s*(?:y\s+)?materiales(?!\s*:)/gi, '\nRecursos didácticos y materiales:');
     clean = clean.replace(/(?:^|\n)\s*(Tareas)\s*\n+\s*(?:y\s+)?compromisos(?!\s*:)/gi, '\nTareas y compromisos:');
+    clean = clean.replace(/(?:^|\n)\s*(TALLER\s*[\/:\-])\s*\n+\s*(ACTIVIDAD(?:ES)?|EJERCICIO(?:S)?|GU[IÍ]A)\b/gi, '\n$1 $2');
 
     // 3. Normalizar encabezados de subsección para que tengan dos puntos
     clean = clean.replace(/(?:^|\n)\s*(Criterios\s+de\s+evaluaci[oó]n)(?!\s*:)/gi, '\n$1:');

@@ -68,8 +68,9 @@ class ImportParserClass {
       'GU[IÍ]A\\s+DE\\s+CONTENIDO',
       'CONTENIDO\\s+(?:PARA\\s+EL\\s+)?(?:ESTUDIANTE|CUADERNO)',
       'CUADERNO\\s+DEL\\s+ESTUDIANTE',
-      'TALLER\\s*(?:[\\/:]\\s*(?:EJERCICIO|ACTIVIDAD)\\s+PR[AÁ]CTICO(?:\\s+DE\\s+LA\\s+CLASE)?|\\s+PR[AÁ]CTICO(?:\\s+DE\\s+LA\\s+CLASE)?|\\s+DE\\s+APLICACI[OÓ]N(?:\\s+EN\\s+CLASE)?(?:\\s*#?\\s*\\d+)?|\\s+EN\\s+CLASE(?:\\s*#?\\s*\\d+)?)',
-      'ACTIVIDAD\\s+PR[AÁ]CTICA(?:\\s+DE\\s+LA\\s+CLASE)?',
+      'TALLER(?:\\s*(?:[\\/:\\-]?\\s*(?:ACTIVIDAD(?:ES)?|EJERCICIO(?:S)?|GU[IÍ]A)?\\s*PR[AÁ]CTIC[OA]S?(?:\\s+DE\\s+LA\\s+CLASE)?|PR[AÁ]CTIC[OA]S?(?:\\s+DE\\s+LA\\s+CLASE)?|DE\\s+APLICACI[OÓ]N(?:\\s+EN\\s+CLASE)?(?:\\s*#?\\s*\\d+)?|EN\\s+CLASE(?:\\s*#?\\s*\\d+)?|[\\/:\\-]\\s*(?:ACTIVIDAD(?:ES)?|EJERCICIOS?|GU[IÍ]A|EVALUACI[OÓ]N)|DE\\s+EJERCICIOS|PEDAG[OÓ]GICO|FORMATIVO|INDIVIDUAL|GRUPAL))?',
+      'ACTIVIDAD(?:ES)?\\s+PR[AÁ]CTIC[OA]S?(?:\\s+DE\\s+LA\\s+CLASE)?',
+      'EJERCICIO(?:S)?\\s+PR[AÁ]CTIC[OA]S?(?:\\s+DE\\s+LA\\s+CLASE)?',
       'PREGUNTA\\s+(?:PROBLEMATIZADORA|ORIENTADORA|GU[IÍ]A|CLAVE)'
     ].join('|');
 
@@ -133,7 +134,7 @@ class ImportParserClass {
     clean = clean.replace(/(\bFASE\s+DE\s+(?:INICIO|DESARROLLO|CIERRE)(?:\s*\([^)]+\))?:?)\s*([A-ZÁÉÍÓÚÑ])/gi, '$1\n\n$2');
 
     // 6. Separar subtítulos de pasos dentro de fases (ej. ". Revisión de la tarea extraclase:" o ") Saludo:")
-    clean = clean.replace(/([.)])\s+([A-ZÁÉÍÓÚÑ][^:\n\r]{2,60}:)(?=\s+[A-ZÁÉÍÓÚÑa-záéíóúñ0-9«"]|\s*$)/g, '$1\n\n$2');
+    clean = clean.replace(/(?<!\b\d)([.)])\s+([A-ZÁÉÍÓÚÑ][^:\n\r]{2,60}:)(?=\s+[A-ZÁÉÍÓÚÑa-záéíóúñ0-9«"]|\s*$)/g, '$1\n\n$2');
 
     // 7. Separar viñetas (•) que estén inline tras texto previo
     clean = clean.replace(/([^\n])\s+(•)\s+/g, '$1\n$2 ');
@@ -175,6 +176,7 @@ class ImportParserClass {
     clean = clean.replace(/(?:^|\n)\s*(Recursos\s+did[aá]cticos)\s*:\s*(?:y\s+)?materiales\b/gi, '\nRecursos didácticos y materiales:');
     clean = clean.replace(/(?:^|\n)\s*(Recursos\s+did[aá]cticos)\s*\n+\s*(?:y\s+)?materiales(?!\s*:)/gi, '\nRecursos didácticos y materiales:');
     clean = clean.replace(/(?:^|\n)\s*(Tareas)\s*\n+\s*(?:y\s+)?compromisos(?!\s*:)/gi, '\nTareas y compromisos:');
+    clean = clean.replace(/(?:^|\n)\s*(TALLER\s*[\/:\-])\s*\n+\s*(ACTIVIDAD(?:ES)?|EJERCICIO(?:S)?|GU[IÍ]A)\b/gi, '\n$1 $2');
 
     // 3. Normalizar encabezados de subsección para que tengan dos puntos
     clean = clean.replace(/(?:^|\n)\s*(Criterios\s+de\s+evaluaci[oó]n)(?!\s*:)/gi, '\n$1:');
@@ -645,13 +647,14 @@ class ImportParserClass {
     }
 
     // 13. TALLER / ACTIVIDAD PRÁCTICA (Cuaderno del Docente / Guía)
-    if (/^(?:TALLER\s*(?:[\/:]\s*(?:ACTIVIDAD|EJERCICIO)\s+PR[AÁ]CTICO(?:\s+DE\s+LA\s+CLASE)?|\s+PR[AÁ]CTICO(?:\s+DE\s+LA\s+CLASE)?|\s+DE\s+APLICACI[OÓ]N(?:\s+EN\s+CLASE)?(?:\s*#?\s*\d+)?|\s+EN\s+CLASE(?:\s*#?\s*\d+)?)|\bACTIVIDAD\s+PR[AÁ]CTICA(?:\s+DE\s+LA\s+CLASE)?|\bEJERCICIO\s+PR[AÁ]CTICO)\b/i.test(upper)) {
+    const isTallerMatch = /^(?:TALLER\b|ACTIVIDAD(?:ES)?\s+PR[AÁ]CTIC[OA]S?|EJERCICIO(?:S)?\s+PR[AÁ]CTIC[OA]S?)/i.test(upper);
+    if (isTallerMatch) {
       const inDidactic = ['inicio', 'desarrollo', 'cierre', 'recursos', 'tareas', 'evaluation', 'observaciones'].includes(currentSection);
-      const isExplicitHeading = /^(?:TALLER\s*[\/:]\s*ACTIVIDAD|ACTIVIDAD\s+PR[AÁ]CTICA\s+DE\s+LA\s+CLASE|TALLER\s+DE\s+APLICACI[OÓ]N\s+EN\s+CLASE)/i.test(upper) || /PARTE\s+2/i.test(upper);
+      const isExplicitHeading = /^(?:TALLER(?:\s*[\/:\-]\s*(?:ACTIVIDAD(?:ES)?|EJERCICIO(?:S)?|GU[IÍ]A)?\s*PR[AÁ]CTIC[OA]S?|\s*PR[AÁ]CTIC[OA]S?|\s+DE\s+APLICACI[OÓ]N|\s+EN\s+CLASE|\s*[\/:\-]\s*|\s*#?\s*\d+|\s*$)|ACTIVIDAD(?:ES)?\s+PR[AÁ]CTIC[OA]S?(?:\s+DE\s+LA\s+CLASE)?|EJERCICIO(?:S)?\s+PR[AÁ]CTIC[OA]S?)/i.test(upper) || /PARTE\s+2/i.test(upper);
       if (inDidactic && !isExplicitHeading) {
         return null;
       }
-      const inline = clean.replace(/^(?:TALLER(?:\s*[\/:]\s*(?:ACTIVIDAD|EJERCICIO)\s+PR[AÁ]CTICO(?:\s+DE\s+LA\s+CLASE)?)?|ACTIVIDAD\s+PR[AÁ]CTICA(?:\s+DE\s+LA\s+CLASE)?|EJERCICIO\s+PR[AÁ]CTICO|TALLER\s+EN\s+CLASE(?:\s*#?\s*\d+)?|TALLER\s+DE\s+APLICACI[OÓ]N(?:\s+EN\s+CLASE)?(?:\s*#?\s*\d+)?)\s*:?\s*/i, '').trim();
+      const inline = clean.replace(/^(?:TALLER(?:\s*(?:[\/:\-]\s*(?:ACTIVIDAD(?:ES)?|EJERCICIO(?:S)?|GU[IÍ]A)?\s*PR[AÁ]CTIC[OA]S?(?:\s+DE\s+LA\s+CLASE)?|PR[AÁ]CTIC[OA]S?(?:\s+DE\s+LA\s+CLASE)?|DE\s+APLICACI[OÓ]N(?:\s+EN\s+CLASE)?(?:\s*#?\s*\d+)?|EN\s+CLASE(?:\s*#?\\s*\d+)?|[\/:\-]\s*(?:ACTIVIDAD(?:ES)?|EJERCICIOS?|GU[IÍ]A|EVALUACI[OÓ]N)|DE\s+EJERCICIOS|PEDAG[OÓ]GICO|FORMATIVO|INDIVIDUAL|GRUPAL))?|ACTIVIDAD(?:ES)?\s+PR[AÁ]CTIC[OA]S?(?:\s+DE\s+LA\s+CLASE)?|EJERCICIO(?:S)?\s+PR[AÁ]CTIC[OA]S?(?:\s+DE\s+LA\s+CLASE)?)\s*:?\s*/i, '').trim();
       return { section: 'practicalActivity', inlineContent: inline || null };
     }
 
@@ -714,7 +717,7 @@ class ImportParserClass {
     if (/^(?:CONTENIDO\s+(?:PARA\s+EL\s+)?(?:ESTUDIANTE|CUADERNO)|CONTENIDO\s+DEL\s+ESTUDIANTE|CUADERNO(?:\s+DEL\s+ESTUDIANTE)?|GU[IÍ]A\s+DEL\s+ESTUDIANTE)\b/i.test(cleanKey)) {
       return { field: 'studentNotebook', value };
     }
-    if (/^(?:TALLER|ACTIVIDAD\s+PR[AÁ]CTICA|EJERCICIO\s+PR[AÁ]CTICO)\b/i.test(cleanKey)) {
+    if (/^(?:TALLER|ACTIVIDAD(?:ES)?\s+PR[AÁ]CTIC[OA]S?|EJERCICIO(?:S)?\s+PR[AÁ]CTIC[OA]S?)\b/i.test(cleanKey)) {
       return { field: 'practicalActivity', value };
     }
     if (/^(?:(?:RECURSOS\s+)?DID[AÁ]CTICOS\s*(?:[:\/-]?\s*)?(?:Y\s+)?MATERIALES|(?:RECURSOS\s+DID[AÁ]CTICOS|RECURSOS\s+Y\s+MATERIALES|MATERIALES\s+DID[AÁ]CTICOS|RECURSOS|MATERIALES))\b/i.test(cleanKey)) {
@@ -869,6 +872,14 @@ class ImportParserClass {
       result.teacherNotebook.practicalActivity += '\n' + buffers.practicalActivity.join('\n').trim();
     }
     if (result.teacherNotebook.practicalActivity) result.detected.practicalActivity = true;
+
+    // Salvaguarda: Eliminar encabezados o prefijos truncados como "TALLER / " que hayan quedado huérfanos al final
+    if (result.didacticSequence.cierre) {
+      result.didacticSequence.cierre = result.didacticSequence.cierre.replace(/(?:^|\n)\s*(?:•\s*)?TALLER\s*[\/:\-]?\s*$/i, '').trim();
+    }
+    if (result.teacherNotebook.studentNotebookContent) {
+      result.teacherNotebook.studentNotebookContent = result.teacherNotebook.studentNotebookContent.replace(/(?:^|\n)\s*(?:•\s*)?TALLER\s*[\/:\-]?\s*$/i, '').trim();
+    }
 
     if (result.metadata.subject || result.metadata.grade || result.metadata.sequenceNumber) {
       result.detected.generalInfo = true;
