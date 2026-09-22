@@ -1,7 +1,7 @@
 /**
  * GENERADOR NATIVO DE DOCUMENTOS .DOCX BASADO EN LA PLANTILLA OFICIAL INSTITUCIONAL
- * Adaptado al nuevo formato oficial "F-GA PREPARADOR DE CLASE COLEGIO HOGAR" (Ejemplopreparador)
- * Preserva al 100% encabezado nativo, márgenes, tablas estructuradas, anclajes y fuentes oficiales.
+ * v3.0 - Genera el cuerpo del documento completamente desde cero para prevenir
+ * saltos de página al exportar a Word. Preserva header1.xml, estilos y márgenes del template.
  */
 
 function escapeXml(unsafe) {
@@ -16,11 +16,9 @@ function escapeXml(unsafe) {
 
 const DocxTemplateEngine = {
   /**
-   * Genera un archivo .docx nativo inyectando los datos de la planeación in-situ
-   * @param {ArrayBuffer|Buffer} templateArrayBuffer
-   * @param {Object} planData
-   * @param {Object} profileData
-   * @returns {Promise<Blob|Buffer>}
+   * Genera un archivo .docx nativo.
+   * Reemplaza COMPLETAMENTE el <w:body> del template con contenido generado fresco,
+   * eliminando toda posibilidad de saltos de página causados por párrafos heredados del template.
    */
   async generateDocx(templateArrayBuffer, planData, profileData) {
     if (typeof JSZip === 'undefined' && typeof require !== 'undefined') {
@@ -42,7 +40,7 @@ const DocxTemplateEngine = {
       ? ExportService.getWeekRange(planData.date)
       : this.getWeekRangeFallback(planData.date);
 
-    // 0. Actualizar encabezado institucional si se ha personalizado en el perfil
+    // 0. Actualizar encabezado institucional si se ha personalizado
     const headerFile = zip.file('word/header1.xml');
     if (headerFile) {
       let headerXml = await headerFile.async('string');
@@ -61,379 +59,18 @@ const DocxTemplateEngine = {
       zip.file('word/header1.xml', headerXml);
     }
 
-    // 1. Reemplazar valores en la Tabla de Metadatos (Tabla 0)
-    // Soportar tanto placeholders explícitos como patrones de plantillas heredadas
-    docXml = docXml
-      .replace(/{{ASIGNATURA}}/g, escapeXml(subjectText))
-      .replace(/{{GRADO}}/g, escapeXml(gradeText))
-      .replace(/{{PERIODO}}/g, escapeXml(period))
-      .replace(/{{DOCENTE}}/g, escapeXml(teacherName))
-      .replace(/{{SEMANA_DEL}}/g, escapeXml(weekRange.start))
-      .replace(/{{SEMANA_AL}}/g, escapeXml(weekRange.end));
+    // 1. Extraer sectPr del template (preserva orientación landscape y márgenes)
+    const sectPrMatch = docXml.match(/<w:sectPr[\s\S]*?<\/w:sectPr>/);
+    const sectPr = sectPrMatch ? sectPrMatch[0] : this.getDefaultSectPr();
 
-    // Compatibilidad retroactiva con plantilla antigua si se pasara como buffer
+    // 2. Generar el contenido del cuerpo COMPLETAMENTE DESDE CERO
+    const freshBody = this.buildFreshBody(planData, profileData, period, teacherName, subjectText, gradeText, weekRange);
+
+    // 3. Reemplazar TODO el contenido de <w:body> preservando el XML exterior del documento
     docXml = docXml.replace(
-      /<w:t>_{5,}<\/w:t>/,
-      `<w:t xml:space="preserve">${escapeXml(subjectText)}   </w:t>`
+      /<w:body>[\s\S]*<\/w:body>/,
+      `<w:body>${freshBody}${sectPr}</w:body>`
     );
-    docXml = docXml.replace(
-      /<w:t xml:space="preserve">_{4,}\s*<\/w:t>/,
-      `<w:t xml:space="preserve">${escapeXml(gradeText)}   </w:t>`
-    );
-    docXml = docXml.replace(
-      /<w:t xml:space="preserve">\s*_{4,}<\/w:t>/,
-      `<w:t xml:space="preserve">${escapeXml(period)}   </w:t>`
-    );
-    docXml = docXml.replace(
-      /<w:t xml:space="preserve">\s*_{5,}<\/w:t>/,
-      `<w:t xml:space="preserve">${escapeXml(teacherName)}</w:t>`
-    );
-    docXml = docXml.replace(
-      /<w:t xml:space="preserve">\s*_{10,}<\/w:t>/,
-      `<w:t xml:space="preserve"> ${escapeXml(weekRange.start)} </w:t>`
-    );
-    docXml = docXml.replace(
-      /<w:t>_ AL<\/w:t>/,
-      `<w:t> AL</w:t>`
-    );
-    docXml = docXml.replace(
-      /<w:t xml:space="preserve">\s*_{10,}<\/w:t>/,
-      `<w:t xml:space="preserve"> ${escapeXml(weekRange.end)}</w:t>`
-    );
-
-    // 2. Localizar y Reemplazar filas de la Tabla de Clases
-    const tables = docXml.match(/<w:tbl[\s\S]*?<\/w:tbl>/g);
-    let classesTable = null;
-
-    if (tables && tables.length > 0) {
-      // Buscar la tabla que contenga el encabezado de clases
-      classesTable = tables.find(t => t.includes('CLASE') && (t.includes('FECHA') || t.includes('FECHAd/m/a'))) || (tables.length > 1 ? tables[1] : tables[0]);
-    }
-
-    if (classesTable) {
-      const headerRow = classesTable.match(/<w:tr[\s\S]*?<\/w:tr>/)[0];
-      const tPrMatch = classesTable.match(/<w:tblPr[\s\S]*?<\/w:tblPr>/);
-      const tGridMatch = classesTable.match(/<w:tblGrid[\s\S]*?<\/w:tblGrid>/);
-      const tPr = tPrMatch ? tPrMatch[0] : '';
-      const tGrid = tGridMatch ? tGridMatch[0] : '';
-
-      // Asegurar que el encabezado de la tabla se repita en la siguiente página si la planeación es extensa
-      let styledHeaderRow = headerRow;
-      if (!styledHeaderRow.includes('<w:tblHeader')) {
-        styledHeaderRow = styledHeaderRow.replace(/<w:trPr>/, '<w:trPr><w:tblHeader/><w:cantSplit/>');
-      }
-
-      function cellParagraphs(text, isCentered = false, isBold = false) {
-        if (!text) {
-          return '<w:p><w:pPr><w:jc w:val="' + (isCentered ? 'center' : 'left') + '"/><w:rPr><w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/><w:sz w:val="20"/></w:rPr></w:pPr></w:p>';
-        }
-        const lines = String(text).split('\n');
-
-        function renderInlineRuns(rawStr, forceBold = false) {
-          if (!rawStr) return '';
-          if (forceBold) {
-            return `
-              <w:r>
-                <w:rPr>
-                  <w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/>
-                  <w:b/>
-                  <w:sz w:val="20"/>
-                </w:rPr>
-                <w:t xml:space="preserve">${escapeXml(rawStr)}</w:t>
-              </w:r>
-            `;
-          }
-
-          const parts = rawStr.split(/(\*\*.*?\*\*)/g);
-          return parts.map(part => {
-            if (!part) return '';
-            const isPartBold = part.startsWith('**') && part.endsWith('**') && part.length >= 4;
-            const content = isPartBold ? part.slice(2, -2) : part;
-            return `
-              <w:r>
-                <w:rPr>
-                  <w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/>
-                  ${isPartBold ? '<w:b/>' : ''}
-                  <w:sz w:val="20"/>
-                </w:rPr>
-                <w:t xml:space="preserve">${escapeXml(content)}</w:t>
-              </w:r>
-            `;
-          }).join('');
-        }
-
-        return lines.map(line => {
-          const trimmed = line.trim();
-          if (!trimmed) {
-            return '<w:p><w:pPr><w:jc w:val="' + (isCentered ? 'center' : 'left') + '"/><w:rPr><w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/><w:sz w:val="20"/></w:rPr></w:pPr></w:p>';
-          }
-
-          const prefixMatch = trimmed.match(/^([●•\s]*(?:\*{0,2}(?:FASE\s+DE\s+(?:INICIO|DESARROLLO|CIERRE)|(?:Fase\s+de\s+)?(?:Inicio|Desarrollo|Cierre)|Recursos(?: didácticos)?|Evaluaci[oó]n(?: formativa)?|Estándar|Pregunta problematizadora|Tareas?(?:\s*\/\s*Compromisos?)?|Eje\s+temático|Metodología|Tiempo\s+disponible|Clase)(?:\s*\([^)]*\))?\*{0,2}):?)(.*)$/i);
-
-          if (prefixMatch && !isBold) {
-            let prefix = prefixMatch[1].replace(/\*\*/g, '');
-            const rest = prefixMatch[2];
-            return `
-              <w:p>
-                <w:pPr>
-                  <w:jc w:val="${isCentered ? 'center' : 'left'}"/>
-                  <w:rPr>
-                    <w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/>
-                    <w:sz w:val="20"/>
-                  </w:rPr>
-                </w:pPr>
-                <w:r>
-                  <w:rPr>
-                    <w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/>
-                    <w:b/>
-                    <w:sz w:val="20"/>
-                  </w:rPr>
-                  <w:t xml:space="preserve">${escapeXml(prefix)}</w:t>
-                </w:r>
-                ${renderInlineRuns(rest, false)}
-              </w:p>
-            `;
-          }
-
-          return `
-            <w:p>
-              <w:pPr>
-                <w:jc w:val="${isCentered ? 'center' : 'left'}"/>
-                <w:rPr>
-                  <w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/>
-                  ${isBold ? '<w:b/>' : ''}
-                  <w:sz w:val="20"/>
-                </w:rPr>
-              </w:pPr>
-              ${renderInlineRuns(trimmed, isBold)}
-            </w:p>
-          `;
-        }).join('');
-      }
-
-      const rowsXml = (planData.classes || []).map((cls, idx) => {
-        const shortDate = (typeof ExportService !== 'undefined' && ExportService.formatShortDate)
-          ? ExportService.formatShortDate(cls.date || planData.date)
-          : (cls.date || planData.date || '');
-        const classNum = cls.dayNumber ? cls.dayNumber.replace(/[^0-9]/g, '') || String(idx + 1) : String(idx + 1);
-        const dayOfWeek = cls.dayOfWeek || ((typeof ExportService !== 'undefined' && ExportService.getDayOfWeekName)
-          ? ExportService.getDayOfWeekName(planData.date)
-          : 'Lunes');
-
-        const isDirGroup = cls.subject && String(cls.subject).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes('direccion de grupo');
-
-        let dba = isDirGroup ? 'No aplica' : (cls.dba || '');
-        let achievement = isDirGroup ? 'No aplica' : (cls.achievement || cls.performance || '');
-        let topic = isDirGroup ? 'Asesoría general' : (cls.topic || '');
-
-        if (!isDirGroup && (!dba || !topic || !achievement) && typeof CurriculumService !== 'undefined') {
-          const autoCur = CurriculumService.getAutoCurriculumItem(period, cls.subject, cls.grade, cls.dayNumber || classNum);
-          if (autoCur) {
-            if (!dba) dba = autoCur.dba;
-            if (!achievement) achievement = autoCur.achievement;
-            if (!topic) topic = autoCur.topic;
-          }
-        }
-
-        let descRaw = (cls.description || '');
-        descRaw = descRaw.replace(/(?<!^)(?<!\()[ \t]*(\*{0,2}(?:FASE\s+DE\s+(?:INICIO|DESARROLLO|CIERRE)|(?:Fase\s+de\s+)?(?:Inicio|Desarrollo|Cierre)|Recursos(?: didácticos)?|Evaluaci[oó]n(?: formativa)?|Estándar|Pregunta problematizadora|Tareas?(?:\s*\/\s*Compromisos?)?)\*{0,2})\s*:\s*/gi, '\n\n$1: ');
-        descRaw = descRaw.replace(/(?<!^)[ \t]*(\*{0,2}(?:FASE\s+DE\s+(?:INICIO|DESARROLLO|CIERRE))(?:[ \t]*\([^)]*\))?\*{0,2})(?=\n|$|[ \t]+[A-ZÁÉÍÓÚ])/gi, '\n\n$1\n\n');
-        const sequence = descRaw.trim();
-
-        return `
-          <w:tr w:rsidR="00523ABE" w:rsidTr="00786631">
-            <w:trPr>
-              <w:trHeight w:val="240"/>
-              <w:cantSplit/>
-            </w:trPr>
-            <w:tc><w:tcPr><w:tcW w:w="535" w:type="pct"/><w:vAlign w:val="center"/></w:tcPr>${cellParagraphs(shortDate, true)}</w:tc>
-            <w:tc><w:tcPr><w:tcW w:w="329" w:type="pct"/><w:vAlign w:val="center"/></w:tcPr>${cellParagraphs(classNum, true, true)}</w:tc>
-            <w:tc><w:tcPr><w:tcW w:w="338" w:type="pct"/><w:vAlign w:val="center"/></w:tcPr>${cellParagraphs(dayOfWeek, true)}</w:tc>
-            <w:tc><w:tcPr><w:tcW w:w="394" w:type="pct"/><w:vAlign w:val="top"/></w:tcPr>${cellParagraphs(dba)}</w:tc>
-            <w:tc><w:tcPr><w:tcW w:w="394" w:type="pct"/><w:vAlign w:val="top"/></w:tcPr>${cellParagraphs(achievement)}</w:tc>
-            <w:tc><w:tcPr><w:tcW w:w="633" w:type="pct"/><w:vAlign w:val="top"/></w:tcPr>${cellParagraphs(topic, false, true)}</w:tc>
-            <w:tc><w:tcPr><w:tcW w:w="2377" w:type="pct"/><w:vAlign w:val="top"/></w:tcPr>${cellParagraphs(sequence)}</w:tc>
-          </w:tr>
-        `;
-      }).join('');
-
-      const newTable1 = `<w:tbl>${tPr}${tGrid}${styledHeaderRow}${rowsXml}</w:tbl>`;
-      docXml = docXml.replace(classesTable, newTable1);
-    }
-
-    // 3. Reemplazar Observaciones en la Tabla de Observaciones (Tabla 2)
-    let notesText = '';
-    if (planData.classes && planData.classes.length > 0) {
-      const classNotes = planData.classes
-        .map((c, i) => {
-          const obs = (c.observations || '').trim();
-          if (!obs) return null;
-          if (planData.classes.length === 1) return escapeXml(obs);
-          const cNum = c.dayNumber ? `Clase ${String(c.dayNumber).replace(/[^0-9]/g, '') || c.dayNumber}` : `Clase ${i + 1}`;
-          const cSub = c.subject ? ` (${c.subject})` : '';
-          return `• ${cNum}${cSub}: ${escapeXml(obs)}`;
-        })
-        .filter(Boolean);
-      if (classNotes.length > 0) {
-        notesText = classNotes.join('\n');
-      }
-    }
-    if (!notesText && planData.generalNotes) {
-      notesText = escapeXml(planData.generalNotes);
-    }
-
-    // Inyectar en la tabla de observaciones
-    if (docXml.includes('{{OBSERVACIONES}}')) {
-      let obsXmlParagraphs = '';
-      if (notesText) {
-        const obsLines = notesText.split('\n');
-        obsXmlParagraphs = obsLines.map(line => `
-          <w:p>
-            <w:pPr>
-              <w:rPr>
-                <w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/>
-                <w:sz w:val="20"/>
-                <w:szCs w:val="20"/>
-              </w:rPr>
-            </w:pPr>
-            <w:r>
-              <w:rPr>
-                <w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/>
-                <w:sz w:val="20"/>
-                <w:szCs w:val="20"/>
-              </w:rPr>
-              <w:t xml:space="preserve">${escapeXml(line)}</w:t>
-            </w:r>
-          </w:p>
-        `).join('');
-      } else {
-        obsXmlParagraphs = `
-          <w:p>
-            <w:pPr>
-              <w:rPr>
-                <w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/>
-                <w:sz w:val="20"/>
-                <w:szCs w:val="20"/>
-              </w:rPr>
-            </w:pPr>
-          </w:p>
-        `;
-      }
-
-      // Reemplazar el párrafo que contiene {{OBSERVACIONES}} dentro de su celda
-      docXml = docXml.replace(
-        /<w:p\b[^>]*>(?:(?!<w:p\b)[\s\S])*?{{OBSERVACIONES}}[\s\S]*?<\/w:p>/,
-        obsXmlParagraphs
-      );
-      // Fallback si quedó como texto suelto
-      docXml = docXml.replace(/{{OBSERVACIONES}}/g, escapeXml(notesText || ''));
-    } else if (notesText) {
-      docXml = docXml.replace(
-        /<w:t>_{50,}<\/w:t>/,
-        `<w:t xml:space="preserve">${notesText}</w:t>`
-      );
-    }
-
-    // 4. Inyectar Sello y Visto Bueno de Coordinación Académica si existe
-    if (planData.coordinatorReview && planData.coordinatorReview.status) {
-      const rev = planData.coordinatorReview;
-      const statusTitle = rev.status === 'approved' 
-        ? 'REVISIÓN &amp; VISTO BUENO OFICIAL: APROBADO' 
-        : (rev.status === 'approved_with_notes' ? 'REVISIÓN DE COORDINACIÓN: APROBADO CON SUGERENCIAS' : 'REVISIÓN DE COORDINACIÓN: REQUIERE AJUSTES');
-      const reviewer = escapeXml(rev.reviewerName || 'Coordinación Académica');
-      const revDate = escapeXml(rev.date || '');
-      const revComments = rev.comments ? escapeXml(rev.comments) : '';
-
-      const coordinatorTableXml = `
-        <w:tbl>
-          <w:tblPr>
-            <w:tblStyle w:val="Tablaconcuadrcula"/>
-            <w:tblW w:w="5008" w:type="pct"/>
-            <w:tblInd w:w="-289" w:type="dxa"/>
-            <w:tblBorders>
-              <w:top w:val="single" w:sz="6" w:space="0" w:color="0284C7"/>
-              <w:left w:val="single" w:sz="6" w:space="0" w:color="0284C7"/>
-              <w:bottom w:val="single" w:sz="6" w:space="0" w:color="0284C7"/>
-              <w:right w:val="single" w:sz="6" w:space="0" w:color="0284C7"/>
-              <w:insideH w:val="single" w:sz="4" w:space="0" w:color="BAE6FD"/>
-              <w:insideV w:val="none"/>
-            </w:tblBorders>
-          </w:tblPr>
-          <w:tblGrid>
-            <w:gridCol w:w="13892"/>
-          </w:tblGrid>
-          <w:tr>
-            <w:trPr><w:cantSplit/></w:trPr>
-            <w:tc>
-              <w:tcPr>
-                <w:tcW w:w="5008" w:type="pct"/>
-                <w:shd w:val="clear" w:color="auto" w:fill="F0F9FF"/>
-              </w:tcPr>
-              <w:p>
-                <w:pPr>
-                  <w:rPr>
-                    <w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/>
-                    <w:b/>
-                    <w:sz w:val="20"/>
-                    <w:color w:val="0369A1"/>
-                  </w:rPr>
-                </w:pPr>
-                <w:r>
-                  <w:rPr>
-                    <w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/>
-                    <w:b/>
-                    <w:sz w:val="20"/>
-                    <w:color w:val="0369A1"/>
-                  </w:rPr>
-                  <w:t>${statusTitle}</w:t>
-                </w:r>
-              </w:p>
-              ${revComments ? `
-              <w:p>
-                <w:pPr>
-                  <w:rPr>
-                    <w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/>
-                    <w:i/>
-                    <w:sz w:val="18"/>
-                    <w:color w:val="1E293B"/>
-                  </w:rPr>
-                </w:pPr>
-                <w:r>
-                  <w:rPr>
-                    <w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/>
-                    <w:i/>
-                    <w:sz w:val="18"/>
-                    <w:color w:val="1E293B"/>
-                  </w:rPr>
-                  <w:t xml:space="preserve">"${revComments}"</w:t>
-                </w:r>
-              </w:p>` : ''}
-              <w:p>
-                <w:pPr>
-                  <w:jc w:val="right"/>
-                  <w:rPr>
-                    <w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/>
-                    <w:sz w:val="16"/>
-                    <w:color w:val="64748B"/>
-                  </w:rPr>
-                </w:pPr>
-                <w:r>
-                  <w:rPr>
-                    <w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/>
-                    <w:sz w:val="16"/>
-                    <w:color w:val="64748B"/>
-                  </w:rPr>
-                  <w:t xml:space="preserve">Revisado por: ${reviewer}  •  Fecha: ${revDate}</w:t>
-                </w:r>
-              </w:p>
-            </w:tc>
-          </w:tr>
-        </w:tbl>
-      `;
-
-      // Insertar antes de sectPr
-      docXml = docXml.replace(/(<w:sectPr[\s\S]*?<\/w:sectPr>)/, `${coordinatorTableXml}<w:p/>$1`);
-    }
 
     zip.file('word/document.xml', docXml);
 
@@ -445,6 +82,424 @@ const DocxTemplateEngine = {
     } else {
       return await zip.generateAsync({ type: 'nodebuffer' });
     }
+  },
+
+  getDefaultSectPr() {
+    return `<w:sectPr><w:headerReference w:type="default" r:id="rId8"/><w:pgSz w:w="15842" w:h="12242" w:orient="landscape" w:code="1"/><w:pgMar w:top="3261" w:right="533" w:bottom="720" w:left="1418" w:header="2269" w:footer="709" w:gutter="0"/><w:cols w:space="708"/><w:docGrid w:linePitch="360"/></w:sectPr>`;
+  },
+
+  /**
+   * Construye el cuerpo completo del documento Word desde cero.
+   * - Tabla de metadatos (ASIGNATURA, GRADO, etc.)
+   * - Párrafo separador mínimo (altura 0)
+   * - Tabla de clases (SIN <w:tblHeader/> para evitar saltos de página)
+   * - Párrafo separador mínimo
+   * - Tabla de observaciones
+   */
+  buildFreshBody(planData, profileData, period, teacherName, subjectText, gradeText, weekRange) {
+    const miniSep = `<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="120" w:lineRule="exact"/><w:rPr><w:sz w:val="2"/><w:szCs w:val="2"/></w:rPr></w:pPr></w:p>`;
+
+    const metaTable = this.buildMetaTable(subjectText, gradeText, period, teacherName, weekRange);
+    const classesTable = this.buildClassesTable(planData, period);
+    const obsTable = this.buildObsTable(planData);
+
+    let coordBlock = '';
+    if (planData.coordinatorReview && planData.coordinatorReview.status) {
+      coordBlock = miniSep + this.buildCoordTable(planData.coordinatorReview);
+    }
+
+    return metaTable + miniSep + classesTable + miniSep + obsTable + coordBlock;
+  },
+
+  /**
+   * Tabla de metadatos (ASIGNATURA / GRADO / PERIODO / DOCENTE / SEMANA DEL / AL)
+   * Columnas en dxa: [1800, 4580, 1380, 2640, 1380, 2110] ≈ 13890 twips total
+   */
+  buildMetaTable(subjectText, gradeText, period, teacherName, weekRange) {
+    const cols = [1800, 4580, 1380, 2640, 1380, 2110];
+
+    const mkCell = (text, colIdx, alignRight = false, bold = false) => {
+      const jc = alignRight ? 'right' : 'left';
+      const boldTag = bold ? '<w:b/><w:bCs/>' : '';
+      return `<w:tc>
+  <w:tcPr><w:tcW w:w="${cols[colIdx]}" w:type="dxa"/><w:vAlign w:val="center"/></w:tcPr>
+  <w:p>
+    <w:pPr>
+      <w:spacing w:before="40" w:after="40" w:line="240" w:lineRule="auto"/>
+      <w:jc w:val="${jc}"/>
+      <w:rPr><w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/>${boldTag}<w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr>
+    </w:pPr>
+    <w:r>
+      <w:rPr><w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/>${boldTag}<w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr>
+      <w:t xml:space="preserve">${escapeXml(text || '')}</w:t>
+    </w:r>
+  </w:p>
+</w:tc>`;
+    };
+
+    return `<w:tbl>
+  <w:tblPr>
+    <w:tblStyle w:val="Tablaconcuadrcula"/>
+    <w:tblW w:w="5000" w:type="pct"/>
+    <w:tblInd w:w="-289" w:type="dxa"/>
+    <w:tblLayout w:type="fixed"/>
+    <w:tblCellMar>
+      <w:top w:w="55" w:type="dxa"/>
+      <w:left w:w="108" w:type="dxa"/>
+      <w:bottom w:w="55" w:type="dxa"/>
+      <w:right w:w="108" w:type="dxa"/>
+    </w:tblCellMar>
+    <w:tblLook w:val="04A0" w:firstRow="1" w:lastRow="0" w:firstColumn="1" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/>
+  </w:tblPr>
+  <w:tblGrid>
+    ${cols.map(c => `<w:gridCol w:w="${c}"/>`).join('\n    ')}
+  </w:tblGrid>
+  <w:tr>
+    <w:trPr><w:trHeight w:val="460" w:hRule="atLeast"/></w:trPr>
+    ${mkCell('ASIGNATURA:', 0, true, true)}
+    ${mkCell(subjectText, 1, false, false)}
+    ${mkCell('GRADO:', 2, true, true)}
+    ${mkCell(gradeText, 3, false, false)}
+    ${mkCell('PERIODO:', 4, true, true)}
+    ${mkCell(period, 5, false, false)}
+  </w:tr>
+  <w:tr>
+    <w:trPr><w:trHeight w:val="460" w:hRule="atLeast"/></w:trPr>
+    ${mkCell('DOCENTE:', 0, true, true)}
+    ${mkCell(teacherName, 1, false, false)}
+    ${mkCell('SEMANA DEL', 2, true, true)}
+    ${mkCell(weekRange.start, 3, false, false)}
+    ${mkCell('AL', 4, true, true)}
+    ${mkCell(weekRange.end, 5, false, false)}
+  </w:tr>
+</w:tbl>`;
+  },
+
+  /**
+   * Tabla de clases.
+   * IMPORTANTE: NO usa <w:tblHeader/> en la fila de encabezado.
+   * Esto evita que el algoritmo de paginación de Word empuje TODA la tabla
+   * a la siguiente página cuando el primer renglón de datos es muy alto.
+   */
+  buildClassesTable(planData, period) {
+    // Anchos de columna en pct (5000 = 100%)
+    const pcts = [535, 329, 338, 394, 394, 633, 2377];
+
+    // Fila de encabezado de la tabla de clases
+    // Sin <w:tblHeader/> ni <w:cantSplit/> para prevenir el salto de página
+    const headerCellXml = (txt, pct, center = true) => {
+      const jc = center ? 'center' : 'both';
+      return `<w:tc>
+  <w:tcPr><w:tcW w:w="${pct}" w:type="pct"/><w:vAlign w:val="center"/></w:tcPr>
+  <w:p>
+    <w:pPr>
+      <w:spacing w:before="40" w:after="40" w:line="220" w:lineRule="auto"/>
+      <w:jc w:val="${jc}"/>
+      <w:rPr><w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/><w:b/><w:bCs/><w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr>
+    </w:pPr>
+    ${txt.split('\n').map((line, i) => `<w:r${i > 0 ? '><w:br/>' : '>'}<w:rPr><w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/><w:b/><w:bCs/><w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr><w:t xml:space="preserve">${escapeXml(line)}</w:t></w:r>`).join('')}
+  </w:p>
+</w:tc>`;
+    };
+
+    const headerRow = `<w:tr>
+  <w:trPr><w:trHeight w:val="600" w:hRule="atLeast"/></w:trPr>
+  ${headerCellXml('FECHA\nd/m/a', pcts[0])}
+  ${headerCellXml('CLASE', pcts[1])}
+  ${headerCellXml('DÍA', pcts[2])}
+  ${headerCellXml('DBA', pcts[3])}
+  ${headerCellXml('LOGRO E\nINDICADOR', pcts[4])}
+  ${headerCellXml('TEMA', pcts[5])}
+  ${headerCellXml('Secuencia didáctica Inicio-Desarrollo -cierre\n(Descripción del desarrollo de la clase Recursos Didácticos – Tarea – Evaluación-Talleres-Quiz)', pcts[6], false)}
+</w:tr>`;
+
+    // Función para generar párrafos dentro de una celda con formato semántico
+    function cellParagraphs(text, alignMode = 'left', isBold = false) {
+      let jcVal = 'left';
+      if (alignMode === true || alignMode === 'center') jcVal = 'center';
+      else if (alignMode === 'both' || alignMode === 'justify') jcVal = 'both';
+      else if (alignMode === 'right') jcVal = 'right';
+
+      if (!text) {
+        return `<w:p><w:pPr><w:jc w:val="${jcVal}"/><w:rPr><w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/><w:sz w:val="20"/></w:rPr></w:pPr></w:p>`;
+      }
+      const lines = String(text).split('\n').map(l => l.trim()).filter(Boolean);
+      if (lines.length === 0) {
+        return `<w:p><w:pPr><w:jc w:val="${jcVal}"/><w:rPr><w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/><w:sz w:val="20"/></w:rPr></w:pPr></w:p>`;
+      }
+
+      function renderInlineRuns(rawStr, forceBold = false) {
+        if (!rawStr) return '';
+        if (forceBold) {
+          return `<w:r><w:rPr><w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/><w:b/><w:sz w:val="20"/></w:rPr><w:t xml:space="preserve">${escapeXml(rawStr)}</w:t></w:r>`;
+        }
+        const parts = rawStr.split(/(\*\*.*?\*\*)/g);
+        return parts.map(part => {
+          if (!part) return '';
+          const isPartBold = part.startsWith('**') && part.endsWith('**') && part.length >= 4;
+          const content = isPartBold ? part.slice(2, -2) : part;
+          return `<w:r><w:rPr><w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/>${isPartBold ? '<w:b/>' : ''}<w:sz w:val="20"/></w:rPr><w:t xml:space="preserve">${escapeXml(content)}</w:t></w:r>`;
+        }).join('');
+      }
+
+      const phasePrefixes = [
+        'FASE\\s+DE\\s+(?:INICIO|DESARROLLO|CIERRE)',
+        '(?<!FASE\\s+DE\\s+)(?:Inicio|Desarrollo|Cierre)',
+        'Recursos(?:\\s+did[aá]cticos)?(?:\\s*[:\\/-]?\\s*(?:y\\s+)?materiales)?',
+        'Evaluaci[oó]n(?:\\s+formativa)?',
+        'Est[aá]ndar(?:\\s+b[aá]sico)?',
+        'Pregunta\\s+problematizadora',
+        'Tareas?(?:\\s*[\\/:]\\s*Compromisos?)?(?:\\s*[:\\/-]?\\s*(?:y\\s+)?actividades\\s+extraclase)?',
+        'Compromisos?',
+        'Eje\\s+tem[aá]tico',
+        'Metodolog[íi]a',
+        'Tiempo\\s+disponible'
+      ].join('|');
+
+      return lines.map((trimmed, idx) => {
+        const spacingXml = idx === 0
+          ? '<w:spacing w:before="20" w:after="40" w:line="240" w:lineRule="auto"/>'
+          : '<w:spacing w:before="60" w:after="40" w:line="240" w:lineRule="auto"/>';
+
+        const prefixRe = new RegExp(
+          `^([●•\\s]*(?:\\*{0,2}(?:${phasePrefixes})(?:\\s*\\([^)]*\\))?\\*{0,2}):?)(.*)$`,
+          'i'
+        );
+        const prefixMatch = trimmed.match(prefixRe);
+
+        if (prefixMatch && !isBold) {
+          let rawPrefix = prefixMatch[1].replace(/\*\*/g, '').trim();
+          let rest = prefixMatch[2] || '';
+
+          if (/^([●•\s]*)Recursos(?:\s+did[aá]cticos)?(?:\s*[:\/-]?\s*(?:y\s+)?materiales)?(?:\s*\([^)]*\))?:?$/i.test(rawPrefix)) {
+            const bulletMatch = rawPrefix.match(/^([●•\s]*)/);
+            const bullet = bulletMatch ? bulletMatch[1] : '';
+            rawPrefix = `${bullet}Recursos didácticos y materiales:`;
+            rest = rest.replace(/^(?:\s*[:\/-]?\s*(?:Y\s+)?MATERIALES\b\s*:?)/i, '');
+          } else if (/^([●•\s]*)Tareas?(?:\s*[\/:]\s*Compromisos?)?(?:\s*[:\/-]?\s*(?:y\s+)?actividades\s+extraclase)?(?:\s*\([^)]*\))?:?$/i.test(rawPrefix)) {
+            const bulletMatch = rawPrefix.match(/^([●•\s]*)/);
+            const bullet = bulletMatch ? bulletMatch[1] : '';
+            rawPrefix = `${bullet}Tareas / Compromisos:`;
+            rest = rest.replace(/^(?:\s*[:\/-]?\s*(?:Y\s+)?ACTIVIDADES\s+EXTRACLASE\b\s*:?)/i, '');
+          }
+
+          if (rest.trim()) rest = ' ' + rest.trim();
+          else rest = '';
+
+          return `<w:p>
+  <w:pPr>${spacingXml}<w:jc w:val="${jcVal}"/><w:rPr><w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/><w:sz w:val="20"/></w:rPr></w:pPr>
+  <w:r><w:rPr><w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/><w:b/><w:sz w:val="20"/></w:rPr><w:t xml:space="preserve">${escapeXml(rawPrefix)}</w:t></w:r>
+  ${renderInlineRuns(rest, false)}
+</w:p>`;
+        }
+
+        return `<w:p>
+  <w:pPr>${spacingXml}<w:jc w:val="${jcVal}"/><w:rPr><w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/>${isBold ? '<w:b/>' : ''}<w:sz w:val="20"/></w:rPr></w:pPr>
+  ${renderInlineRuns(trimmed, isBold)}
+</w:p>`;
+      }).join('');
+    }
+
+    const phasePrefixList = [
+      'FASE\\s+DE\\s+(?:INICIO|DESARROLLO|CIERRE)',
+      '(?<!FASE\\s+DE\\s+)(?:Inicio|Desarrollo|Cierre)',
+      'Recursos(?:\\s+did[aá]cticos)?(?:\\s*[:\\/-]?\\s*(?:y\\s+)?materiales)?',
+      'Evaluaci[oó]n(?:\\s+formativa)?',
+      'Est[aá]ndar(?:\\s+b[aá]sico)?',
+      'Pregunta\\s+problematizadora',
+      'Tareas?(?:\\s*[\\/:]\\s*Compromisos?)?(?:\\s*[:\\/-]?\\s*(?:y\\s+)?actividades\\s+extraclase)?',
+      'Compromisos?',
+      'Eje\\s+tem[aá]tico',
+      'Metodolog[íi]a',
+      'Tiempo\\s+disponible'
+    ].join('|');
+    const phaseColonRegex = new RegExp(`(?<!^)(?<!\\()[ \\t]*(\\*{0,2}(?:${phasePrefixList})(?:[ \\t]*\\([^)]*\\))?\\*{0,2})\\s*:\\s*`, 'gi');
+
+    const rowsXml = (planData.classes || []).map((cls, idx) => {
+      const shortDate = (typeof ExportService !== 'undefined' && ExportService.formatShortDate)
+        ? ExportService.formatShortDate(cls.date || planData.date)
+        : (cls.date || planData.date || '');
+      const classNum = cls.dayNumber ? cls.dayNumber.replace(/[^0-9]/g, '') || String(idx + 1) : String(idx + 1);
+      const dayOfWeek = cls.dayOfWeek || ((typeof ExportService !== 'undefined' && ExportService.getDayOfWeekName)
+        ? ExportService.getDayOfWeekName(planData.date)
+        : 'Lunes');
+
+      const isDirGroup = cls.subject && String(cls.subject).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes('direccion de grupo');
+
+      let dba = isDirGroup ? 'No aplica' : (cls.dba || '');
+      let achievement = isDirGroup ? 'No aplica' : (cls.achievement || cls.performance || '');
+      let topic = isDirGroup ? 'Asesoría general' : (cls.topic || '');
+
+      if (!isDirGroup && (!dba || !topic || !achievement) && typeof CurriculumService !== 'undefined') {
+        const autoCur = CurriculumService.getAutoCurriculumItem(period, cls.subject, cls.grade, cls.dayNumber || classNum);
+        if (autoCur) {
+          if (!dba) dba = autoCur.dba;
+          if (!achievement) achievement = autoCur.achievement;
+          if (!topic) topic = autoCur.topic;
+        }
+      }
+
+      let descRaw = (cls.description || '');
+      descRaw = descRaw
+        .replace(/(?:Recursos\s+did[aá]cticos?\s*:\s*(?:Y\s+)?MATERIALES|Recursos\s+did[aá]cticos?\s+y\s+materiales\s*:?)/gi, 'Recursos didácticos y materiales:')
+        .replace(/(?:Tareas?(?:\s*[\/:]\s*Compromisos?)?\s*:\s*(?:Y\s+)?ACTIVIDADES\s+EXTRACLASE|Tareas?(?:\s*[\/:]\s*Compromisos?)?\s*y\s+actividades\s+extraclase\s*:?)/gi, 'Tareas / Compromisos:');
+      descRaw = descRaw.replace(phaseColonRegex, '\n\n$1: ');
+      descRaw = descRaw.replace(/\n{3,}/g, '\n\n');
+      const sequence = descRaw.trim();
+
+      return `<w:tr w:rsidR="00523ABE" w:rsidTr="00786631">
+  <w:trPr><w:trHeight w:val="240"/></w:trPr>
+  <w:tc><w:tcPr><w:tcW w:w="${pcts[0]}" w:type="pct"/><w:vAlign w:val="center"/></w:tcPr>${cellParagraphs(shortDate, 'center')}</w:tc>
+  <w:tc><w:tcPr><w:tcW w:w="${pcts[1]}" w:type="pct"/><w:vAlign w:val="center"/></w:tcPr>${cellParagraphs(classNum, 'center', true)}</w:tc>
+  <w:tc><w:tcPr><w:tcW w:w="${pcts[2]}" w:type="pct"/><w:vAlign w:val="center"/></w:tcPr>${cellParagraphs(dayOfWeek, 'center')}</w:tc>
+  <w:tc><w:tcPr><w:tcW w:w="${pcts[3]}" w:type="pct"/><w:vAlign w:val="top"/></w:tcPr>${cellParagraphs(dba, 'both')}</w:tc>
+  <w:tc><w:tcPr><w:tcW w:w="${pcts[4]}" w:type="pct"/><w:vAlign w:val="top"/></w:tcPr>${cellParagraphs(achievement, 'both')}</w:tc>
+  <w:tc><w:tcPr><w:tcW w:w="${pcts[5]}" w:type="pct"/><w:vAlign w:val="top"/></w:tcPr>${cellParagraphs(topic, 'left', true)}</w:tc>
+  <w:tc><w:tcPr><w:tcW w:w="${pcts[6]}" w:type="pct"/><w:vAlign w:val="top"/></w:tcPr>${cellParagraphs(sequence, 'both')}</w:tc>
+</w:tr>`;
+    }).join('');
+
+    return `<w:tbl>
+  <w:tblPr>
+    <w:tblStyle w:val="Tablaconcuadrcula"/>
+    <w:tblW w:w="5000" w:type="pct"/>
+    <w:tblInd w:w="-289" w:type="dxa"/>
+    <w:tblLayout w:type="fixed"/>
+    <w:tblCellMar>
+      <w:top w:w="55" w:type="dxa"/>
+      <w:left w:w="108" w:type="dxa"/>
+      <w:bottom w:w="55" w:type="dxa"/>
+      <w:right w:w="108" w:type="dxa"/>
+    </w:tblCellMar>
+    <w:tblLook w:val="04A0" w:firstRow="1" w:lastRow="0" w:firstColumn="1" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/>
+  </w:tblPr>
+  <w:tblGrid>
+    <w:gridCol w:w="1488"/>
+    <w:gridCol w:w="914"/>
+    <w:gridCol w:w="939"/>
+    <w:gridCol w:w="1093"/>
+    <w:gridCol w:w="1093"/>
+    <w:gridCol w:w="1760"/>
+    <w:gridCol w:w="6604"/>
+  </w:tblGrid>
+  ${headerRow}
+  ${rowsXml}
+</w:tbl>`;
+  },
+
+  /**
+   * Tabla de observaciones y cuaderno
+   */
+  buildObsTable(planData) {
+    let notesText = '';
+    if (planData.classes && planData.classes.length > 0) {
+      const classNotes = planData.classes
+        .map((c, i) => {
+          const obs = (c.observations || '').trim();
+          if (!obs) return null;
+          if (planData.classes.length === 1) return obs;
+          const cNum = c.dayNumber ? `Clase ${String(c.dayNumber).replace(/[^0-9]/g, '') || c.dayNumber}` : `Clase ${i + 1}`;
+          const cSub = c.subject ? ` (${c.subject})` : '';
+          return `• ${cNum}${cSub}: ${obs}`;
+        })
+        .filter(Boolean);
+      if (classNotes.length > 0) notesText = classNotes.join('\n');
+    }
+    if (!notesText && planData.generalNotes) notesText = planData.generalNotes;
+
+    const obsParagraphs = notesText
+      ? notesText.split('\n').map(line => `<w:p>
+  <w:pPr><w:jc w:val="both"/><w:rPr><w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/><w:sz w:val="20"/><w:szCs w:val="20"/></w:rPr></w:pPr>
+  <w:r><w:rPr><w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/><w:sz w:val="20"/><w:szCs w:val="20"/></w:rPr><w:t xml:space="preserve">${escapeXml(line)}</w:t></w:r>
+</w:p>`).join('')
+      : `<w:p><w:pPr><w:rPr><w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/><w:sz w:val="20"/><w:szCs w:val="20"/></w:rPr></w:pPr></w:p>`;
+
+    const cuadernoCell = `<w:p>
+  <w:pPr><w:jc w:val="center"/><w:rPr><w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/><w:sz w:val="20"/><w:szCs w:val="20"/></w:rPr></w:pPr>
+</w:p>`;
+
+    return `<w:tbl>
+  <w:tblPr>
+    <w:tblStyle w:val="Tablaconcuadrcula"/>
+    <w:tblW w:w="5000" w:type="pct"/>
+    <w:tblInd w:w="-289" w:type="dxa"/>
+    <w:tblLayout w:type="fixed"/>
+    <w:tblCellMar>
+      <w:top w:w="55" w:type="dxa"/>
+      <w:left w:w="108" w:type="dxa"/>
+      <w:bottom w:w="55" w:type="dxa"/>
+      <w:right w:w="108" w:type="dxa"/>
+    </w:tblCellMar>
+    <w:tblLook w:val="04A0" w:firstRow="1" w:lastRow="0" w:firstColumn="1" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/>
+  </w:tblPr>
+  <w:tblGrid>
+    <w:gridCol w:w="10418"/>
+    <w:gridCol w:w="3473"/>
+  </w:tblGrid>
+  <w:tr>
+    <w:trPr><w:trHeight w:val="300" w:hRule="atLeast"/></w:trPr>
+    <w:tc>
+      <w:tcPr><w:tcW w:w="3750" w:type="pct"/><w:vAlign w:val="top"/></w:tcPr>
+      <w:p>
+        <w:pPr>
+          <w:spacing w:before="40" w:after="40"/>
+          <w:rPr><w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/><w:b/><w:bCs/><w:sz w:val="20"/><w:szCs w:val="20"/></w:rPr>
+        </w:pPr>
+        <w:r><w:rPr><w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/><w:b/><w:bCs/><w:sz w:val="20"/><w:szCs w:val="20"/></w:rPr><w:t>OBSERVACIONES:</w:t></w:r>
+      </w:p>
+      ${obsParagraphs}
+    </w:tc>
+    <w:tc>
+      <w:tcPr><w:tcW w:w="1250" w:type="pct"/><w:vAlign w:val="top"/></w:tcPr>
+      <w:p>
+        <w:pPr>
+          <w:spacing w:before="40" w:after="40"/>
+          <w:jc w:val="center"/>
+          <w:rPr><w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/><w:b/><w:bCs/><w:sz w:val="20"/><w:szCs w:val="20"/></w:rPr>
+        </w:pPr>
+        <w:r><w:rPr><w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/><w:b/><w:bCs/><w:sz w:val="20"/><w:szCs w:val="20"/></w:rPr><w:t>CUADERNO</w:t></w:r>
+      </w:p>
+      ${cuadernoCell}
+    </w:tc>
+  </w:tr>
+</w:tbl>`;
+  },
+
+  /**
+   * Tabla de revisión de coordinación académica (opcional)
+   */
+  buildCoordTable(rev) {
+    const statusTitle = rev.status === 'approved'
+      ? 'REVISIÓN &amp; VISTO BUENO OFICIAL: APROBADO'
+      : (rev.status === 'approved_with_notes' ? 'REVISIÓN DE COORDINACIÓN: APROBADO CON SUGERENCIAS' : 'REVISIÓN DE COORDINACIÓN: REQUIERE AJUSTES');
+    const reviewer = escapeXml(rev.reviewerName || 'Coordinación Académica');
+    const revDate = escapeXml(rev.date || '');
+    const revComments = rev.comments ? escapeXml(rev.comments) : '';
+
+    return `<w:tbl>
+  <w:tblPr>
+    <w:tblStyle w:val="Tablaconcuadrcula"/>
+    <w:tblW w:w="5008" w:type="pct"/>
+    <w:tblInd w:w="-289" w:type="dxa"/>
+    <w:tblBorders>
+      <w:top w:val="single" w:sz="6" w:space="0" w:color="0284C7"/>
+      <w:left w:val="single" w:sz="6" w:space="0" w:color="0284C7"/>
+      <w:bottom w:val="single" w:sz="6" w:space="0" w:color="0284C7"/>
+      <w:right w:val="single" w:sz="6" w:space="0" w:color="0284C7"/>
+      <w:insideH w:val="single" w:sz="4" w:space="0" w:color="BAE6FD"/>
+      <w:insideV w:val="none"/>
+    </w:tblBorders>
+  </w:tblPr>
+  <w:tblGrid><w:gridCol w:w="13892"/></w:tblGrid>
+  <w:tr>
+    <w:tc>
+      <w:tcPr><w:tcW w:w="5008" w:type="pct"/><w:shd w:val="clear" w:color="auto" w:fill="F0F9FF"/></w:tcPr>
+      <w:p><w:pPr><w:rPr><w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/><w:b/><w:sz w:val="20"/><w:color w:val="0369A1"/></w:rPr></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/><w:b/><w:sz w:val="20"/><w:color w:val="0369A1"/></w:rPr><w:t>${statusTitle}</w:t></w:r></w:p>
+      ${revComments ? `<w:p><w:pPr><w:rPr><w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/><w:i/><w:sz w:val="18"/><w:color w:val="1E293B"/></w:rPr></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/><w:i/><w:sz w:val="18"/><w:color w:val="1E293B"/></w:rPr><w:t xml:space="preserve">"${revComments}"</w:t></w:r></w:p>` : ''}
+      <w:p><w:pPr><w:jc w:val="right"/><w:rPr><w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/><w:sz w:val="16"/><w:color w:val="64748B"/></w:rPr></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Arial Narrow" w:hAnsi="Arial Narrow"/><w:sz w:val="16"/><w:color w:val="64748B"/></w:rPr><w:t xml:space="preserve">Revisado por: ${reviewer}  •  Fecha: ${revDate}</w:t></w:r></w:p>
+    </w:tc>
+  </w:tr>
+</w:tbl>`;
   },
 
   getWeekRangeFallback(dateStr) {

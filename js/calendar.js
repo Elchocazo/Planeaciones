@@ -66,6 +66,17 @@ class CalendarComponent {
     const profile = StorageService.getProfile();
     const workDays = profile?.workDays || ['1', '2', '3', '4', '5'];
 
+    // Obtener TODAS las clases directamente desde ClassRepository (desacoplado y persistente)
+    const tid = (typeof ClassRepository !== 'undefined') ? ClassRepository._getCurrentTeacherId() : null;
+    const allRepoClasses = (typeof ClassRepository !== 'undefined') ? ClassRepository.getAllClasses(tid) : [];
+    const repoClassesByDate = {};
+    allRepoClasses.forEach(cls => {
+      if (cls.date) {
+        if (!repoClassesByDate[cls.date]) repoClassesByDate[cls.date] = [];
+        repoClassesByDate[cls.date].push(cls);
+      }
+    });
+
     // Primer día del mes
     const firstDayOfMonth = new Date(this.selectedYear, this.selectedMonth, 1);
     // Último día del mes
@@ -112,12 +123,15 @@ class CalendarComponent {
       const isWorkDay = workDays.includes(standardDay);
 
       const isToday = isCurrentYearAndMonth && today.getDate() === day;
+      const repoClassesForDay = repoClassesByDate[dateStr] || [];
       const plan = allPlans[dateStr];
-      const hasPlan = plan && plan.classes && plan.classes.length > 0;
+      const planClasses = plan && plan.classes ? plan.classes : [];
+      const dayClassesCount = Math.max(repoClassesForDay.length, planClasses.length);
+      const hasPlan = dayClassesCount > 0;
 
       if (hasPlan) {
         monthlyPlansCount++;
-        monthlyClassesCount += plan.classes.length;
+        monthlyClassesCount += dayClassesCount;
       }
 
       // Obtener festivos colombianos o eventos institucionales
@@ -176,8 +190,10 @@ class CalendarComponent {
       }
 
       if (hasPlan) {
-        // Mostrar hasta 2 materias
-        const subjects = [...new Set(plan.classes.map(c => c.subject).filter(Boolean))];
+        // Mostrar hasta 2 materias combinando repo y plan
+        const subjectsFromRepo = repoClassesForDay.map(c => c.subjectName || c.subject).filter(Boolean);
+        const subjectsFromPlan = planClasses.map(c => c.subject).filter(Boolean);
+        const subjects = [...new Set([...subjectsFromRepo, ...subjectsFromPlan])];
         const displaySubjects = subjects.slice(0, 2);
         
         displaySubjects.forEach(sub => {
@@ -203,7 +219,7 @@ class CalendarComponent {
                 <button type="button" class="btn-day-quick-download" onclick="event.stopPropagation(); App.openDayDownloadModal('${dateStr}')" title="Descargar planeación de este día (Día completo o clase individual en Word/PDF)" style="background: none; border: none; cursor: pointer; padding: 0 2px; font-size: 0.82rem; line-height: 1; transition: transform 0.15s ease;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">
                   📥
                 </button>
-                <span class="day-plans-count" title="${plan.classes.length} clases planeadas">${plan.classes.length} cls</span>
+                <span class="day-plans-count" title="${dayClassesCount} clases registradas">${dayClassesCount} cls</span>
               ` : ''}
             </div>
           </div>

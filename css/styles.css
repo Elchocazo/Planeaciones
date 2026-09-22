@@ -84,6 +84,13 @@ button, input, select, textarea {
   font-family: inherit;
   font-size: inherit;
   color: inherit;
+  box-sizing: border-box;
+}
+
+textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 button {
@@ -1487,21 +1494,24 @@ button {
   margin-bottom: 0.4rem;
 }
 
-.form-input, .form-select {
+.form-input, .form-select, .form-textarea {
   width: 100%;
-  border: 1px solid var(--slate-300);
+  box-sizing: border-box;
+  border: 1.5px solid var(--slate-300);
   border-radius: var(--radius-md);
-  padding: 0.65rem 0.85rem;
-  font-size: 0.9rem;
+  padding: 0.75rem 1rem;
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  line-height: 1.5;
   color: var(--slate-800);
   background: #ffffff;
   transition: var(--transition-fast);
 }
 
-.form-input:focus, .form-select:focus {
+.form-input:focus, .form-select:focus, .form-textarea:focus {
   outline: none;
   border-color: var(--primary-500);
-  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
 }
 
 .form-helper {
@@ -1759,9 +1769,18 @@ button {
   vertical-align: middle;
 }
 
+.preparador-main-table td:nth-child(4),
+.preparador-main-table td:nth-child(5),
+.preparador-main-table td:nth-child(7) {
+  text-align: justify;
+  text-justify: inter-word;
+}
+
 .preparador-cell-p {
   margin: 0 0 4px 0;
   line-height: 1.3;
+  text-align: justify;
+  text-justify: inter-word;
 }
 
 .preparador-cell-p:last-child {
@@ -1771,6 +1790,8 @@ button {
 .preparador-phase-title {
   margin: 6px 0 2px 0;
   font-weight: bold;
+  text-align: justify;
+  text-justify: inter-word;
 }
 
 /* Sección de Observaciones Estructurada (Nuevo Formato Oficial) */
@@ -1799,11 +1820,15 @@ button {
   width: 85%;
   font-size: 8.5pt;
   min-height: 36px;
+  text-align: justify;
+  text-justify: inter-word;
 }
 
 .preparador-obs-table .obs-text-line {
   margin-bottom: 3px;
   line-height: 1.3;
+  text-align: justify;
+  text-justify: inter-word;
 }
 
 .preparador-obs-table .obs-empty-line {
@@ -2030,7 +2055,7 @@ button {
   .preparador-main-table td {
     page-break-inside: auto !important;
     break-inside: auto !important;
-    padding: 4px 4px !important;
+    padding: 4px 5px !important;
     font-size: 8pt !important;
     line-height: 1.25 !important;
   }
@@ -2038,7 +2063,7 @@ button {
   .preparador-main-table th {
     page-break-inside: avoid !important;
     break-inside: avoid !important;
-    padding: 4px 4px !important;
+    padding: 4px 5px !important;
     font-size: 8pt !important;
     line-height: 1.25 !important;
     background-color: #f5f5f5 !important;
@@ -2047,7 +2072,14 @@ button {
     vertical-align: middle !important;
   }
 
-  /* Párrafos estructurados con flujo continuo que se fragmentan naturalmente entre páginas */
+  .preparador-main-table td:nth-child(4),
+  .preparador-main-table td:nth-child(5),
+  .preparador-main-table td:nth-child(7) {
+    text-align: justify !important;
+    text-justify: inter-word !important;
+  }
+
+  /* Párrafos estructurados con flujo continuo que evitan orfandad */
   .preparador-cell-p {
     margin: 0 0 3px 0 !important;
     line-height: 1.25 !important;
@@ -2055,21 +2087,25 @@ button {
     break-inside: auto !important;
     orphans: 2 !important;
     widows: 2 !important;
+    text-align: justify !important;
+    text-justify: inter-word !important;
   }
 
   .preparador-cell-p:last-child {
     margin-bottom: 0 !important;
   }
 
-  /* Títulos y subtítulos de fase pedagógica */
+  /* Títulos y subtítulos de fase pedagógica nunca separados de su texto */
   .preparador-phase-title {
     margin: 4px 0 2px 0 !important;
-    page-break-inside: auto !important;
-    break-inside: auto !important;
-    page-break-after: auto !important;
-    break-after: auto !important;
-    orphans: 2 !important;
-    widows: 2 !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+    orphans: 3 !important;
+    widows: 3 !important;
+    text-align: justify !important;
+    text-justify: inter-word !important;
   }
 
   /* Sección de Observaciones Estructurada (Nuevo Formato Oficial) */
@@ -2100,11 +2136,15 @@ button {
   .preparador-obs-table .obs-content-cell {
     width: 85% !important;
     font-size: 8pt !important;
+    text-align: justify !important;
+    text-justify: inter-word !important;
   }
 
   .preparador-obs-table .obs-text-line {
     margin-bottom: 2px !important;
     line-height: 1.25 !important;
+    text-align: justify !important;
+    text-justify: inter-word !important;
   }
 
   /* Sección de Observaciones reglada (Fallback) */
@@ -3488,8 +3528,9 @@ body.notebook-mode .app-container {
   width: 100%;
   max-width: 860px;
   min-height: 1050px;
-  padding: 2.5rem 3.5rem;
-  border-radius: 8px;
+  /* Margen Estrecho estándar (1.27cm a cada lado) */
+  padding: 1.27cm;
+  border-radius: 4px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05);
   border: 1px solid #e2e8f0;
   display: flex;
@@ -3518,238 +3559,2087 @@ body.notebook-mode .app-container {
 }
 
 .notebook-single-editor-body p {
-  margin: 0.65rem 0;
-  min-height: 1.5em;
+  margin-bottom: 0.8rem;
+  line-height: 1.65;
 }
 
 .notebook-single-editor-body h1 {
   font-size: 1.5rem;
-  font-weight: 800;
-  color: var(--slate-900);
+  color: #1e3a8a;
   margin-top: 1.5rem;
-  margin-bottom: 0.6rem;
-  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 0.5rem;
+  font-weight: 700;
+  border-bottom: 2px solid #bfdbfe;
   padding-bottom: 4px;
 }
 
 .notebook-single-editor-body h2 {
   font-size: 1.25rem;
-  font-weight: 700;
-  color: var(--primary-800);
-  margin-top: 1.3rem;
+  color: #1e3a8a;
+  margin-top: 1.25rem;
   margin-bottom: 0.5rem;
+  font-weight: 700;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 3px;
 }
 
 .notebook-single-editor-body h3 {
   font-size: 1.1rem;
-  font-weight: 600;
-  color: var(--slate-800);
-  margin-top: 1.1rem;
+  color: #1e293b;
+  margin-top: 1rem;
   margin-bottom: 0.4rem;
+  font-weight: 600;
 }
 
 .notebook-single-editor-body ul,
 .notebook-single-editor-body ol {
-  padding-left: 1.8rem;
-  margin: 0.65rem 0;
+  margin: 0.5rem 0 1rem 1.5rem;
+  padding-left: 0.5rem;
+  line-height: 1.65;
 }
 
 .notebook-single-editor-body li {
   margin-bottom: 0.35rem;
 }
 
-.notebook-single-editor-body table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 1.2rem 0;
+.notebook-single-editor-body blockquote {
+  border-left: 4px solid var(--primary-500);
+  background: var(--slate-50);
+  padding: 8px 14px;
+  margin: 1rem 0;
+  font-style: italic;
+  color: var(--slate-700);
+  border-radius: 0 4px 4px 0;
 }
 
-.notebook-single-editor-body th,
-.notebook-single-editor-body td {
-  border: 1px solid #cbd5e1;
-  padding: 8px 12px;
+.notebook-callout {
+  padding: 10px 14px;
+  border-radius: 6px;
+  margin: 1rem 0;
+  line-height: 1.6;
   font-size: 0.95rem;
 }
 
-.notebook-single-editor-body th {
-  background: #f8fafc;
-  font-weight: 700;
-  color: var(--slate-800);
+.notebook-callout.concept {
+  background: #ecfdf5;
+  border-left: 4px solid #10b981;
+  color: #064e3b;
 }
 
-/* Salto de página visual tipo Word / Google Docs */
+.notebook-callout.activity {
+  background: #eff6ff;
+  border-left: 4px solid #3b82f6;
+  color: #1e3a8a;
+}
+
+.notebook-callout.homework {
+  background: #fffbeb;
+  border-left: 4px solid #f59e0b;
+  color: #78350f;
+}
+
+.notebook-callout strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 0.95rem;
+}
+
+.notebook-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+}
+
+.notebook-table th,
+.notebook-table td {
+  border: 1px solid #cbd5e1;
+  padding: 8px 12px;
+  font-size: 0.9rem;
+}
+
+.notebook-table th {
+  background: #f8fafc;
+  font-weight: 700;
+  color: #1e293b;
+}
+
 .notebook-page-break {
-  margin: 2.5rem 0;
   position: relative;
+  margin: 2rem 0;
+  text-align: center;
   user-select: none;
-  cursor: default;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .notebook-page-break .page-break-line {
+  border-top: 2px dashed #94a3b8;
+  width: 100%;
   position: absolute;
   top: 50%;
   left: 0;
-  right: 0;
-  border-top: 2px dashed #94a3b8;
   z-index: 1;
 }
 
 .notebook-page-break .page-break-label {
   position: relative;
   z-index: 2;
-  background: #ffffff;
-  padding: 4px 14px;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 2px 12px;
   border-radius: 12px;
   border: 1px solid #cbd5e1;
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: #64748b;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
 
 .notebook-document-footer {
-  margin-top: 2.5rem;
+  margin-top: 2rem;
   padding-top: 1rem;
   border-top: 1px solid #e2e8f0;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 0.8rem;
-  color: #94a3b8;
 }
 
-/* Optimización Integral para Impresión de Cuaderno / Guía Pedagógica */
+/* ==========================================================================
+   IMPRESIÓN DEL CUADERNO / GUÍA PEDAGÓGICA — ESTRATEGIA DE LISTA BLANCA
+   Se muestra SOLO el contenido del documento. Todo lo demás se oculta.
+   Activado con body.printing-notebook (aplicado por printNotebook() en JS).
+   ========================================================================== */
 @media print {
-  body.notebook-mode,
-  body.printing-notebook {
-    background: #ffffff !important;
-    padding: 0 !important;
-    margin: 0 !important;
+
+  /* --- PASO 1: OCULTAR TODO EL DOM POR DEFECTO --- */
+  body.printing-notebook * {
+    visibility: hidden;
   }
 
-  body.notebook-mode .app-container,
-  body.printing-notebook .app-container {
-    display: block !important;
+  /* --- PASO 2: MOSTRAR SOLO EL CONTENIDO DEL CUADERNO --- */
+  /* El paper-container y todos sus descendientes se hacen visibles */
+  body.printing-notebook .notebook-paper-container,
+  body.printing-notebook .notebook-paper-container * {
+    visibility: visible;
+  }
+
+  /* El div de observaciones generado para impresión también es visible */
+  body.printing-notebook #nb-print-obs-div,
+  body.printing-notebook #nb-print-obs-div * {
+    visibility: visible;
+  }
+
+  /* --- PASO 3: POSICIONAR EL DOCUMENTO EN LA PÁGINA --- */
+  /* El paper-container ocupa toda la página impresa con Margen Estrecho (1.27cm a cada lado) */
+  body.printing-notebook .notebook-paper-container {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
     width: 100% !important;
     max-width: 100% !important;
     margin: 0 !important;
-    padding: 0 !important;
-    border: none !important;
-    background: #ffffff !important;
-  }
-
-  body.notebook-mode #notebook-view,
-  body.printing-notebook #notebook-view {
-    display: block !important;
-    width: 100% !important;
-    margin: 0 !important;
-    padding: 0 !important;
-  }
-
-  body.notebook-mode #notebook-mount-point,
-  body.printing-notebook #notebook-mount-point {
-    display: block !important;
-    width: 100% !important;
-    margin: 0 !important;
-    padding: 0 !important;
-  }
-
-  body.notebook-mode .main-header,
-  body.printing-notebook .main-header,
-  body.notebook-mode #app-main-header,
-  body.printing-notebook #app-main-header,
-  body.notebook-mode .notebook-sticky-header-wrapper,
-  body.printing-notebook .notebook-sticky-header-wrapper,
-  body.notebook-mode #notebook-conflict-banner,
-  body.printing-notebook #notebook-conflict-banner,
-  body.notebook-mode .btn,
-  body.printing-notebook .btn,
-  body.notebook-mode .btn-secondary,
-  body.printing-notebook .btn-secondary,
-  body.notebook-mode .btn-primary,
-  body.printing-notebook .btn-primary,
-  body.notebook-mode .modal-backdrop,
-  body.printing-notebook .modal-backdrop,
-  body.notebook-mode .toast-container,
-  body.printing-notebook .toast-container,
-  body.notebook-mode #calendar-view,
-  body.printing-notebook #calendar-view,
-  body.notebook-mode #planner-view,
-  body.printing-notebook #planner-view,
-  body.notebook-mode #printable-report,
-  body.printing-notebook #printable-report {
-    display: none !important;
-  }
-
-  body.notebook-mode .notebook-document-scroll-wrapper,
-  body.printing-notebook .notebook-document-scroll-wrapper {
-    background: transparent !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    width: 100% !important;
-    display: block !important;
-    overflow: visible !important;
-  }
-
-  body.notebook-mode .notebook-paper-container,
-  body.printing-notebook .notebook-paper-container {
+    /* Margen Estrecho oficial: 1.27cm (0.5 pulgadas) */
+    padding: 1.27cm !important;
     box-shadow: none !important;
     border: none !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    max-width: 100% !important;
-    width: 100% !important;
-    display: block !important;
-    min-height: auto !important;
     background: #ffffff !important;
+    box-sizing: border-box !important;
   }
 
+  /* --- PASO 4: ELIMINAR ELEMENTOS DEL EDITOR QUE NO SON DOCUMENTO --- */
+
+  /* Marcadores Hoja 2, Hoja 3 — completamente ocultos */
+  body.printing-notebook .nb-auto-page-break {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  /* Herramienta de imagen flotante */
+  body.printing-notebook #nb-img-toolbar {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  /* Outline de imagen seleccionada */
+  body.printing-notebook .nb-img-selected {
+    outline: none !important;
+  }
+
+  /* Ocultar el textarea real (se reemplaza por #nb-print-obs-div en JS) */
+  body.printing-notebook #hdr-edit-observations {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  /* Contador de palabras */
+  body.printing-notebook #doc-word-count-badge,
+  body.printing-notebook .notebook-word-count-footer,
+  body.printing-notebook .notebook-document-footer {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  /* --- PASO 5: LIMPIEZA VISUAL DEL DOCUMENTO --- */
+
+  /* Editor de texto — quitar borde de contenteditable */
+  body.printing-notebook #notebook-single-editor {
+    border: none !important;
+    outline: none !important;
+    padding: 0 !important;
+    min-height: auto !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  /* Encabezado institucional del cuaderno — conservar sin sombra */
+  body.printing-notebook .notebook-page-header-card {
+    box-shadow: none !important;
+    border: 1px solid #e2e8f0 !important;
+    margin-bottom: 1rem !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* Sección de observaciones — aspecto de documento, no de formulario */
+  body.printing-notebook .notebook-observations-card {
+    border-top: 1.5px dashed #94a3b8 !important;
+    padding-top: 0.8rem !important;
+    margin-top: 1.5rem !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* Div de observaciones para impresión (generado por JS) */
+  body.printing-notebook #nb-print-obs-div {
+    font-size: 0.85rem !important;
+    line-height: 1.6 !important;
+    color: #1e293b !important;
+    white-space: pre-wrap !important;
+    padding: 0.5rem 0 0 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    background: transparent !important;
+  }
+
+  /* --- PASO 6: SALTOS DE PÁGINA MANUALES (insertados por el usuario con Ctrl+Enter) --- */
   .notebook-page-break {
-    page-break-after: always;
-    break-after: page;
-    height: 0;
-    margin: 0;
-    padding: 0;
-    border: none;
+    page-break-after: always !important;
+    break-after: page !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    background: none !important;
   }
 
   .notebook-page-break .page-break-line,
   .notebook-page-break .page-break-label {
     display: none !important;
+    visibility: hidden !important;
   }
 
-  .notebook-observations-card {
+  /* --- PASO 7: PAGINACIÓN INTELIGENTE — EVITAR CORTES MALOS --- */
+
+  /* Párrafos: orphans y widows evitan líneas sueltas al inicio/fin de página */
+  body.printing-notebook #notebook-single-editor p {
+    orphans: 3 !important;
+    widows: 3 !important;
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+    margin-bottom: 0.5rem !important;
+  }
+
+  /* Encabezados: nunca solos al final de una página */
+  body.printing-notebook #notebook-single-editor h1,
+  body.printing-notebook #notebook-single-editor h2,
+  body.printing-notebook #notebook-single-editor h3,
+  body.printing-notebook #notebook-single-editor h4 {
+    page-break-after: avoid !important;
+    break-after: avoid !important;
     page-break-inside: avoid !important;
     break-inside: avoid !important;
-    margin-top: 2rem !important;
-    border-top: 1px dashed #94a3b8 !important;
-    padding-top: 0.8rem !important;
-    display: block !important;
+    orphans: 3 !important;
+    widows: 3 !important;
   }
 
-  .notebook-observations-card textarea {
-    border: 1px solid #cbd5e1 !important;
-    background: transparent !important;
-    min-height: 80px !important;
+  /* Callouts y cuadros de concepto: mantener unidos */
+  body.printing-notebook #notebook-single-editor .notebook-callout,
+  body.printing-notebook #notebook-single-editor .notebook-callout * {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* Tablas: el encabezado se repite y las filas fluyen con naturalidad */
+  body.printing-notebook #notebook-single-editor table {
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+  }
+
+  body.printing-notebook #notebook-single-editor thead {
+    display: table-header-group !important;
+  }
+
+  body.printing-notebook #notebook-single-editor tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* Imágenes: evitar que queden partidas */
+  body.printing-notebook #notebook-single-editor img {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    max-width: 100% !important;
     height: auto !important;
-    max-height: none !important;
-    font-size: 0.85rem !important;
-    width: 100% !important;
-    display: block !important;
-    resize: none !important;
-    white-space: pre-wrap !important;
-    overflow: visible !important;
   }
 
-  .notebook-document-footer {
+  /* Listas: preferir mantenerlas juntas si caben */
+  body.printing-notebook #notebook-single-editor ul,
+  body.printing-notebook #notebook-single-editor ol {
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+    orphans: 3 !important;
+    widows: 3 !important;
+  }
+
+  body.printing-notebook #notebook-single-editor li {
     page-break-inside: avoid !important;
     break-inside: avoid !important;
-    margin-top: 1.5rem !important;
-    padding-top: 0.5rem !important;
+  }
+
+  /* Bloques div genéricos (wrappers de imagen, etc.) */
+  body.printing-notebook #notebook-single-editor div {
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+  }
+
+  /* Wrapper de imagen con texto asociado: mantener juntos si caben */
+  body.printing-notebook #notebook-single-editor div > img:only-child,
+  body.printing-notebook #notebook-single-editor div[style*="text-align"] {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+}
+
+
+/* =========================================================================
+   NUEVA ARQUITECTURA: ESTILOS DE NAVEGACIÓN PRINCIPAL Y COMPONENTES
+   ========================================================================= */
+
+/* Barra de Navegación Principal */
+.main-nav-tabs-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff;
+  border-bottom: 2px solid var(--slate-200);
+  padding: 0 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.app-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0.75rem 1.15rem;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--slate-600);
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-bottom: -2px;
+}
+
+.app-nav-btn:hover {
+  color: var(--primary-600);
+  background: var(--slate-50);
+}
+
+.app-nav-btn.active {
+  color: var(--primary-700);
+  border-bottom-color: var(--primary-600);
+  background: #ffffff;
+}
+
+/* DASHBOARD / INICIO */
+.dashboard-page-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 1rem 2rem 1rem;
+}
+
+.dashboard-header-card {
+  background: #ffffff;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.dashboard-badge-today {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  background: var(--primary-50);
+  color: var(--primary-700);
+  padding: 3px 8px;
+  border-radius: 6px;
+  margin-bottom: 4px;
+}
+
+.dashboard-date-title {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: var(--slate-800);
+}
+
+.dashboard-date-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dashboard-date-input {
+  border: 1px solid var(--slate-300);
+  border-radius: var(--radius-md);
+  padding: 0.35rem 0.65rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--slate-700);
+}
+
+.dashboard-stats-row {
+  display: flex;
+  gap: 10px;
+}
+
+.stat-pill {
+  background: var(--slate-100);
+  border-radius: 8px;
+  padding: 0.5rem 0.85rem;
+  text-align: center;
+  min-width: 80px;
+}
+
+.stat-pill .stat-num {
+  display: block;
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: var(--slate-800);
+  line-height: 1.1;
+}
+
+.stat-pill .stat-desc {
+  font-size: 0.72rem;
+  color: var(--slate-500);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.stat-pill.success {
+  background: #ecfdf5;
+}
+.stat-pill.success .stat-num {
+  color: #059669;
+}
+
+.stat-pill.warning {
+  background: #fffbeb;
+}
+.stat-pill.warning .stat-num {
+  color: #d97706;
+}
+
+/* Banner de Próxima Clase Pendiente */
+.dashboard-hero-banner {
+  background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+  color: #ffffff;
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  box-shadow: var(--shadow-md);
+}
+
+.dashboard-hero-banner.completed {
+  background: linear-gradient(135deg, #065f46 0%, #059669 100%);
+}
+
+.hero-tag {
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.hero-subject {
+  margin: 0.4rem 0 0.25rem 0;
+  font-size: 1.45rem;
+  font-weight: 800;
+}
+
+.hero-meta {
+  margin: 0;
+  font-size: 0.9rem;
+  opacity: 0.9;
+}
+
+.dashboard-main-columns {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 1.25rem;
+}
+
+@media (max-width: 900px) {
+  .dashboard-main-columns {
+    grid-template-columns: 1fr;
   }
 }
 
+.section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.85rem;
+}
+
+.section-title-row h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--slate-800);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Tarjetas de Clases del Día */
+.dashboard-classes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.class-schedule-card {
+  background: #ffffff;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-md);
+  padding: 1rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.class-schedule-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.class-schedule-card.status-planned {
+  border-left: 4px solid #10b981;
+}
+
+.class-schedule-card.status-pending {
+  border-left: 4px solid #f59e0b;
+}
+
+.class-card-time {
+  min-width: 105px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.card-time-str {
+  display: block;
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: var(--slate-800);
+}
+
+.card-homeroom-tag {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--slate-500);
+  background: var(--slate-100);
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-top: 4px;
+}
+
+.card-homeroom-tag.tag-homeroom {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.class-card-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.class-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.class-subject-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--slate-900);
+}
+
+.class-seq-badge {
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: var(--primary-700);
+  background: var(--primary-50);
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+
+.class-status-badge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 10px;
+}
+
+.class-status-badge.badge-planned {
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+}
+
+.class-status-badge.badge-pending {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.class-topic-preview {
+  margin: 0 0 4px 0;
+  font-size: 0.85rem;
+  color: var(--slate-700);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.class-pedagogy-snippet {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--slate-500);
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.class-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* Barra Lateral de Progreso */
+.dashboard-progress-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.dashboard-progress-sidebar .section-title-row h3 {
+  font-size: 0.95rem;
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.3;
+}
+
+.dashboard-progress-list {
+  background: #ffffff;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: var(--shadow-sm);
+}
+
+.progress-item-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.progress-title-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+}
+
+.progress-bar-track {
+  background: var(--slate-100);
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  background: linear-gradient(90deg, #3b82f6 0%, #10b981 100%);
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.4s ease;
+}
+
+.progress-sub-text {
+  font-size: 0.72rem;
+  color: var(--slate-500);
+}
+
+.dashboard-quick-actions-card {
+  background: #ffffff;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dashboard-quick-actions-card h4 {
+  margin: 0 0 6px 0;
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: var(--slate-700);
+}
+
+.btn-block {
+  width: 100%;
+  text-align: center;
+  justify-content: center;
+}
+
+/* =========================================================================
+   ESTILOS DEL EDITOR DE CLASE INDIVIDUAL (ClassEditorView)
+   ========================================================================= */
+
+.class-editor-layout {
+  max-width: 1380px;
+  margin: 0 auto;
+  padding: 0 1.25rem 3rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.class-editor-header {
+  background: #ffffff;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-lg);
+  padding: 1rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  box-shadow: var(--shadow-sm);
+  position: sticky;
+  top: 10px;
+  z-index: 100;
+}
+
+.class-editor-header .header-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.class-title-subject {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--slate-900);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.class-header-seq {
+  background: var(--primary-100);
+  color: var(--primary-800);
+  font-size: 0.85rem;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.class-header-sub {
+  font-size: 0.8rem;
+  color: var(--slate-500);
+}
+
+.editor-save-badge {
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 20px;
+  transition: all 0.2s ease;
+}
+
+.editor-save-badge.status-saved {
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+}
+
+.editor-save-badge.status-dirty {
+  background: #fffbeb;
+  color: #d97706;
+  border: 1px solid #fde68a;
+}
+
+.editor-save-badge.status-saving {
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+}
+
+.editor-save-badge.status-error {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+.class-editor-header .header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.class-editor-subbar {
+  background: var(--slate-100);
+  border-radius: var(--radius-md);
+  padding: 0.65rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.subbar-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.subbar-modes {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.editor-section {
+  background: #ffffff;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.editor-section .section-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+  border-bottom: 1px solid var(--slate-100);
+  padding-bottom: 0.75rem;
+}
+
+.editor-section .section-header-bar h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--slate-800);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.curriculum-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+  width: 100%;
+}
+
+.curriculum-grid .full-width {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+.curriculum-grid .half-width {
+  width: 100%;
+}
+
+@media (max-width: 768px) {
+  .curriculum-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pedagogy-block {
+  margin-bottom: 1.5rem;
+  background: var(--slate-50);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem 1.5rem;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.pedagogy-block:focus-within {
+  background: #ffffff;
+  box-shadow: var(--shadow-sm);
+  border-color: var(--slate-300);
+}
+
+.pedagogy-block.block-inicio {
+  border-left: 5px solid #3b82f6;
+}
+
+.pedagogy-block.block-desarrollo {
+  border-left: 5px solid #10b981;
+}
+
+.pedagogy-block.block-cierre {
+  border-left: 5px solid #8b5cf6;
+}
+
+.pedagogy-label {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--slate-800);
+  margin-bottom: 0.65rem;
+}
+
+.phase-badge {
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 3px 10px;
+  border-radius: 6px;
+  letter-spacing: 0.03em;
+}
+
+.badge-inicio {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.badge-desarrollo {
+  background: #d1fae5;
+  color: #047857;
+}
+
+.badge-cierre {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+
+/* =========================================================================
+   ESTILOS MAESTROS DE CUADROS DE TEXTO Y FORMULARIO DEL EDITOR PEDAGÓGICO
+   ========================================================================= */
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 1.25rem;
+  width: 100%;
+}
+
+.form-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--slate-700);
+  margin-bottom: 0.5rem;
+}
+
+.form-textarea,
+.form-group textarea,
+textarea.form-textarea,
+textarea.pedagogy-textarea {
+  display: block !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  padding: 0.85rem 1.15rem;
+  border: 1.5px solid var(--slate-300);
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  line-height: 1.65;
+  color: var(--slate-800);
+  background-color: #ffffff;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background-color var(--transition-fast);
+  resize: vertical;
+  min-height: 110px;
+}
+
+.form-textarea:focus,
+.form-group textarea:focus,
+textarea.form-textarea:focus,
+textarea.pedagogy-textarea:focus {
+  outline: none;
+  border-color: var(--primary-500);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+  background-color: #ffffff;
+}
+
+.form-textarea::placeholder {
+  color: var(--slate-400);
+  font-size: 0.9rem;
+  font-style: italic;
+  opacity: 0.85;
+}
+
+.pedagogy-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  line-height: 1.65;
+  background: #ffffff;
+}
+
+/* Alturas amplias, generosas y proporcionales para evitar recortes */
+#editor-input-nb-question {
+  min-height: 58px;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+#editor-input-nb-dynamics {
+  min-height: 180px;
+}
+
+#editor-input-nb-student-content {
+  min-height: 220px;
+}
+
+#editor-input-nb-practical-activity {
+  min-height: 200px;
+}
+
+#editor-input-nb-notes {
+  min-height: 110px;
+}
+
+#editor-input-desarrollo {
+  min-height: 210px;
+}
+
+#editor-input-inicio,
+#editor-input-cierre {
+  min-height: 135px;
+}
+
+#editor-input-dba,
+#editor-input-achievement {
+  min-height: 110px;
+}
+
+#editor-input-recursos,
+#editor-input-evaluacion,
+#editor-input-tareas,
+#editor-input-observaciones {
+  min-height: 95px;
+}
+
+.detailed-pedagogy-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+  width: 100%;
+  margin-top: 1.25rem;
+  border-top: 1px dashed var(--slate-200);
+  padding-top: 1.25rem;
+}
+
+.detailed-pedagogy-grid .half-width {
+  width: 100%;
+}
+
+@media (max-width: 768px) {
+  .detailed-pedagogy-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.editor-bottom-bar {
+  background: #ffffff;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-md);
+  padding: 1rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.bottom-right-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* =========================================================================
+   ESTILOS DE VISTA SECUENCIAS (SequenceView)
+   ========================================================================= */
+
+.sequences-page-layout {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1rem 3rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.sequences-header-card {
+  background: #ffffff;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.header-title-group h2 {
+  margin: 0 0 4px 0;
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: var(--slate-800);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-sub {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--slate-600);
+}
+
+.sequences-filter-bar {
+  display: flex;
+  gap: 6px;
+}
+
+.sequences-list-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.sequence-group-card {
+  background: #ffffff;
+  border: 1px solid var(--slate-200);
+  border-radius: var(--radius-md);
+  padding: 1.25rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.sequence-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--slate-100);
+  padding-bottom: 0.65rem;
+}
+
+.group-title-col h3 {
+  margin: 0 0 2px 0;
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--slate-900);
+}
+
+.group-meta {
+  font-size: 0.8rem;
+  color: var(--slate-500);
+}
+
+.sequence-classes-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.seq-class-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+}
+
+.seq-class-chip:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.seq-class-chip.chip-planned {
+  background: #ecfdf5;
+  color: #065f46;
+  border-color: #a7f3d0;
+}
+
+.seq-class-chip.chip-pending {
+  background: #fffbeb;
+  color: #92400e;
+  border-color: #fde68a;
+}
+
+.chip-status {
+  font-weight: 800;
+}
+
+.chip-date {
+  font-size: 0.72rem;
+  opacity: 0.8;
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   ESTILOS: IMPORTADOR INTELIGENTE DE PLANEACIONES
+   ========================================================================== */
+.import-context-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--slate-100);
+  border: 1px solid var(--slate-300);
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  color: var(--slate-800);
+}
+.import-context-pill.info {
+  background: var(--blue-50);
+  border-color: var(--primary-200);
+  color: var(--primary-800);
+}
+.import-context-pill .badge-seq {
+  background: var(--primary-600);
+  color: #fff;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+}
+.import-context-pill .badge-date {
+  font-size: 0.78rem;
+  color: var(--slate-600);
+}
+
+.import-detection-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px;
+  margin-bottom: 1rem;
+}
+.detection-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--slate-50);
+  border: 1px solid var(--slate-200);
+  font-size: 0.82rem;
+  color: var(--slate-600);
+}
+.detection-item.detected {
+  background: var(--accent-50);
+  border-color: #a7f3d0;
+  color: #065f46;
+  font-weight: 600;
+}
+.detection-item em {
+  font-style: normal;
+  font-weight: 700;
+  color: var(--slate-800);
+}
+
+.import-conflict-alert {
+  display: flex;
+  gap: 12px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  padding: 14px;
+  border-radius: var(--radius-md);
+  margin-bottom: 1.25rem;
+}
+.import-conflict-alert .alert-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.identity-resolution-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+.identity-resolution-options .radio-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.identity-resolution-options .radio-option.active {
+  border-color: var(--primary-600);
+  background: var(--primary-50);
+}
+.identity-resolution-options .radio-option input[type="radio"] {
+  margin-top: 3px;
+  cursor: pointer;
+}
+.identity-resolution-options .radio-option .desc {
+  font-size: 0.78rem;
+  color: var(--slate-500);
+  margin-top: 2px;
+}
+
+.preview-content-scroll {
+  max-height: 520px;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+.preview-fields-row {
+  display: flex;
+  gap: 12px;
+}
+.preview-fields-tabs {
+  background: var(--slate-50);
+  border: 1px solid var(--slate-200);
+  padding: 12px;
+  border-radius: var(--radius-md);
+  margin-top: 8px;
+}
+.preview-fields-tabs .tab-header {
+  font-size: 0.8rem;
+  color: var(--slate-700);
+  margin-bottom: 8px;
+}
+
+.import-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 1rem;
+  border-top: 1px solid var(--slate-200);
+}
+.footer-action-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.import-undo-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 10000;
+  box-shadow: var(--shadow-xl);
+  background: #1e293b;
+  color: #fff;
+  padding: 12px 18px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--slate-600);
+}
+
+/* ==========================================================================
+   ESTILOS: PESTAÑAS DUALES DEL EDITOR (Secuencia vs Cuaderno)
+   ========================================================================== */
+.editor-dual-tabs-bar {
+  display: flex;
+  gap: 8px;
+  border-bottom: 2px solid var(--slate-200);
+  margin-bottom: 1.25rem;
+  padding-bottom: 2px;
+}
+.editor-dual-tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border: none;
+  background: transparent;
+  font-family: var(--font-sans);
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--slate-500);
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-radius: 6px 6px 0 0;
+}
+.editor-dual-tab-btn:hover {
+  color: var(--primary-600);
+  background: var(--slate-50);
+}
+.editor-dual-tab-btn.active {
+  color: var(--primary-600);
+  border-bottom-color: var(--primary-600);
+  background: var(--primary-50);
+}
+.editor-dual-tab-btn .tab-badge {
+  font-size: 0.72rem;
+  padding: 2px 6px;
+  border-radius: var(--radius-full);
+  background: var(--slate-200);
+  color: var(--slate-700);
+  font-weight: 700;
+}
+.editor-dual-tab-btn.active .tab-badge {
+  background: var(--primary-600);
+  color: #fff;
+}
+
+.phase-duration-badge {
+  font-size: 0.72rem;
+  background: var(--slate-200);
+  color: var(--slate-700);
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  font-weight: 600;
+  margin-left: 6px;
+}
+
+/* ==========================================================================
+   ESTILOS: VISTA HISTORIAL Y RECUPERACIÓN
+   ========================================================================== */
+.history-page-layout, .recovery-page-layout {
+  padding: 1.5rem;
+  max-width: 1300px;
+  margin: 0 auto;
+}
+.history-filters-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  background: #fff;
+  padding: 14px 18px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--slate-200);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 1.5rem;
+  align-items: center;
+}
+.history-search-input {
+  flex: 1 1 260px;
+  min-width: 220px;
+}
+.history-filter-select {
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--slate-300);
+  font-size: 0.85rem;
+  background: #fff;
+}
+.history-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--slate-200);
+}
+.history-table th {
+  background: var(--slate-100);
+  color: var(--slate-700);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 12px 16px;
+  text-align: left;
+  border-bottom: 1px solid var(--slate-200);
+}
+.history-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--slate-100);
+  font-size: 0.85rem;
+  color: var(--slate-700);
+  vertical-align: middle;
+}
+.history-table tr:hover td {
+  background: var(--slate-50);
+}
+
+.recovery-banner-alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+  border-left: 5px solid #f59e0b;
+  padding: 12px 18px;
+  border-radius: var(--radius-md);
+  margin-bottom: 1.25rem;
+  color: #92400e;
+}
+.recovery-banner-alert strong {
+  color: #78350f;
+}
+
+/* ==========================================================================
+   PANEL DE MATERIAS Y CLASES (SequenceView)
+   ========================================================================== */
+.sequences-page-layout {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 1.25rem 0.5rem 3rem;
+}
+
+.sequences-header-card {
+  background: #ffffff;
+  border: 1px solid var(--slate-200);
+  border-radius: 14px;
+  padding: 1.25rem 1.5rem;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+}
+
+.seq-header-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.seq-header-icon {
+  font-size: 2rem;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  width: 50px;
+  height: 50px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.1);
+}
+
+.seq-period-selector-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f8fafc;
+  border: 1px solid var(--slate-200);
+  padding: 6px 12px;
+  border-radius: 10px;
+}
+
+.seq-period-label {
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: var(--slate-600);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.seq-period-pills {
+  display: flex;
+  gap: 4px;
+  background: #e2e8f0;
+  padding: 3px;
+  border-radius: 8px;
+}
+
+.seq-period-pill {
+  border: none;
+  background: transparent;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--slate-700);
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.seq-period-pill:hover {
+  background: rgba(255, 255, 255, 0.6);
+  color: #1e293b;
+}
+
+.seq-period-pill.active {
+  background: var(--primary-600);
+  color: #ffffff;
+  box-shadow: 0 1px 4px rgba(37, 99, 235, 0.3);
+}
+
+/* KPI Summary Bar */
+.seq-kpi-summary-bar {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  background: #f8fafc;
+  border: 1px solid var(--slate-200);
+  border-radius: 10px;
+  padding: 12px 18px;
+  margin: 1.1rem 0;
+  flex-wrap: wrap;
+}
+
+.seq-kpi-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-right: 1px solid var(--slate-200);
+  padding-right: 18px;
+}
+
+.seq-kpi-item:nth-child(4) {
+  border-right: none;
+}
+
+.kpi-icon {
+  font-size: 1.35rem;
+}
+
+.kpi-value {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #1e293b;
+  line-height: 1.1;
+}
+
+.kpi-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+
+.seq-kpi-progress-col {
+  flex: 1;
+  min-width: 220px;
+}
+
+.seq-progress-track {
+  width: 100%;
+  height: 9px;
+  background: #e2e8f0;
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.seq-progress-fill {
+  height: 100%;
+  background: #10b981;
+  border-radius: 5px;
+  transition: width 0.3s ease;
+}
+
+/* Controls Bar */
+.seq-controls-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.seq-search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 260px;
+  background: #f8fafc;
+  border: 1px solid var(--slate-300);
+  border-radius: 8px;
+  padding: 0 12px;
+  transition: border-color 0.15s ease;
+}
+
+.seq-search-box:focus-within {
+  border-color: var(--primary-500);
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.seq-search-input {
+  border: none;
+  background: transparent;
+  width: 100%;
+  padding: 8px 4px;
+  font-size: 0.88rem;
+  color: #1e293b;
+  outline: none;
+}
+
+.seq-search-clear {
+  border: none;
+  background: transparent;
+  font-size: 1.2rem;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.seq-search-clear:hover {
+  color: #334155;
+}
+
+.seq-filter-pills {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.seq-filter-pill {
+  background: #f1f5f9;
+  border: 1px solid var(--slate-300);
+  color: #475569;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.seq-filter-pill:hover {
+  background: #e2e8f0;
+  color: #1e293b;
+}
+
+.seq-filter-pill.active {
+  background: #1e293b;
+  border-color: #1e293b;
+  color: #ffffff;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.2);
+}
+
+/* Groups List */
+.sequences-list-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin-top: 1.25rem;
+}
+
+.seq-group-card {
+  background: #ffffff;
+  border: 1px solid var(--slate-200);
+  border-radius: 12px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.seq-group-card:hover {
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+}
+
+.seq-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  background: #f8fafc;
+  border-bottom: 1px solid var(--slate-200);
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.seq-group-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.seq-subj-icon-box {
+  font-size: 1.5rem;
+  background: #ffffff;
+  border: 1px solid var(--slate-200);
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.seq-group-title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.seq-grade-badge {
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 12px;
+  border: 1px solid #bfdbfe;
+}
+
+.seq-period-mini-tag {
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.seq-group-meta {
+  font-size: 0.78rem;
+  color: #64748b;
+  margin-top: 3px;
+}
+
+.seq-group-actions-col {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.seq-group-progress-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.seq-group-pct-text {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: #2563eb;
+}
+
+.seq-group-progress-bar {
+  width: 90px;
+  height: 7px;
+  background: #e2e8f0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.seq-group-progress-fill {
+  height: 100%;
+  background: #2563eb;
+  border-radius: 4px;
+}
+
+.seq-group-btns {
+  display: flex;
+  gap: 6px;
+}
+
+/* Sequential Classes Grid */
+.seq-classes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 12px;
+  padding: 16px 18px;
+  background: #ffffff;
+}
+
+.seq-class-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 14px;
+  transition: all 0.15s ease;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+.seq-class-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.08);
+}
+
+.seq-class-card.card-planned {
+  border-left: 4px solid #10b981;
+}
+
+.seq-class-card.card-pending {
+  border-left: 4px solid #f59e0b;
+}
+
+.seq-class-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.seq-class-num-badge {
+  font-size: 0.82rem;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.seq-class-num-badge.num-planned {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.seq-class-num-badge.num-pending {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.seq-class-status-text {
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.seq-class-status-text.status-planned {
+  color: #16a34a;
+}
+
+.seq-class-status-text.status-pending {
+  color: #d97706;
+}
+
+.seq-class-date-row {
+  font-size: 0.75rem;
+  color: #64748b;
+  margin-bottom: 6px;
+  display: flex;
+  gap: 8px;
+}
+
+.seq-class-topic-box {
+  font-size: 0.82rem;
+  color: #1e293b;
+  line-height: 1.35;
+  margin-bottom: 8px;
+  min-height: 38px;
+}
+
+.seq-class-features-row {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.feat-tag {
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.feat-notebook {
+  background: #f0fdf4;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+
+.feat-obs {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.feat-att {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.seq-class-actions {
+  display: flex;
+  gap: 6px;
+  border-top: 1px solid #f1f5f9;
+  padding-top: 8px;
+  margin-top: auto;
+}
+
+.seq-class-actions .btn-action-plan {
+  flex: 1;
+  font-weight: 700;
+  font-size: 0.78rem;
+  padding: 5px 8px;
+  text-align: center;
+}
+
+.seq-empty-filter-note {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 1.5rem;
+  color: #94a3b8;
+  font-style: italic;
+  font-size: 0.85rem;
+}
+
+/* Navigator modal styling in ClassEditorView */
+.nav-class-card.is-current-editing {
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25) !important;
+}
 

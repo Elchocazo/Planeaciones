@@ -6,8 +6,7 @@
   <title>Planeador de Clases Pedagógico - Gestión Docente</title>
   <meta name="description" content="Aplicación profesional para organizar y estructurar planeadores de clase docentes con vista de calendario y exportación a Word y PDF.">
   
-  <!-- CSS Principal -->
-  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/styles.css?v=4.2.3">
   
   <!-- Favicon SVG -->
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%234f46e5'><path d='M4 19.5A2.5 2.5 0 0 1 6.5 17H20'/><path d='M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z'/></svg>">
@@ -49,6 +48,11 @@
       </div>
 
       <div class="header-actions">
+        <!-- Botón Importar Planeación (Inteligente) -->
+        <button class="btn btn-secondary" id="btn-import-header" onclick="ImportModal.open(null, () => { if (typeof DashboardView !== 'undefined') DashboardView.render(); })" title="Importador Inteligente: Pegar planeación en texto o estructurada">
+          📥 Importar
+        </button>
+
         <!-- Botón Panel de Coordinación (Supervisión, visto bueno y descargas) -->
         <button class="btn btn-primary btn-coord-header" id="btn-coordinator-panel" onclick="CoordinatorView.openDashboard()" title="Panel de Coordinación: Supervisar planeaciones de los docentes, dar visto bueno y descargarlas en Word/PDF">
           🎓 Panel de Coordinación
@@ -94,8 +98,41 @@
       </div>
     </header>
 
+    <!-- BARRA DE NAVEGACIÓN PRINCIPAL (NUEVA ARQUITECTURA) -->
+    <nav class="main-nav-tabs-bar" id="main-app-nav">
+      <button type="button" class="app-nav-btn active" data-view="dashboard" onclick="AppRouter.navigateTo('dashboard')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+        Inicio / Hoy
+      </button>
+      <button type="button" class="app-nav-btn" data-view="calendar" onclick="AppRouter.navigateTo('calendar')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+        Calendario
+      </button>
+      <button type="button" class="app-nav-btn" data-view="sequences" onclick="AppRouter.navigateTo('sequences')" title="Ver todas las materias, grados y secuencia de clases (#1, #2, #3...)">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+        Materias & Clases
+      </button>
+      <button type="button" class="app-nav-btn" data-view="history" onclick="AppRouter.navigateTo('history')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
+        Historial
+      </button>
+      <button type="button" class="app-nav-btn" data-view="recovery" onclick="AppRouter.navigateTo('recovery')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+        Recuperadas
+      </button>
+      <button type="button" class="app-nav-btn" data-view="settings" onclick="App.openSettingsModal('matrix')">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        Configuración
+      </button>
+    </nav>
+
+    <!-- VISTA INICIO / DASHBOARD PRINCIPAL (Req. 28, 84, 85) -->
+    <main id="dashboard-view" style="display: block;">
+      <!-- Renderizado dinámicamente por js/ui/dashboard-view.js -->
+    </main>
+
     <!-- VISTA 1: CALENDARIO MENSUAL (INICIO EN LUNES) -->
-    <main id="calendar-view" class="calendar-page-layout">
+    <main id="calendar-view" class="calendar-page-layout" style="display: none;">
       <!-- Tarjeta del Calendario -->
       <section class="calendar-card" id="calendar-mount-point">
         <!-- Generado dinámicamente por js/calendar.js -->
@@ -160,17 +197,36 @@
             ¿Cómo planear?
           </h3>
           <p style="font-size: 0.8rem; color: var(--primary-900); line-height: 1.5;">
-            1. Haz clic sobre cualquier día del calendario.<br/>
-            2. Selecciona la <strong>materia</strong> y el <strong>grado</strong> en la tabla.<br/>
-            3. Escribe los <strong>DBA</strong>, <strong>desempeños</strong> y <strong>descripción</strong>.<br/>
-            4. Adjunta <strong>imágenes o PDFs</strong> como anexos.<br/>
-            5. Exporta tu planeación a <strong>Word (.docx)</strong> o <strong>PDF</strong>.
+            1. En <strong>Inicio</strong>, pulsa <strong>+ Planear</strong> en la clase que corresponda.<br/>
+            2. Completa los campos pedagógicos (Inicio, Desarrollo, Cierre).<br/>
+            3. Pulsa <strong>Guardar clase</strong> para persistir de forma individual.<br/>
+            4. Exporta tu planeación a <strong>PDF</strong> o <strong>Word</strong> cuando lo requieras.
           </p>
         </div>
       </aside>
     </main>
 
-    <!-- VISTA 2: EDITOR DE PLANEACIÓN DIARIA -->
+    <!-- VISTA NUEVA: EDITOR DE CLASE ATÓMICO (Req. 32-41) -->
+    <main id="class-editor-view" style="display: none;">
+      <!-- Renderizado dinámicamente por js/ui/class-editor-view.js -->
+    </main>
+
+    <!-- VISTA NUEVA: SEGUIMIENTO DE SECUENCIAS CURRICULARES (Req. 51, 52) -->
+    <main id="sequences-view" style="display: none;">
+      <!-- Renderizado dinámicamente por js/ui/sequence-view.js -->
+    </main>
+
+    <!-- VISTA NUEVA: HISTORIAL GENERAL DE PLANEACIONES (Req. 100-105) -->
+    <main id="history-view" style="display: none;">
+      <!-- Renderizado dinámicamente por js/ui/history-view.js -->
+    </main>
+
+    <!-- VISTA NUEVA: CENTRO DE RECUPERACIÓN Y AUDITORÍA (Req. 136-141) -->
+    <main id="recovery-view" style="display: none;">
+      <!-- Renderizado dinámicamente por js/ui/recovery-view.js -->
+    </main>
+
+    <!-- VISTA COMPATIBILIDAD: EDITOR DE PLANEACIÓN DIARIA LEGACY -->
     <main id="planner-view" style="display: none;">
       <section id="planner-mount-point">
         <!-- Generado dinámicamente por js/planner.js -->
@@ -520,6 +576,93 @@
     </div>
   </div>
 
+
+
+  <!-- MODAL: MODIFICAR NÚMERO DE CLASE Y CONSECUTIVO -->
+  <div class="modal-backdrop" id="change-class-number-modal-backdrop">
+    <div class="modal-card" style="max-width: 520px;">
+      <div class="modal-header">
+        <h2 style="display:flex; align-items:center; gap:8px; font-size:1.15rem; color:var(--slate-800);">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--primary-600)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+          Modificar Número de Clase
+        </h2>
+        <button type="button" class="btn-close-modal" onclick="Planner.closeChangeClassNumberModal()">&times;</button>
+      </div>
+      <div class="modal-body" id="change-class-number-modal-body" style="padding: 1.25rem;">
+        <!-- Renderizado dinámicamente por Planner.renderChangeClassNumberModalContent -->
+      </div>
+      <div class="modal-footer" style="justify-content: flex-end; gap: 0.5rem;">
+        <button type="button" class="btn btn-secondary" onclick="Planner.closeChangeClassNumberModal()">Cancelar</button>
+        <button type="button" class="btn btn-primary" onclick="Planner.applyChangeClassNumberFromModal()" id="btn-apply-class-number">
+          Guardar y Actualizar Conteo
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: CAMBIAR DÍA / FECHA DE LA CLASE -->
+  <div class="modal-backdrop" id="change-class-date-modal-backdrop">
+    <div class="modal-card" style="max-width: 480px;">
+      <div class="modal-header">
+        <h2 style="display:flex; align-items:center; gap:8px; font-size:1.15rem; color:var(--slate-800);">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--primary-600)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+          Cambiar Día / Fecha de la Clase
+        </h2>
+        <button type="button" class="btn-close-modal" onclick="ClassEditorView.closeChangeDateModal()">&times;</button>
+      </div>
+      <div class="modal-body" id="change-class-date-modal-body" style="padding: 1.25rem;">
+        <!-- Renderizado dinámicamente por ClassEditorView.renderChangeDateModalContent -->
+      </div>
+      <div class="modal-footer" style="justify-content: flex-end; gap: 0.5rem;">
+        <button type="button" class="btn btn-secondary" onclick="ClassEditorView.closeChangeDateModal()">Cancelar</button>
+        <button type="button" class="btn btn-primary" onclick="ClassEditorView.applyChangeDateFromModal()" id="btn-apply-class-date">
+          Guardar y Mover Clase
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: CAMBIAR NÚMERO DE CLASE DESDE EL EDITOR INDIVIDUAL -->
+  <div class="modal-backdrop" id="editor-change-class-number-modal-backdrop">
+    <div class="modal-card" style="max-width: 500px;">
+      <div class="modal-header">
+        <h2 style="display:flex; align-items:center; gap:8px; font-size:1.15rem; color:var(--slate-800);">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--primary-600)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+          Modificar Número de Clase
+        </h2>
+        <button type="button" class="btn-close-modal" onclick="ClassEditorView.closeChangeNumberModal()">&times;</button>
+      </div>
+      <div class="modal-body" id="editor-change-class-number-modal-body" style="padding: 1.25rem;">
+        <!-- Renderizado dinámicamente por ClassEditorView.renderChangeNumberModalContent -->
+      </div>
+      <div class="modal-footer" style="justify-content: flex-end; gap: 0.5rem;">
+        <button type="button" class="btn btn-secondary" onclick="ClassEditorView.closeChangeNumberModal()">Cancelar</button>
+        <button type="button" class="btn btn-primary" onclick="ClassEditorView.applyChangeNumberFromModal()" id="btn-apply-editor-class-number">
+          Guardar y Actualizar Conteo
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL / DRAWER: EXPLORADOR RÁPIDO DE CLASES (CLASE #1, #2, #3...) -->
+  <div class="modal-backdrop" id="class-navigator-modal-backdrop">
+    <div class="modal-card modal-large" style="max-width: 860px;">
+      <div class="modal-header">
+        <h2 style="display:flex; align-items:center; gap:8px; font-size:1.15rem; color:var(--slate-800);">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--primary-600)" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg>
+          Explorador Rápido de Clases por Materia
+        </h2>
+        <button type="button" class="btn-close-modal" onclick="ClassEditorView.closeClassNavigatorModal()">&times;</button>
+      </div>
+      <div class="modal-body" id="class-navigator-modal-body" style="padding: 1.25rem; max-height: 72vh; overflow-y: auto;">
+        <!-- Renderizado dinámicamente por ClassEditorView.renderClassNavigatorModalContent -->
+      </div>
+      <div class="modal-footer" style="justify-content: flex-end; gap: 0.5rem;">
+        <button type="button" class="btn btn-secondary" onclick="ClassEditorView.closeClassNavigatorModal()">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL: VISTA PREVIA DE IMAGEN / ANEXO -->
   <div class="modal-backdrop" id="image-preview-modal-backdrop">
     <div class="modal-card" style="max-width: 800px; text-align: center;">
@@ -540,19 +683,55 @@
   <div class="toast-container" id="toast-container"></div>
 
   <!-- Scripts de la Aplicación -->
+  <!-- 1. Librerías externas y almacenamiento base -->
   <script src="js/jszip.min.js"></script>
   <script src="js/idb-storage.js"></script>
-   <script src="js/plan-repository.js?v=20260916-5"></script>
-  <script src="js/users-service.js?v=20260916-5"></script>
-  <script src="js/storage.js?v=20260916-5"></script>
-  <script src="js/curriculum.js?v=20260916-5"></script>
-  <script src="js/docx-generator.js?v=20260916-5"></script>
-  <script src="js/holidays.js?v=20260916-5"></script>
-  <script src="js/export.js?v=20260916-5"></script>
-  <script src="js/notebook-editor.js?v=20260916-5"></script>
-  <script src="js/coordinator-view.js?v=20260916-5"></script>
-  <script src="js/calendar.js?v=20260916-5"></script>
-  <script src="js/planner.js?v=20260916-5"></script>
-  <script src="js/app.js?v=20260916-5"></script>
+
+  <!-- 2. Datos curriculares puros -->
+  <script src="js/data/curriculum-data.js?v=20260916-6"></script>
+
+  <!-- 3. Repositorios de datos desacoplados -->
+  <script src="js/repositories/schedule-repository.js?v=20260916-6"></script>
+  <script src="js/repositories/sequence-repository.js?v=20260916-6"></script>
+  <script src="js/repositories/class-repository.js?v=20260916-6"></script>
+  <script src="js/repositories/curriculum-repository.js?v=20260916-6"></script>
+
+  <!-- 4. Capa Core y Estado -->
+  <script src="js/core/app-state.js?v=20260921-1"></script>
+  <script src="js/core/router.js?v=20260921-1"></script>
+
+  <!-- 5. Servicios de Dominio -->
+  <script src="js/users-service.js?v=20260921-1"></script>
+  <script src="js/services/class-service.js?v=20260921-1"></script>
+  <script src="js/services/sequence-service.js?v=20260921-1"></script>
+  <script src="js/services/schedule-service.js?v=20260921-1"></script>
+  <script src="js/services/recovery-service.js?v=20260921-1"></script>
+  <script src="js/services/migration-manager.js?v=20260921-1"></script>
+  <script src="js/services/backup-service.js?v=20260921-1"></script>
+  <script src="js/services/import-parser.js?v=20260921-1"></script>
+  <script src="js/services/import-service.js?v=20260921-1"></script>
+
+  <!-- 6. Servicios auxiliares heredados pero necesarios -->
+  <script src="js/storage.js?v=20260921-1"></script>
+  <script src="js/plan-repository.js?v=20260921-1"></script>
+  <script src="js/curriculum.js?v=20260921-1"></script>
+  <script src="js/docx-generator.js?v=20260921-1"></script>
+  <script src="js/holidays.js?v=20260921-1"></script>
+  <script src="js/export/export-adapter.js?v=20260921-1"></script>
+  <script src="js/export.js?v=20260921-1"></script>
+
+  <!-- 7. Vistas y Componentes UI -->
+  <script src="js/ui/curriculum-selector.js?v=20260921-1"></script>
+  <script src="js/ui/import-modal.js?v=20260921-1"></script>
+  <script src="js/ui/dashboard-view.js?v=20260921-1"></script>
+  <script src="js/ui/class-editor-view.js?v=20260921-1"></script>
+  <script src="js/ui/sequence-view.js?v=20260921-1"></script>
+  <script src="js/ui/history-view.js?v=20260921-1"></script>
+  <script src="js/ui/recovery-view.js?v=20260921-1"></script>
+  <script src="js/notebook-editor.js?v=20260921-7"></script>
+  <script src="js/coordinator-view.js?v=20260921-1"></script>
+  <script src="js/calendar.js?v=20260921-1"></script>
+  <script src="js/planner.js?v=20260921-1"></script>
+  <script src="js/app.js?v=20260921-1"></script>
 </body>
 </html>

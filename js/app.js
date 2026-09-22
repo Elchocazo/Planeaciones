@@ -10,7 +10,7 @@ const App = {
   tempSubjectsList: [],
   tempGradesList: [],
 
-  init() {
+  async init() {
     this.currentProfile = StorageService.getProfile();
 
     // Limpieza y actualización al nuevo horario semanal oficial, 1° Periodo y mallas curriculares
@@ -59,14 +59,68 @@ const App = {
       PlanRepository.init().catch(e => console.warn('[App] Error al iniciar PlanRepository:', e));
     }
 
+    // Inicializar nueva arquitectura (Router, Vistas y Modales)
+    if (typeof AppRouter !== 'undefined') {
+      AppRouter.init();
+    }
+    if (typeof DashboardView !== 'undefined') {
+      DashboardView.init();
+    }
+    if (typeof ClassEditorView !== 'undefined') {
+      ClassEditorView.init();
+    }
+    if (typeof SequenceView !== 'undefined') {
+      SequenceView.init();
+    }
+    if (typeof HistoryView !== 'undefined') {
+      HistoryView.init();
+    }
+    if (typeof RecoveryView !== 'undefined') {
+      RecoveryView.init();
+    }
+    if (typeof ImportModal !== 'undefined') {
+      ImportModal.init();
+    }
+    if (typeof CurriculumSelectorModal !== 'undefined') {
+      CurriculumSelectorModal.init();
+    }
+
+    // Inicializar repositorios y arquitectura v5
+    const tid = (typeof ClassRepository !== 'undefined') ? ClassRepository._getCurrentTeacherId() : 'usr_manuel';
+    if (typeof ClassRepository !== 'undefined' && ClassRepository.init) {
+      try {
+        await ClassRepository.init(tid);
+      } catch (e) {
+        console.warn('[App] Error inicializando ClassRepository:', e);
+      }
+    }
+
+    // Protocolo de migración segura a v5 con respaldo automático
+    if (typeof MigrationManager !== 'undefined' && MigrationManager.needsMigration()) {
+      try {
+        await MigrationManager.runMigration(tid);
+      } catch (err) {
+        console.error('[App] Error durante la migración segura:', err);
+      }
+    } else if (typeof ClassRepository !== 'undefined') {
+      // Si ya está en esquema v5 pero ClassRepository no tiene clases cargadas, auto-recuperar
+      const currentClasses = ClassRepository.getAllClasses(tid);
+      if (currentClasses.length === 0 && typeof RecoveryService !== 'undefined') {
+        try {
+          console.log('[App] 0 clases en ClassRepository. Ejecutando autorrecuperación preventiva...');
+          await RecoveryService.executeSafeRecovery(tid);
+        } catch (err) {
+          console.error('[App] Error en autorrecuperación preventiva:', err);
+        }
+      }
+    }
+
     // Marcar banderas de versiones anteriores para prevenir ejecuciones destructivas
     localStorage.setItem('schedule_official_updated_v5', 'true');
     localStorage.setItem('robotics_10_curriculum_updated_v1', 'true');
     localStorage.setItem('mallas_official_folder_synced_v13', 'true');
     localStorage.setItem('schedule_merge_consecutive_v2', 'true');
     localStorage.setItem('schedule_official_calibrated_v4', 'true');
-
-    // Inicializar componentes visuales (solo lectura y edición controlada)
 
     // Inicializar componentes
     window.Calendar = new CalendarComponent('calendar-mount-point');
@@ -81,7 +135,14 @@ const App = {
       this.openSettingsModal('profile', true); // Primer ingreso
     } else {
       this.renderHeaderProfile();
-      this.showCalendarView();
+      if (typeof AppRouter !== 'undefined') {
+        // force:true garantiza que el dashboard se re-renderice con los datos reales
+        // cargados por ClassRepository.init(), incluso si el router ya renderizó
+        // una versión vacía al inicio.
+        AppRouter.navigateTo('dashboard', { force: true });
+      } else {
+        this.showCalendarView();
+      }
     }
   },
 
@@ -244,6 +305,10 @@ const App = {
   },
 
   showCalendarView() {
+    if (typeof AppRouter !== 'undefined') {
+      AppRouter.navigateTo('calendar');
+      return;
+    }
     if (this.activeView === 'planner' && window.Planner && typeof window.Planner.hasUnsavedChanges === 'function' && window.Planner.hasUnsavedChanges()) {
       window.Planner.promptNavigateIfUnsaved(() => {
         this._executeShowCalendarView();
@@ -305,6 +370,11 @@ const App = {
   },
 
   openDayPlanner(dateStr) {
+    if (typeof DashboardView !== 'undefined' && typeof AppRouter !== 'undefined') {
+      DashboardView.setDate(dateStr);
+      AppRouter.navigateTo('dashboard');
+      return;
+    }
     if (window.Planner && typeof window.Planner.flushPendingSave === 'function') {
       window.Planner.flushPendingSave();
     }

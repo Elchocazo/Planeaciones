@@ -923,6 +923,10 @@ const StorageService = {
    * Exporta todos los datos de la aplicación a un archivo JSON descargable
    */
   exportBackup() {
+    if (typeof BackupService !== 'undefined' && BackupService.downloadBackup) {
+      BackupService.downloadBackup();
+      return;
+    }
     const backupData = {
       version: '1.0',
       exportedAt: new Date().toISOString(),
@@ -944,7 +948,10 @@ const StorageService = {
    */
   importBackup(jsonString) {
     try {
-      const parsed = JSON.parse(jsonString);
+      if (typeof BackupService !== 'undefined' && BackupService.restoreBackup) {
+        BackupService.restoreBackup(jsonString).catch(e => console.error(e));
+      }
+      const parsed = typeof jsonString === 'string' ? JSON.parse(jsonString) : jsonString;
       if (parsed.profile) {
         this.saveProfile(parsed.profile);
       }

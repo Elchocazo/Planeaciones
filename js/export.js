@@ -128,14 +128,28 @@ const ExportService = {
           escaped = escaped.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
 
           // Resaltar prefijos y títulos de fases pedagógicas
-          escaped = escaped.replace(/^([●•\s]*(?:(?:<strong>)?FASE\s+DE\s+(?:INICIO|DESARROLLO|CIERRE)(?:<\/strong>)?|(?:Fase\s+de\s+)?(?:Inicio|Desarrollo|Cierre)|Recursos(?: didácticos)?|Evaluaci[oó]n(?: formativa)?|Estándar|Pregunta problematizadora|Tareas?(?:\s*\/\s*Compromisos?)?|Eje\s+temático|Metodología|Tiempo\s+disponible|Clase)(?:\s*\([^)]*\))?:?)/i, '<strong>$1</strong>');
+          escaped = escaped.replace(/^([●•\s]*(?:(?:<strong>)?FASE\s+DE\s+(?:INICIO|DESARROLLO|CIERRE)(?:<\/strong>)?|(?:Fase\s+de\s+)?(?:Inicio|Desarrollo|Cierre)|Recursos(?:\s+did[aá]cticos)?(?:\s*[:\/-]?\s*(?:y\s+)?materiales)?|Evaluaci[oó]n(?: formativa)?|Estándar|Pregunta problematizadora|Tareas?(?:\s*[\/:]\s*Compromisos?)?(?:\s*[:\/-]?\s*(?:y\s+)?actividades\s+extraclase)?|Eje\s+temático|Metodología|Tiempo\s+disponible|Clase)(?:\s*\([^)]*\))?:?)/i, (m) => {
+            let norm = m.replace(/<\/?strong>/g, '');
+            if (/Recursos/i.test(norm)) {
+              const bullet = norm.match(/^[●•\s]*/)[0] || '';
+              return `<strong>${bullet}Recursos didácticos y materiales:</strong>`;
+            }
+            if (/Tareas/i.test(norm)) {
+              const bullet = norm.match(/^[●•\s]*/)[0] || '';
+              return `<strong>${bullet}Tareas / Compromisos:</strong>`;
+            }
+            return `<strong>${norm}</strong>`;
+          });
+          escaped = escaped
+            .replace(/(<strong>[●•\s]*Recursos didácticos y materiales:<\/strong>)\s*(?:[:\/-]?\s*(?:Y\s+)?MATERIALES\b\s*:?)/gi, '$1 ')
+            .replace(/(<strong>[●•\s]*Tareas \/ Compromisos:<\/strong>)\s*(?:[:\/-]?\s*(?:Y\s+)?ACTIVIDADES EXTRACLASE\b\s*:?)/gi, '$1 ');
           escaped = escaped.replace(/<strong><strong>(.*?)<\/strong><\/strong>/g, '<strong>$1</strong>');
 
           const isPhase = /^(?:<strong>)?\s*(?:FASE\s+DE\s+(?:INICIO|DESARROLLO|CIERRE)|(?:Fase\s+de\s+)?(?:Inicio|Desarrollo|Cierre)):?/i.test(escaped);
           if (isPhase) {
-            return `<div class="preparador-cell-p preparador-phase-title">${escaped}</div>`;
+            return `<div class="preparador-cell-p preparador-phase-title" style="text-align: justify; text-justify: inter-word;">${escaped}</div>`;
           }
-          return `<div class="preparador-cell-p">${escaped}</div>`;
+          return `<div class="preparador-cell-p" style="text-align: justify; text-justify: inter-word;">${escaped}</div>`;
         }).join('');
       };
 
@@ -161,9 +175,26 @@ const ExportService = {
       const dba = isDirGroup ? '<span style="color:#64748b; font-style:italic;">No aplica</span>' : formatCellText(dbaRaw);
       const achievement = isDirGroup ? '<span style="color:#64748b; font-style:italic;">No aplica</span>' : formatCellText(achievementRaw);
       const topic = isDirGroup ? '<span style="color:#64748b; font-style:italic;">Asesoría general</span>' : this.escapeHtml(topicRaw);
+      const phasePrefixes = [
+        'FASE\\s+DE\\s+(?:INICIO|DESARROLLO|CIERRE)',
+        '(?<!FASE\\s+DE\\s+)(?:Inicio|Desarrollo|Cierre)',
+        'Recursos(?:\\s+did[aá]cticos)?(?:\\s*[:\\/-]?\\s*(?:y\\s+)?materiales)?',
+        'Evaluaci[oó]n(?:\\s+formativa)?',
+        'Estándar(?:\\s+básico)?',
+        'Pregunta\\s+problematizadora',
+        'Tareas?(?:\\s*[\/:]\\s*Compromisos?)?(?:\\s*[:\\/-]?\\s*(?:y\\s+)?actividades\\s+extraclase)?',
+        'Compromisos?',
+        'Eje\\s+temático',
+        'Metodología',
+        'Tiempo\\s+disponible'
+      ].join('|');
+      const phaseColonRegex = new RegExp(`(?<!^)(?<!\\()[ \\t]*(\\*{0,2}(?:${phasePrefixes})(?:[ \\t]*\\([^)]*\\))?\\*{0,2})\\s*:\\s*`, 'gi');
+
       let descFormatted = (cls.description || '')
-        .replace(/(?<!^)(?<!\()[ \t]*(\*{0,2}(?:FASE\s+DE\s+(?:INICIO|DESARROLLO|CIERRE)|(?:Fase\s+de\s+)?(?:Inicio|Desarrollo|Cierre)|Recursos(?: didácticos)?|Evaluaci[oó]n(?: formativa)?|Estándar|Pregunta problematizadora|Tareas?(?:\s*\/\s*Compromisos?)?)\*{0,2})\s*:\s*/gi, '\n\n$1: ')
-        .replace(/(?<!^)[ \t]*(\*{0,2}(?:FASE\s+DE\s+(?:INICIO|DESARROLLO|CIERRE))(?:[ \t]*\([^)]*\))?\*{0,2})(?=\n|$|[ \t]+[A-ZÁÉÍÓÚ])/gi, '\n\n$1\n\n');
+        .replace(/(?:Recursos\s+did[aá]cticos?\s*:\s*(?:Y\s+)?MATERIALES|Recursos\s+did[aá]cticos?\s+y\s+materiales\s*:?)/gi, 'Recursos didácticos y materiales:')
+        .replace(/(?:Tareas?(?:\s*[\/:]\s*Compromisos?)?\s*:\s*(?:Y\s+)?ACTIVIDADES\s+EXTRACLASE|Tareas?(?:\s*[\/:]\s*Compromisos?)?\s*y\s+actividades\s+extraclase\s*:?)/gi, 'Tareas / Compromisos:')
+        .replace(phaseColonRegex, '\n\n$1: ')
+        .replace(/\n{3,}/g, '\n\n');
       const sequence = formatCellText(descFormatted.trim());
 
 
@@ -174,10 +205,10 @@ const ExportService = {
           <td style="text-align: center; vertical-align: middle; padding: 4px; font-size: 8pt;">${shortDate}</td>
           <td style="text-align: center; vertical-align: middle; padding: 4px; font-size: 8.5pt; font-weight: bold;">${classNum}</td>
           <td style="text-align: center; vertical-align: middle; padding: 4px; font-size: 8pt;">${this.escapeHtml(dayOfWeek)}</td>
-          <td style="vertical-align: top; padding: 4px; font-size: 8pt; line-height: 1.25;">${dba}</td>
-          <td style="vertical-align: top; padding: 4px; font-size: 8pt; line-height: 1.25;">${achievement}</td>
+          <td style="vertical-align: top; padding: 4px; font-size: 8pt; line-height: 1.25; text-align: justify; text-justify: inter-word;">${dba}</td>
+          <td style="vertical-align: top; padding: 4px; font-size: 8pt; line-height: 1.25; text-align: justify; text-justify: inter-word;">${achievement}</td>
           <td style="vertical-align: top; padding: 4px; font-size: 8pt; font-weight: 500; line-height: 1.25;">${topic}</td>
-          <td style="vertical-align: top; padding: 4px; font-size: 8pt; line-height: 1.25;">${sequence}</td>
+          <td style="vertical-align: top; padding: 4px; font-size: 8pt; line-height: 1.25; text-align: justify; text-justify: inter-word;">${sequence}</td>
         </tr>
       `;
     }).join('');
@@ -273,8 +304,8 @@ const ExportService = {
         <table class="preparador-obs-table">
           <tr>
             <td class="obs-lbl"><strong>OBSERVACIONES:</strong></td>
-            <td class="obs-content-cell">
-              ${notesText ? notesText.split('\n').map(l => `<div class="obs-text-line">${l}</div>`).join('') : '<div class="obs-empty-line">&nbsp;</div>'}
+            <td class="obs-content-cell" style="text-align: justify; text-justify: inter-word;">
+              ${notesText ? notesText.split('\n').map(l => `<div class="obs-text-line" style="text-align: justify; text-justify: inter-word;">${l}</div>`).join('') : '<div class="obs-empty-line">&nbsp;</div>'}
             </td>
           </tr>
         </table>
@@ -343,7 +374,8 @@ const ExportService = {
       App.showToast('Generando documento oficial de Word...', 'info');
 
       // Intentar cargar la plantilla nativa oficial Preparador.docx
-      const response = await fetch('Preparador.docx');
+      // Cache-buster para garantizar que se use siempre la versión más reciente
+      const response = await fetch('Preparador.docx?v=' + Date.now());
       if (!response.ok) throw new Error('No se pudo cargar la plantilla Preparador.docx');
       
       const templateBuffer = await response.arrayBuffer();
@@ -383,6 +415,11 @@ const ExportService = {
           body { font-family: Arial, sans-serif; font-size: 8.5pt; }
           table { width: 100%; border-collapse: collapse; }
           td, th { border: 1px solid #000; padding: 4px; font-size: 8pt; }
+          .preparador-cell-p { text-align: justify; text-justify: inter-word; }
+          .preparador-main-table td:nth-child(4),
+          .preparador-main-table td:nth-child(5),
+          .preparador-main-table td:nth-child(7) { text-align: justify; text-justify: inter-word; }
+          .preparador-obs-table .obs-content-cell { text-align: justify; text-justify: inter-word; }
         </style>
       </head>
       <body>${htmlContent}</body>
@@ -521,6 +558,39 @@ const ExportService = {
   },
 
   /**
+   * Exporta una única clase recuperándola directamente por su ID permanente (Req. 89)
+   * OPERACIÓN PURA DE SOLO LECTURA: Jamás modifica la clase ni el estado persistido.
+   */
+  exportClassById(classId, format = 'pdf') {
+    if (!classId) return;
+    let cls = null;
+    if (typeof ClassRepository !== 'undefined' && ClassRepository.getClass) {
+      cls = ClassRepository.getClass(classId);
+    }
+    if (!cls) {
+      alert('No se encontró la clase especificada para exportar.');
+      return;
+    }
+
+    const profile = typeof StorageService !== 'undefined' ? StorageService.getProfile() : null;
+    const planData = typeof ExportAdapter !== 'undefined'
+      ? ExportAdapter.fromClass(cls, profile)
+      : {
+          date: cls.date,
+          period: cls.period || '1°',
+          classes: [cls]
+        };
+
+    if (format === 'preview') {
+      this.openLivePreview(planData, profile);
+    } else if (format === 'pdf') {
+      this.exportToPdf(planData, profile);
+    } else {
+      this.exportToWord(planData, profile);
+    }
+  },
+
+  /**
    * Exporta o previsualiza de manera individual una única clase de un día determinado
    * @param {Object} planData - Datos de la planeación
    * @param {Object} profileData - Perfil del docente
@@ -589,7 +659,9 @@ const ExportService = {
   }
 };
 
-window.ExportService = ExportService;
+if (typeof window !== 'undefined') {
+  window.ExportService = ExportService;
+}
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = ExportService;
 }

@@ -1,4 +1,4 @@
-﻿# Dependencies
+# Dependencies
 node_modules/
 package-lock.json.backup
 
@@ -33,3 +33,9 @@ ehthumbs.db
 .env
 .env.*
 !.env.example
+
+# Backups & Local exports
+backups/
+*.pdf
+*.docx
+*.doc

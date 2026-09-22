@@ -340,10 +340,16 @@ class PlannerComponent {
             ` : ''}
           </td>
 
-          <!-- Columna 2: # Clase (Consecutivo Inteligente) -->
-          <td class="col-day-num" style="vertical-align: top; text-align: center; padding-top: 0.6rem;">
-            <input type="text" class="table-input cls-day-number" value="${this.escapeHtml(cls.dayNumber || String(idx + 1))}" style="font-size: 0.95rem; font-weight: bold; text-align: center; color: var(--primary-700); padding: 0.4rem 0.2rem;" onchange="Planner.onClassNumberChange(${idx}, this.value); Planner.handleInputChange(true);" oninput="Planner.handleInputChange()" onblur="Planner.handleInputChange(true)" title="Número de clase consecutivo. Al cambiarlo, las siguientes clases se ajustan en secuencia." />
+          <!-- Columna 2: # Clase (Consecutivo Inteligente y Modificable) -->
+          <td class="col-day-num" style="vertical-align: top; text-align: center; padding-top: 0.5rem;">
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
+              <input type="number" min="1" max="999" class="table-input cls-day-number" value="${this.escapeHtml(cls.dayNumber || String(idx + 1))}" style="font-size: 0.95rem; font-weight: 800; text-align: center; color: var(--primary-700); padding: 0.35rem 0.2rem; border-color: var(--primary-300);" onchange="Planner.onClassNumberChange(${idx}, this.value)" onkeydown="if(event.key==='Enter'){ this.blur(); }" title="Número de clase consecutivo. Puedes escribir directamente el número o pulsar en 'Modificar'." />
+              <button type="button" class="btn btn-sm btn-change-class-num" onclick="Planner.openChangeClassNumberModal(${idx})" style="font-size: 0.68rem; font-weight: 700; padding: 2px 4px; color: var(--primary-700); background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 4px; cursor: pointer; width: 100%; display: flex; align-items: center; justify-content: center; gap: 2px; transition: all 0.15s ease;" title="Modificar número de clase y continuar el conteo hacia adelante">
+                ✏️ Modificar
+              </button>
+            </div>
           </td>
+
 
           <!-- Columna 3: Día de la Semana -->
           <td class="col-day-name" style="vertical-align: top; text-align: center; padding-top: 0.6rem;">
@@ -654,9 +660,16 @@ class PlannerComponent {
               <thead>
                 <tr>
                   <th class="col-date">FECHA<br/><small>d/m/a</small></th>
-                  <th class="col-day-num">
+                  <th class="col-day-num" style="padding: 0.5rem 0.3rem;">
                     CLASE
-                    <button type="button" class="btn btn-secondary" style="font-size:0.65rem; padding:1px 4px; margin-top:2px; display:block; width:100%;" onclick="Planner.autoRenumberSequence()" title="Recalcular consecutivo desde planeaciones anteriores">⚡ Consecutivo</button>
+                    <div style="display: flex; flex-direction: column; gap: 3px; margin-top: 4px;">
+                      <button type="button" class="btn btn-primary btn-sm" style="font-size: 0.68rem; font-weight: 700; padding: 3px 4px; width: 100%; background: var(--primary-600); color: #ffffff; border: none; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 2px;" onclick="Planner.openChangeClassNumberModal()" title="Modificar manualmente la numeración de las clases y continuar el conteo">
+                        🔢 Modificar #
+                      </button>
+                      <button type="button" class="btn btn-secondary btn-sm" style="font-size: 0.62rem; padding: 2px 3px; width: 100%;" onclick="Planner.autoRenumberSequence()" title="Recalcular consecutivo automáticamente desde planeaciones anteriores">
+                        ⚡ Consecutivo
+                      </button>
+                    </div>
                   </th>
                   <th class="col-day-name">DÍA</th>
                   <th class="col-subject-grade">ASIGNATURA Y GRADO</th>
@@ -1917,30 +1930,253 @@ class PlannerComponent {
   }
 
   onClassNumberChange(idx, val) {
-    this.collectDataFromDOM();
     const startNum = parseInt(String(val).replace(/[^0-9]/g, ''), 10);
-    if (!isNaN(startNum) && this.currentPlan.classes[idx]) {
-      this.currentPlan.classes[idx].dayNumber = String(startNum);
-      this.currentPlan.classes[idx].sequenceNumber = startNum;
-      const targetSub = String(this.currentPlan.classes[idx].subject || '').toLowerCase().trim();
-      const targetGrd = String(this.currentPlan.classes[idx].grade || '').toLowerCase().trim();
-
-      // Si hay clases posteriores de la misma materia y grado en el mismo día, secuenciarlas
-      let offset = 1;
-      for (let i = idx + 1; i < this.currentPlan.classes.length; i++) {
-        const sub = String(this.currentPlan.classes[i].subject || '').toLowerCase().trim();
-        const grd = String(this.currentPlan.classes[i].grade || '').toLowerCase().trim();
-        if (sub === targetSub && grd === targetGrd) {
-          this.currentPlan.classes[i].dayNumber = String(startNum + offset);
-          this.currentPlan.classes[i].sequenceNumber = startNum + offset;
-          offset++;
-        }
-      }
-      this.render();
-      this.saveCurrentPlan(false);
-      App.showToast(`Consecutivo de ${this.currentPlan.classes[idx].subject} ${this.currentPlan.classes[idx].grade} fijado en #${startNum}`, 'info');
+    if (!isNaN(startNum) && startNum > 0) {
+      this.applyClassNumberChange(idx, startNum, true);
+    } else {
+      this.render(); // Revertir valor si no es válido
     }
   }
+
+  /**
+   * Aplica un cambio manual de número de clase con opción de continuar la secuencia hacia adelante.
+   * Guarda de forma atómica y propaga a las siguientes clases del mismo día y a días futuros.
+   */
+  applyClassNumberChange(idx, startNum, propagateForward = true) {
+    this.collectDataFromDOM();
+
+    if (!this.currentPlan || !this.currentPlan.classes || !this.currentPlan.classes[idx]) {
+      return;
+    }
+
+    startNum = parseInt(String(startNum).replace(/[^0-9]/g, ''), 10);
+    if (isNaN(startNum) || startNum <= 0) {
+      App.showToast('Por favor ingresa un número de clase válido mayor a 0', 'warning');
+      return;
+    }
+
+    const cls = this.currentPlan.classes[idx];
+    const normSub = (s) => String(s || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+    const normGrd = (g) => String(g || '').toLowerCase().replace(/[^0-9a-z]/gi, '').trim();
+
+    const targetSub = normSub(cls.subject);
+    const targetGrd = normGrd(cls.grade);
+
+    // 1. Asignar el nuevo número a la clase seleccionada
+    cls.dayNumber = String(startNum);
+    cls.sequenceNumber = startNum;
+
+    let nextNum = startNum + 1;
+
+    // 2. Si se solicita continuar la secuencia hacia adelante
+    if (propagateForward) {
+      // Clases posteriores de la misma materia y grado en el MISMO día
+      for (let i = idx + 1; i < this.currentPlan.classes.length; i++) {
+        const nextCls = this.currentPlan.classes[i];
+        const sub = normSub(nextCls.subject);
+        const grd = normGrd(nextCls.grade);
+        if (sub === targetSub && grd === targetGrd) {
+          nextCls.dayNumber = String(nextNum);
+          nextCls.sequenceNumber = nextNum;
+          nextNum++;
+        }
+      }
+    }
+
+    // 3. Guardar el día actual directamente garantizando persistencia
+    StorageService.savePlan(this.currentDateStr, this.currentPlan);
+    this._hasUnsavedChanges = false;
+    this.updateSaveIndicator('saved');
+
+    // 4. Propagar a DÍAS FUTUROS con la misma materia y grado si se eligió continuar el conteo
+    if (propagateForward) {
+      try {
+        const allPlans = typeof StorageService !== 'undefined' ? StorageService.getAllPlans() : {};
+        const currentDate = this.currentDateStr;
+
+        // Obtener todas las fechas posteriores al día actual, en orden cronológico ascendente
+        const futureDates = Object.keys(allPlans)
+          .filter(d => d > currentDate)
+          .sort();
+
+        let runningNum = nextNum; // continuar la cuenta desde donde quedó el día actual
+
+        for (const futureDate of futureDates) {
+          const plan = allPlans[futureDate];
+          if (!plan || !Array.isArray(plan.classes)) continue;
+
+          let planModified = false;
+          for (const futureCls of plan.classes) {
+            const sub = normSub(futureCls.subject);
+            const grd = normGrd(futureCls.grade);
+            if (sub === targetSub && grd === targetGrd) {
+              futureCls.dayNumber = String(runningNum);
+              futureCls.sequenceNumber = runningNum;
+              runningNum++;
+              planModified = true;
+            }
+          }
+
+          if (planModified) {
+            StorageService.savePlan(futureDate, plan);
+          }
+        }
+      } catch (e) {
+        console.warn('Error al propagar numeración a fechas futuras:', e);
+      }
+    }
+
+    // 5. Re-renderizar la vista para reflejar inmediatamente los nuevos números
+    this.render();
+
+    if (window.Calendar && typeof window.Calendar.updateDayIndicators === 'function') {
+      window.Calendar.updateDayIndicators();
+    }
+
+    // 6. Notificación amigable
+    const subLabel = cls.subject || 'Clase';
+    const grdLabel = cls.grade ? `(${cls.grade})` : '';
+    if (propagateForward) {
+      App.showToast(`¡Número de clase actualizado a #${startNum} para ${subLabel} ${grdLabel}! Conteo continuado hacia adelante.`, 'success');
+    } else {
+      App.showToast(`¡Número de clase actualizado a #${startNum} para ${subLabel} ${grdLabel}!`, 'success');
+    }
+  }
+
+  /**
+   * Abre el Modal oficial para Modificar el Número de Clase
+   */
+  openChangeClassNumberModal(selectedClassIndex = null) {
+    if (!this.currentPlan || !this.currentPlan.classes || this.currentPlan.classes.length === 0) {
+      App.showToast('No hay clases registradas en este día para renumerar', 'info');
+      return;
+    }
+
+    const backdrop = document.getElementById('change-class-number-modal-backdrop');
+    const body = document.getElementById('change-class-number-modal-body');
+    if (!backdrop || !body) return;
+
+    let targetIdx = 0;
+    if (selectedClassIndex !== null && selectedClassIndex !== undefined && this.currentPlan.classes[selectedClassIndex]) {
+      targetIdx = parseInt(selectedClassIndex, 10);
+    }
+
+    this._modalTargetClassIndex = targetIdx;
+    this.renderChangeClassNumberModalContent(targetIdx);
+    backdrop.classList.add('active');
+
+    setTimeout(() => {
+      const input = document.getElementById('modal-new-number-input');
+      if (input) {
+        input.focus();
+        input.select();
+      }
+    }, 100);
+  }
+
+  /**
+   * Cierra el Modal de modificación de número de clase
+   */
+  closeChangeClassNumberModal() {
+    const backdrop = document.getElementById('change-class-number-modal-backdrop');
+    if (backdrop) backdrop.classList.remove('active');
+  }
+
+  /**
+   * Renderiza el contenido interno del modal según la clase seleccionada
+   */
+  renderChangeClassNumberModalContent(targetIdx) {
+    const body = document.getElementById('change-class-number-modal-body');
+    if (!body || !this.currentPlan || !this.currentPlan.classes) return;
+
+    const classes = this.currentPlan.classes;
+    const currentCls = classes[targetIdx] || classes[0];
+    const currentNum = parseInt(String(currentCls.dayNumber || '').replace(/[^0-9]/g, ''), 10) || (targetIdx + 1);
+
+    const optionsHtml = classes.map((c, i) => {
+      const cNum = c.dayNumber ? `Clase #${c.dayNumber}` : `Clase #${i + 1}`;
+      const sub = c.subject || 'Sin Asignatura';
+      const grd = c.grade ? `(${c.grade})` : '';
+      return `<option value="${i}" ${i === targetIdx ? 'selected' : ''}>${cNum}: ${this.escapeHtml(sub)} ${this.escapeHtml(grd)}</option>`;
+    }).join('');
+
+    body.innerHTML = `
+      <div style="margin-bottom: 1.1rem;">
+        <label class="form-label" style="font-weight: 700; color: var(--slate-700); margin-bottom: 0.4rem; display: block;">
+          Selecciona la clase que deseas renumerar:
+        </label>
+        <select id="modal-class-select" class="form-select" style="font-size: 0.95rem; font-weight: 600; padding: 0.6rem 0.8rem; border-color: var(--primary-300);" onchange="Planner.onModalClassSelectionChange(this.value)">
+          ${optionsHtml}
+        </select>
+      </div>
+
+      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 1.25rem; display: flex; align-items: center; justify-content: space-between;">
+        <div>
+          <div style="font-size: 0.78rem; color: var(--slate-500); text-transform: uppercase; font-weight: 700;">Asignatura y Curso</div>
+          <div style="font-size: 0.95rem; font-weight: 700; color: var(--slate-800);">${this.escapeHtml(currentCls.subject || 'Materia')} — ${this.escapeHtml(currentCls.grade || '')}</div>
+        </div>
+        <div style="text-align: right;">
+          <div style="font-size: 0.78rem; color: var(--slate-500); text-transform: uppercase; font-weight: 700;">Número Actual</div>
+          <span style="display: inline-block; background: var(--primary-100); color: var(--primary-800); font-weight: 800; font-size: 1rem; padding: 2px 10px; border-radius: 12px;">#${currentNum}</span>
+        </div>
+      </div>
+
+      <div class="form-group mb-3">
+        <label class="form-label" for="modal-new-number-input" style="font-weight: 700; color: var(--slate-700); font-size: 0.92rem;">
+          Nuevo número de clase:
+        </label>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <input type="number" min="1" max="999" id="modal-new-number-input" class="form-input" value="${currentNum}" style="font-size: 1.35rem; font-weight: 800; text-align: center; color: var(--primary-700); padding: 0.5rem; max-width: 140px; border: 2px solid var(--primary-400); border-radius: 8px;" onkeydown="if(event.key==='Enter'){ Planner.applyChangeClassNumberFromModal(); }" />
+          <span style="font-size: 0.85rem; color: var(--slate-500); line-height: 1.3;">
+            Ingresa el número que debe tener esta clase (ejemplo: <strong>1</strong>, <strong>5</strong>, <strong>15</strong>).
+          </span>
+        </div>
+      </div>
+
+      <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px 14px; margin-top: 1rem;">
+        <label style="display: flex; align-items: flex-start; gap: 10px; cursor: pointer; user-select: none;">
+          <input type="checkbox" id="modal-propagate-forward" checked style="margin-top: 3px; accent-color: #16a34a; width: 18px; height: 18px; cursor: pointer;" />
+          <div style="font-size: 0.88rem; color: #166534; line-height: 1.35;">
+            <strong style="display: block; font-weight: 700; margin-bottom: 2px;">Continuar el conteo automáticamente hacia adelante</strong>
+            <span style="font-size: 0.78rem; font-weight: 400; color: #15803d;">
+              A partir de este nuevo número, las clases siguientes de <strong>${this.escapeHtml(currentCls.subject || '')} ${this.escapeHtml(currentCls.grade || '')}</strong> en esta fecha y en las semanas futuras se renumerarán en orden consecutivo (+1, +2, +3...).
+            </span>
+          </div>
+        </label>
+      </div>
+    `;
+  }
+
+  onModalClassSelectionChange(newIdxStr) {
+    const idx = parseInt(newIdxStr, 10);
+    this._modalTargetClassIndex = idx;
+    this.renderChangeClassNumberModalContent(idx);
+    const input = document.getElementById('modal-new-number-input');
+    if (input) {
+      input.focus();
+      input.select();
+    }
+  }
+
+  applyChangeClassNumberFromModal() {
+    const idx = this._modalTargetClassIndex !== undefined ? this._modalTargetClassIndex : 0;
+    const input = document.getElementById('modal-new-number-input');
+    const propagateBox = document.getElementById('modal-propagate-forward');
+
+    if (!input) return;
+    const newNum = parseInt(input.value.trim(), 10);
+    if (isNaN(newNum) || newNum <= 0) {
+      App.showToast('Ingresa un número de clase válido mayor a 0', 'warning');
+      input.focus();
+      return;
+    }
+
+    const propagate = propagateBox ? propagateBox.checked : true;
+    this.closeChangeClassNumberModal();
+    this.applyClassNumberChange(idx, newNum, propagate);
+  }
+
+
 
   autoRenumberSequence() {
     this.collectDataFromDOM();
