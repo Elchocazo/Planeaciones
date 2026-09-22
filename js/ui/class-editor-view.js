@@ -446,17 +446,12 @@ class ClassEditorViewClass {
       </div>
     `;
 
-    // Auto-ajustar alturas amplias y dinámicas de todos los cuadros de texto
-    const scheduleResize = () => {
-      if (typeof requestAnimationFrame !== 'undefined') {
-        requestAnimationFrame(() => this.autoResizeAllTextareas());
-      } else {
-        this.autoResizeAllTextareas();
-      }
-    };
-    scheduleResize();
-    setTimeout(scheduleResize, 50);
-    setTimeout(scheduleResize, 200);
+    // Auto-ajustar alturas amplias y dinámicas de todos los cuadros de texto sin layout thrashing
+    if (typeof requestAnimationFrame !== 'undefined') {
+      requestAnimationFrame(() => this.autoResizeAllTextareas());
+    } else {
+      this.autoResizeAllTextareas();
+    }
   }
 
   onFieldInput(event) {
@@ -630,6 +625,10 @@ class ClassEditorViewClass {
   }
 
   navigateToPreviousClass() {
+    this._syncFromDomToCurrentClass();
+    if (typeof ClassService !== 'undefined' && ClassService.cancelPendingAutoSave) {
+      ClassService.cancelPendingAutoSave();
+    }
     const prev = ClassService.findPreviousClassInSequence(this.currentClass);
     if (prev) {
       this.loadClass(prev.id);
@@ -639,6 +638,10 @@ class ClassEditorViewClass {
   }
 
   navigateToNextClass() {
+    this._syncFromDomToCurrentClass();
+    if (typeof ClassService !== 'undefined' && ClassService.cancelPendingAutoSave) {
+      ClassService.cancelPendingAutoSave();
+    }
     const next = ClassService.findNextPendingClass(this.currentClass);
     if (next) {
       this.loadClass(next.id);
@@ -1322,9 +1325,8 @@ class ClassEditorViewClass {
     if (!el || el.tagName !== 'TEXTAREA') return;
     if (typeof window === 'undefined' || typeof document === 'undefined') return;
 
-    // Obtener min-height configurada en CSS o inline style
-    const computed = window.getComputedStyle(el);
-    const minH = (computed && parseInt(computed.minHeight, 10)) || parseInt(el.style.minHeight, 10) || 100;
+    // Obtener min-height sin forzar getComputedStyle a menos que sea estrictamente necesario
+    const minH = parseInt(el.style.minHeight, 10) || 100;
 
     // Si está oculto en pestaña inactiva, aseguramos su altura mínima base
     if (el.offsetParent === null) {

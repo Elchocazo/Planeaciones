@@ -139,7 +139,7 @@ const App = {
         // force:true garantiza que el dashboard se re-renderice con los datos reales
         // cargados por ClassRepository.init(), incluso si el router ya renderizó
         // una versión vacía al inicio.
-        AppRouter.navigateTo('dashboard', { force: true });
+        AppRouter.navigateTo('dashboard', { force: true, replace: true });
       } else {
         this.showCalendarView();
       }

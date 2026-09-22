@@ -13,6 +13,7 @@ class AppRouterClass {
     this.viewContainers = {};
     this.historyStack = [];
     this._historyIndex = 0;
+    this._isNavigatingBack = false;
     this._initialized = false;
   }
 
@@ -100,6 +101,17 @@ class AppRouterClass {
   }
 
   _handlePopState(event) {
+    // Si la navegación hacia atrás ya fue ejecutada instantáneamente por goBack(), solo sincronizar índice
+    if (this._isNavigatingBack) {
+      this._isNavigatingBack = false;
+      if (event && event.state && typeof event.state.historyIndex === 'number') {
+        this._historyIndex = event.state.historyIndex;
+      } else if (this._historyIndex > 0) {
+        this._historyIndex--;
+      }
+      return;
+    }
+
     const state = event.state;
 
     // 1. Verificar cambios sin guardar en el editor actual
@@ -261,7 +273,7 @@ class AppRouterClass {
       this._onViewActivated(canonical, options);
 
       if (typeof window !== 'undefined' && window.scrollTo) {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        window.scrollTo({ top: 0, behavior: 'auto' });
       }
       return true;
     } finally {
@@ -270,10 +282,9 @@ class AppRouterClass {
   }
 
   /**
-   * Vuelve a la sección o vista anterior de forma segura.
-   * Si hay historial en el navegador, retrocede una posición.
-   * Si no, consulta la pila interna historyStack.
-   * Si está vacía, navega a 'dashboard'.
+   * Vuelve a la sección o vista anterior de forma segura e instantánea.
+   * Resuelve inmediatamente en memoria la vista previa sin bloqueos ni esperas asíncronas.
+   * Si hay historial en el navegador, sincroniza la URL en segundo plano.
    * Jamás saca al usuario de la aplicación.
    */
   goBack() {
@@ -284,20 +295,54 @@ class AppRouterClass {
       AppState.set('isDirty', false);
     }
 
-    // 2. Si el navegador tiene historial empujado en la SPA, invocar history.back()
-    if (this._historyIndex > 0 && typeof window !== 'undefined' && window.history && typeof window.history.back === 'function') {
-      window.history.back();
-      return true;
+    // 2. Limpiar/cancelar temporizadores pendientes de la vista saliente y sincronizar cambios inmediatos
+    if (typeof ClassService !== 'undefined' && ClassService.cancelPendingAutoSave) {
+      ClassService.cancelPendingAutoSave();
+    }
+    if (typeof NotebookEditor !== 'undefined') {
+      if (NotebookEditor._autoSaveTimer) {
+        clearTimeout(NotebookEditor._autoSaveTimer);
+        NotebookEditor._autoSaveTimer = null;
+      }
+      if (this.currentView === 'notebook' && typeof NotebookEditor.saveCurrentNotebookContent === 'function') {
+        try {
+          NotebookEditor.saveCurrentNotebookContent(false);
+        } catch (e) {}
+      }
     }
 
-    // 3. Fallback a la pila interna
+    // 3. Determinar destino previo prioritario desde historyStack
+    let targetView = 'dashboard';
+    let targetOptions = {};
+
     if (this.historyStack && this.historyStack.length > 0) {
       const prev = this.historyStack.pop();
-      return this.navigateTo(prev.view, { ...prev.options, bypassDirtyCheck: true, fromPopState: true });
+      targetView = prev.view;
+      targetOptions = prev.options || {};
+    } else {
+      // Fallback contextual si la pila está vacía (evita sacar al usuario o desorientarlo)
+      if (this.currentView === 'notebook') {
+        targetView = 'editor';
+        if (this.currentOptions?.classId) targetOptions.classId = this.currentOptions.classId;
+      } else if (this.currentView === 'editor') {
+        targetView = 'calendar';
+      } else {
+        targetView = 'dashboard';
+      }
     }
 
-    // 4. Si no hay historial previo, ir al dashboard
-    return this.navigateTo('dashboard', { bypassDirtyCheck: true });
+    // 4. Si el navegador tiene historial empujado en la SPA, sincronizarlo sin retrasar la interfaz
+    if (this._historyIndex > 0 && typeof window !== 'undefined' && window.history && typeof window.history.back === 'function') {
+      this._isNavigatingBack = true;
+      try {
+        window.history.back();
+      } catch (e) {
+        this._isNavigatingBack = false;
+      }
+    }
+
+    // 5. Transición inmediata e instantánea (0 ms) a la vista anterior
+    return this.navigateTo(targetView, { ...targetOptions, bypassDirtyCheck: true, fromPopState: true });
   }
 
   /**
