@@ -18,6 +18,7 @@ class ClassRepositoryClass {
     this._channel = null;
     this._tabId = 'tab_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now();
     this._cache = {}; // teacherId -> { [classId]: ClassSession }
+    this._sequenceIndex = {}; // `${tid}_${per}_${sub}_${grd}_${grp}` -> maxSequenceNumber (O(1))
     this._isInitialized = false;
     this._initPromise = null;
     this._setupChannel();
@@ -269,18 +270,24 @@ class ClassRepositoryClass {
 
   /**
    * Encuentra el mayor sequenceNumber registrado para teacher + period + subject + grade + group.
+   * Utiliza un índice asociativo en memoria para responder en tiempo constante O(1).
    * Esto garantiza la preservación histórica: jamás renumera hacia abajo.
    */
   getMaxSequenceNumber(scopeOrPeriod = {}, subject, grade, groupOrTeacherId, teacherId) {
     const scope = this._normalizeScope(scopeOrPeriod, subject, grade, groupOrTeacherId, teacherId);
     const tid = scope.teacherId || this._getCurrentTeacherId();
-    const map = this._getAllMap(tid);
-    const classes = Object.values(map);
-
     const targetSub = this._norm(scope.subject || scope.subjectName);
     const targetGrd = this._norm(scope.grade || scope.gradeName);
     const targetGrp = this._norm(scope.group || scope.grade || scope.gradeName);
     const targetPer = this._norm(scope.period || '1°');
+
+    const indexKey = `${tid}_${targetPer}_${targetSub}_${targetGrd}_${targetGrp}`;
+    if (this._sequenceIndex && this._sequenceIndex[indexKey] !== undefined) {
+      return this._sequenceIndex[indexKey];
+    }
+
+    const map = this._getAllMap(tid);
+    const classes = Object.values(map);
 
     let maxNum = 0;
     classes.forEach(cls => {
@@ -296,7 +303,24 @@ class ClassRepositoryClass {
       }
     });
 
+    if (!this._sequenceIndex) this._sequenceIndex = {};
+    this._sequenceIndex[indexKey] = maxNum;
     return maxNum;
+  }
+
+  _updateSequenceIndex(cls) {
+    if (!cls) return;
+    if (!this._sequenceIndex) this._sequenceIndex = {};
+    const tid = cls.teacherId || this._getCurrentTeacherId();
+    const targetSub = this._norm(cls.subjectName || cls.subject);
+    const targetGrd = this._norm(cls.gradeName || cls.grade);
+    const targetGrp = this._norm(cls.group || cls.gradeName || cls.grade);
+    const targetPer = this._norm(cls.period || '1°');
+    const indexKey = `${tid}_${targetPer}_${targetSub}_${targetGrd}_${targetGrp}`;
+    const num = parseInt(cls.sequenceNumber, 10);
+    if (!isNaN(num)) {
+      this._sequenceIndex[indexKey] = Math.max(this._sequenceIndex[indexKey] || 0, num);
+    }
   }
 
   /**
@@ -679,6 +703,7 @@ class ClassRepositoryClass {
 
     this._persist(map, tid);
     this._broadcastSave(normalized);
+    this._updateSequenceIndex(normalized);
 
     console.log(`[ClassRepository:CREATE_CLASS] ID: ${normalized.id} Sub: ${normalized.subjectName} Grd: ${normalized.gradeName} Seq: #${normalized.sequenceNumber} Date: ${normalized.date}`);
     return JSON.parse(JSON.stringify(normalized));
@@ -715,6 +740,7 @@ class ClassRepositoryClass {
     map[normalized.id] = normalized;
     this._persist(map, tid);
     this._broadcastSave(normalized);
+    this._updateSequenceIndex(normalized);
 
     console.log(`[ClassRepository:UPDATE_CLASS] ID: ${normalized.id} Sub: ${normalized.subjectName} Grd: ${normalized.gradeName} Seq: #${normalized.sequenceNumber} v: ${normalized.version}`);
     return JSON.parse(JSON.stringify(normalized));
@@ -755,6 +781,7 @@ class ClassRepositoryClass {
 
     delete map[classId];
     this._persist(map, tid);
+    this._sequenceIndex = {};
 
     if (this._channel) {
       try {

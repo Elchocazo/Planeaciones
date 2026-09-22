@@ -15,14 +15,36 @@ function escapeXml(unsafe) {
 }
 
 const DocxTemplateEngine = {
+  _loadingJSZip: null,
+
+  async loadJSZip() {
+    if (typeof JSZip !== 'undefined') return window.JSZip || JSZip;
+    if (this._loadingJSZip) return this._loadingJSZip;
+    if (typeof require !== 'undefined') {
+      global.JSZip = require('jszip');
+      return global.JSZip;
+    }
+    if (typeof document !== 'undefined') {
+      this._loadingJSZip = new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'js/jszip.min.js';
+        script.onload = () => resolve(window.JSZip);
+        script.onerror = (e) => reject(new Error('Error al cargar jszip.min.js'));
+        document.head.appendChild(script);
+      });
+      return this._loadingJSZip;
+    }
+    throw new Error('JSZip no disponible');
+  },
+
   /**
    * Genera un archivo .docx nativo.
    * Reemplaza COMPLETAMENTE el <w:body> del template con contenido generado fresco,
    * eliminando toda posibilidad de saltos de página causados por párrafos heredados del template.
    */
   async generateDocx(templateArrayBuffer, planData, profileData) {
-    if (typeof JSZip === 'undefined' && typeof require !== 'undefined') {
-      global.JSZip = require('jszip');
+    if (typeof JSZip === 'undefined') {
+      await this.loadJSZip();
     }
 
     const zip = await JSZip.loadAsync(templateArrayBuffer);

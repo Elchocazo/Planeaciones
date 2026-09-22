@@ -683,12 +683,16 @@
   <div class="toast-container" id="toast-container"></div>
 
   <!-- Scripts de la Aplicación -->
-  <!-- 1. Librerías externas y almacenamiento base -->
-  <script src="js/jszip.min.js"></script>
+  <!-- 1. Almacenamiento base (JSZip se carga bajo demanda al exportar a Word) -->
   <script src="js/idb-storage.js"></script>
 
-  <!-- 2. Datos curriculares puros -->
-  <script src="js/data/curriculum-data.js?v=20260916-6"></script>
+  <!-- 2. Datos curriculares modularizados bajo demanda -->
+  <script src="js/data/curriculum/matematicas.js?v=20260921-2"></script>
+  <script src="js/data/curriculum/sistemas.js?v=20260921-2"></script>
+  <script src="js/data/curriculum/robotica.js?v=20260921-2"></script>
+  <script src="js/data/curriculum/logica.js?v=20260921-2"></script>
+  <script src="js/data/curriculum/direccion_grupo.js?v=20260921-2"></script>
+  <script src="js/data/curriculum-data.js?v=20260921-2"></script>
 
   <!-- 3. Repositorios de datos desacoplados -->
   <script src="js/repositories/schedule-repository.js?v=20260916-6"></script>

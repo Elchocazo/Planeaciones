@@ -86,7 +86,7 @@ class ImportParserClass {
 
       // No separar si la palabra está precedida por preposiciones, artículos o frases conectivas
       // (ej. "Criterios de evaluación", "Instrumentos de evaluación", "el taller práctico", "dicho taller")
-      if (/(?:criterios|instrumentos|r[úu]bricas?|estrategias?|momentos?|tipos?|proceso|gu[ií]a|formato|uso|entrega|asignaci[oó]n|revisi[oó]n|an[aá]lisis|sobre|para|con|por|sin|hacia|mediante|seg[úu]n|de|del|la|el|los|las|un|una|unos|unas|este|esta|estos|estas|dicho|dicha|cada|su|sus|y|o|que)\s*(?:de|del|sobre|para)?$/i.test(prefixBefore)) {
+      if (/\b(?:criterios|instrumentos|r[úu]bricas?|estrategias?|momentos?|tipos?|proceso|gu[ií]a|formato|uso|entrega|asignaci[oó]n|revisi[oó]n|an[aá]lisis|sobre|para|con|por|sin|hacia|mediante|seg[úu]n|de|del|la|el|los|las|un|una|unos|unas|este|esta|estos|estas|dicho|dicha|cada|su|sus|y|o|que)\s*(?:de|del|sobre|para)?$/i.test(prefixBefore)) {
         return p1 + ' ' + (starsBefore || '') + p2 + (starsAfter || '');
       }
 

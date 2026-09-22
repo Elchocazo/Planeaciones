@@ -71,9 +71,11 @@ const DEFAULT_PROFILE = {
   academicStartDate: '2026-09-01'
 };
 
-window.DEFAULT_GRADES = DEFAULT_GRADES;
-window.DEFAULT_WEEKLY_SCHEDULE = DEFAULT_WEEKLY_SCHEDULE;
-window.DEFAULT_PROFILE = DEFAULT_PROFILE;
+if (typeof window !== 'undefined') {
+  window.DEFAULT_GRADES = DEFAULT_GRADES;
+  window.DEFAULT_WEEKLY_SCHEDULE = DEFAULT_WEEKLY_SCHEDULE;
+  window.DEFAULT_PROFILE = DEFAULT_PROFILE;
+}
 
 const StorageService = {
   /**
@@ -658,6 +660,37 @@ const StorageService = {
         ? UserService.getCurrentUserId()
         : 'usr_manuel';
 
+      // 1. Delegación a ClassRepository optimizado (O(1)) si está disponible
+      if (typeof ClassRepository !== 'undefined' && ClassRepository.getNextSequenceNumber) {
+        const repoNext = ClassRepository.getNextSequenceNumber({
+          teacherId: currentUserId,
+          period: period || '1°',
+          subject: subject,
+          grade: grade,
+          group: grade
+        });
+
+        // Revisar si en el mismo día hay clases en memoria aún no persistidas
+        let sameDayMax = 0;
+        if (Array.isArray(currentDayClasses)) {
+          const norm = (str) => String(str || '').trim().toLowerCase();
+          const targetSub = norm(subject);
+          const targetGrd = norm(grade);
+          currentDayClasses.forEach((cls, idx) => {
+            if (excludeIndex >= 0 && idx >= excludeIndex) return;
+            const clsSub = norm(cls.subject);
+            const clsGrd = norm(cls.grade);
+            if (targetSub && clsSub && clsSub !== targetSub) return;
+            if (targetGrd && clsGrd && clsGrd !== targetGrd) return;
+            const parsed = parseInt(String(cls.dayNumber || cls.sequenceNumber || '').replace(/[^0-9]/g, ''), 10);
+            if (!isNaN(parsed) && parsed > sameDayMax) {
+              sameDayMax = parsed;
+            }
+          });
+        }
+        return Math.max(repoNext, sameDayMax + 1);
+      }
+
       if (typeof PlanRepository !== 'undefined' && PlanRepository.calculateNextSequenceNumber) {
         return PlanRepository.calculateNextSequenceNumber(currentUserId, dateStr, period, subject, grade, currentDayClasses);
       }
@@ -976,10 +1009,29 @@ const StorageService = {
   // PROTOCOLO DE GUARDADO AUTOMÁTICO Y PREVENCIÓN DE PÉRDIDA DE DATOS
   // =========================================================================
 
+  _isSaving: false,
+  _isDirty: false,
+  _hasDiskEndpoint: null, // null: no verificado, false: no disponible, true: disponible
+
+  markDirty() {
+    this._isDirty = true;
+    if (typeof AppState !== 'undefined' && AppState.set) {
+      AppState.set('isDirty', true);
+    }
+  },
+
+  markClean() {
+    this._isDirty = false;
+    if (typeof AppState !== 'undefined' && AppState.set) {
+      AppState.set('isDirty', false);
+    }
+  },
+
   /**
    * Envía un respaldo en segundo plano al servidor local (para guardado físico a disco duro)
    */
   async syncToDisk(payload = null) {
+    if (this._hasDiskEndpoint === false) return false;
     try {
       if (typeof window === 'undefined' || !window.fetch) return false;
       const dataToSync = payload || {
@@ -993,9 +1045,16 @@ const StorageService = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(dataToSync)
       });
-      return resp.ok;
+      if (resp.ok) {
+        this._hasDiskEndpoint = true;
+        return true;
+      } else {
+        this._hasDiskEndpoint = false;
+        return false;
+      }
     } catch (e) {
-      // Si la app corre desde file:// o el servidor node no está activo, falla silenciosamente
+      // Si la app corre desde file:// o el servidor node no está activo, se desactiva silenciosamente
+      this._hasDiskEndpoint = false;
       return false;
     }
   },
@@ -1004,9 +1063,18 @@ const StorageService = {
    * Ejecuta el protocolo completo de autoguardado y prevención de pérdida de datos
    */
   async executeAutoSaveProtocol(showFeedback = true) {
+    if (this._isSaving) return false;
+    const isDirty = this._isDirty || (typeof AppState !== 'undefined' && AppState.get('isDirty'));
+
+    // Si es un autoguardado en segundo plano y no hubo cambios, no saturar el hilo principal
+    if (!showFeedback && !isDirty) {
+      return true;
+    }
+
+    this._isSaving = true;
     try {
       // 1. Recolectar datos activos de la interfaz (Planeador diario)
-      if (window.Planner && typeof window.Planner.collectDataFromDOM === 'function') {
+      if (typeof window !== 'undefined' && window.Planner && typeof window.Planner.collectDataFromDOM === 'function') {
         window.Planner.collectDataFromDOM();
         if (window.Planner.currentPlan && window.Planner.currentDateStr) {
           this.savePlan(window.Planner.currentDateStr, window.Planner.currentPlan);
@@ -1014,7 +1082,7 @@ const StorageService = {
       }
 
       // 2. Recolectar datos activos del Cuaderno Docente si está abierto
-      if (window.NotebookEditor && typeof window.NotebookEditor.saveCurrentNotebookContent === 'function') {
+      if (typeof window !== 'undefined' && window.NotebookEditor && typeof window.NotebookEditor.saveCurrentNotebookContent === 'function') {
         window.NotebookEditor.saveCurrentNotebookContent(false);
       }
 
@@ -1025,21 +1093,26 @@ const StorageService = {
         ? UserService.getCurrentUserId()
         : 'usr_manuel';
 
-      // 4. Guardar snapshot histórico en IndexedDB (hasta 20 puntos de restauración)
-      if (typeof IDBStorage !== 'undefined' && IDBStorage.saveSnapshot) {
-        await IDBStorage.saveSnapshot(currentUserId, {
+      // 4. Guardar snapshot histórico en IndexedDB solo si hubo modificaciones reales o guardado manual
+      if (isDirty || showFeedback) {
+        if (typeof IDBStorage !== 'undefined' && IDBStorage.saveSnapshot) {
+          await IDBStorage.saveSnapshot(currentUserId, {
+            profile,
+            plans: allPlans
+          });
+        }
+        this.markClean();
+      }
+
+      // 5. Enviar respaldo físico a disco si el endpoint existe
+      if (this._hasDiskEndpoint !== false) {
+        this.syncToDisk({
+          version: '2.0',
+          exportedAt: new Date().toISOString(),
           profile,
           plans: allPlans
         });
       }
-
-      // 5. Enviar respaldo físico a disco vía servidor local
-      this.syncToDisk({
-        version: '2.0',
-        exportedAt: new Date().toISOString(),
-        profile,
-        plans: allPlans
-      });
 
       if (showFeedback && typeof App !== 'undefined' && App.showToast) {
         App.showToast('✓ Protocolo de autoguardado ejecutado: datos 100% protegidos en memoria, base de datos y disco', 'success');
@@ -1049,11 +1122,13 @@ const StorageService = {
     } catch (err) {
       console.warn('[StorageService] Error en protocolo de autoguardado:', err);
       return false;
+    } finally {
+      this._isSaving = false;
     }
   },
 
   /**
-   * Inicia el ciclo heartbeat de autoguardado automático en segundo plano cada 45 segundos
+   * Inicia el ciclo heartbeat de autoguardado inteligente en segundo plano cada 45 segundos
    */
   startAutoSaveHeartbeat(intervalMs = 45000) {
     if (this._heartbeatStarted) return;
@@ -1065,27 +1140,36 @@ const StorageService = {
     }
 
     setInterval(() => {
-      this.executeAutoSaveProtocol(false);
+      // Solo guardar si hay cambios pendientes
+      if (this._isDirty || (typeof AppState !== 'undefined' && AppState.get('isDirty'))) {
+        this.executeAutoSaveProtocol(false);
+      }
     }, intervalMs);
 
-    // Salvaguardas ante cierre de pestaña, cambio de visibilidad o congelamiento
+    // Salvaguardas ante cierre de pestaña o cambio de visibilidad solo si hay cambios sucios
     if (typeof window !== 'undefined') {
       window.addEventListener('beforeunload', () => {
-        this.executeAutoSaveProtocol(false);
+        if (this._isDirty || (typeof AppState !== 'undefined' && AppState.get('isDirty'))) {
+          this.executeAutoSaveProtocol(false);
+        }
       });
       window.addEventListener('pagehide', () => {
-        this.executeAutoSaveProtocol(false);
+        if (this._isDirty || (typeof AppState !== 'undefined' && AppState.get('isDirty'))) {
+          this.executeAutoSaveProtocol(false);
+        }
       });
     }
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'hidden') {
-          this.executeAutoSaveProtocol(false);
+          if (this._isDirty || (typeof AppState !== 'undefined' && AppState.get('isDirty'))) {
+            this.executeAutoSaveProtocol(false);
+          }
         }
       });
     }
 
-    console.log(`[StorageService] Protocolo de autoguardado activo (latido cada ${intervalMs / 1000}s).`);
+    console.log(`[StorageService] Protocolo de autoguardado inteligente activo (latido cada ${intervalMs / 1000}s).`);
   }
 };
 
