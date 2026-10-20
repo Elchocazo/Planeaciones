@@ -12,6 +12,29 @@ const App = {
 
   async init() {
     this.currentProfile = StorageService.getProfile();
+    // Renderizado sincrónico e inmediato del perfil para evitar cualquier dato provisional
+    this.renderHeaderProfile();
+
+    // Pre-hidratación sincrónica e inmediata en memoria para CERO segundos en blanco en recarga (F5)
+    const tid = (typeof ClassRepository !== 'undefined') ? ClassRepository._getCurrentTeacherId() : 'usr_manuel';
+    if (typeof ClassRepository !== 'undefined' && ClassRepository._hydrateSyncFromLocalStorage) {
+      if (!ClassRepository._cache || !ClassRepository._cache[tid] || Object.keys(ClassRepository._cache[tid]).length === 0) {
+        ClassRepository._hydrateSyncFromLocalStorage(tid);
+      }
+    }
+    if (typeof ScheduleRepository !== 'undefined' && ScheduleRepository.getAllSlots) {
+      ScheduleRepository.getAllSlots(tid);
+    }
+
+    // Renderizado sincrónico e inmediato de la vista principal Dashboard (0ms)
+    if (typeof DashboardView !== 'undefined') {
+      try {
+        DashboardView.init();
+        DashboardView.render();
+      } catch (eDash) {
+        console.warn('[App] Aviso en render sincrónico inmediato de Dashboard:', eDash);
+      }
+    }
 
     // Limpieza y actualización al nuevo horario semanal oficial, 1° Periodo y mallas curriculares
     if (!localStorage.getItem('schedule_official_updated_v5')) {
@@ -47,22 +70,72 @@ const App = {
     }
 
     // Sincronización oficial de las mallas curriculares completas de todas las materias y periodos (1° a 4°)
-    if (!localStorage.getItem('mallas_official_folder_synced_v13')) {
+    if (!localStorage.getItem('mallas_official_folder_synced_v14')) {
       if (typeof CurriculumService !== 'undefined') {
         CurriculumService.saveAllCurriculum(JSON.parse(JSON.stringify(DEFAULT_CURRICULUM)));
       }
-      localStorage.setItem('mallas_official_folder_synced_v13', 'true');
+      localStorage.setItem('mallas_official_folder_synced_v14', 'true');
     }
 
-    // Inicialización del repositorio centralizado con cero pérdida de datos
+    // 1. Inicialización y pre-hidratación atómica de repositorios (ScheduleRepository, ClassRepository & PlanRepository)
+    if (typeof ScheduleRepository !== 'undefined' && ScheduleRepository.init) {
+      try {
+        await ScheduleRepository.init(tid);
+      } catch (e) {
+        console.warn('[App] Error inicializando ScheduleRepository:', e);
+      }
+    }
+
+    if (typeof ClassRepository !== 'undefined' && ClassRepository.init) {
+      try {
+        await ClassRepository.init(tid);
+      } catch (e) {
+        console.warn('[App] Error inicializando ClassRepository:', e);
+      }
+    }
+
     if (typeof PlanRepository !== 'undefined' && PlanRepository.init) {
-      PlanRepository.init().catch(e => console.warn('[App] Error al iniciar PlanRepository:', e));
+      try {
+        await PlanRepository.init();
+      } catch (e) {
+        console.warn('[App] Error al iniciar PlanRepository:', e);
+      }
     }
 
-    // Inicializar nueva arquitectura (Router, Vistas y Modales)
-    if (typeof AppRouter !== 'undefined') {
-      AppRouter.init();
+    // Sincronizar y realinear numeración oficial en ClassRepository y PlanRepository
+    if (typeof ClassRepository !== 'undefined' && typeof ClassRepository.realignSequenceNumbersToSchedule === 'function') {
+      try {
+        ClassRepository.realignSequenceNumbersToSchedule(tid);
+      } catch (eAlign) {
+        console.warn('[App] Error realineando numeración a horario oficial:', eAlign);
+      }
     }
+
+    // 2. Protocolo de migración segura a v5 con respaldo automático y autorrecuperación preventiva
+    if (typeof MigrationManager !== 'undefined' && MigrationManager.needsMigration()) {
+      try {
+        await MigrationManager.runMigration(tid);
+      } catch (err) {
+        console.error('[App] Error durante la migración segura:', err);
+      }
+    } else if (typeof ClassRepository !== 'undefined') {
+      const currentClasses = ClassRepository.getAllClasses(tid);
+      if (currentClasses.length === 0 && typeof RecoveryService !== 'undefined') {
+        try {
+          console.log('[App] 0 clases en ClassRepository. Ejecutando autorrecuperación preventiva...');
+          await RecoveryService.executeSafeRecovery(tid);
+        } catch (err) {
+          console.error('[App] Error en autorrecuperación preventiva:', err);
+        }
+      }
+    }
+
+    // Inicializar sincronización en la nube si está disponible
+    if (typeof FirestoreService !== 'undefined' && !FirestoreService.isReady()) {
+      FirestoreService.init().catch(e => console.warn('[App] Firestore init notice:', e));
+    }
+
+    // 3. Inicializar vistas y modales ANTES del Router para que sus mount points y listeners existan
     if (typeof DashboardView !== 'undefined') {
       DashboardView.init();
     }
@@ -85,40 +158,15 @@ const App = {
       CurriculumSelectorModal.init();
     }
 
-    // Inicializar repositorios y arquitectura v5
-    const tid = (typeof ClassRepository !== 'undefined') ? ClassRepository._getCurrentTeacherId() : 'usr_manuel';
-    if (typeof ClassRepository !== 'undefined' && ClassRepository.init) {
-      try {
-        await ClassRepository.init(tid);
-      } catch (e) {
-        console.warn('[App] Error inicializando ClassRepository:', e);
-      }
-    }
-
-    // Protocolo de migración segura a v5 con respaldo automático
-    if (typeof MigrationManager !== 'undefined' && MigrationManager.needsMigration()) {
-      try {
-        await MigrationManager.runMigration(tid);
-      } catch (err) {
-        console.error('[App] Error durante la migración segura:', err);
-      }
-    } else if (typeof ClassRepository !== 'undefined') {
-      // Si ya está en esquema v5 pero ClassRepository no tiene clases cargadas, auto-recuperar
-      const currentClasses = ClassRepository.getAllClasses(tid);
-      if (currentClasses.length === 0 && typeof RecoveryService !== 'undefined') {
-        try {
-          console.log('[App] 0 clases en ClassRepository. Ejecutando autorrecuperación preventiva...');
-          await RecoveryService.executeSafeRecovery(tid);
-        } catch (err) {
-          console.error('[App] Error en autorrecuperación preventiva:', err);
-        }
-      }
+    // 4. Inicializar enrutador (con los datos ya 100% listos en memoria, el primer render es definitivo y sin parpadeos)
+    if (typeof AppRouter !== 'undefined') {
+      AppRouter.init();
     }
 
     // Marcar banderas de versiones anteriores para prevenir ejecuciones destructivas
     localStorage.setItem('schedule_official_updated_v5', 'true');
     localStorage.setItem('robotics_10_curriculum_updated_v1', 'true');
-    localStorage.setItem('mallas_official_folder_synced_v13', 'true');
+    localStorage.setItem('mallas_official_folder_synced_v14', 'true');
     localStorage.setItem('schedule_merge_consecutive_v2', 'true');
     localStorage.setItem('schedule_official_calibrated_v4', 'true');
 
@@ -131,15 +179,62 @@ const App = {
   },
 
   checkProfileOrOnboarding() {
+    // Si la Coordinadora Marisol Ruiz está activa, no solicitar perfil ni abrir onboarding
+    const isCoord = (typeof UserService !== 'undefined' && UserService.isCoordinatorActive()) ||
+                    (() => {
+                      try {
+                        const s = JSON.parse(sessionStorage.getItem('chmd_session_auth') || '{}');
+                        return s.role === 'coordinator';
+                      } catch (e) { return false; }
+                    })();
+
+    if (isCoord) {
+      this.renderHeaderProfile();
+      if (typeof AppRouter !== 'undefined') {
+        const hash = (typeof window !== 'undefined' && window.location && window.location.hash) 
+          ? window.location.hash.replace(/^#/, '').split('?')[0] 
+          : '';
+        const allowedCoordViews = ['calendar', 'sequences', 'notebook'];
+        if (allowedCoordViews.includes(hash)) {
+          let initialOpts = {};
+          if (window.location.hash.includes('?')) {
+            const queryPart = window.location.hash.split('?')[1];
+            try {
+              const params = new URLSearchParams(queryPart);
+              if (params.get('id')) initialOpts.classId = params.get('id');
+            } catch (e) {}
+          }
+          AppRouter.navigateTo(hash, { ...initialOpts, replace: true, force: true });
+        } else {
+          AppRouter.navigateTo('calendar', { replace: true, force: true });
+        }
+      } else {
+        this.showCalendarView();
+      }
+      return;
+    }
+
     if (!this.currentProfile || !this.currentProfile.name) {
       this.openSettingsModal('profile', true); // Primer ingreso
     } else {
       this.renderHeaderProfile();
       if (typeof AppRouter !== 'undefined') {
-        // force:true garantiza que el dashboard se re-renderice con los datos reales
-        // cargados por ClassRepository.init(), incluso si el router ya renderizó
-        // una versión vacía al inicio.
-        AppRouter.navigateTo('dashboard', { force: true, replace: true });
+        const hash = (typeof window !== 'undefined' && window.location && window.location.hash) 
+          ? window.location.hash.replace(/^#/, '').split('?')[0] 
+          : '';
+        const canonicalHash = (hash === 'class-editor') ? 'editor' : hash;
+        const hasSpecificHash = canonicalHash && canonicalHash !== 'dashboard' && 
+          (AppRouter.viewContainers && (AppRouter.viewContainers[canonicalHash] || canonicalHash === 'editor'));
+
+        if (!hasSpecificHash && AppRouter.currentView !== 'dashboard') {
+          AppRouter.navigateTo('dashboard', { replace: true });
+        } else if (AppRouter.currentView === 'dashboard') {
+          // Si ya estamos en el dashboard, verificar si el contenedor tiene contenido
+          const dashEl = document.getElementById('dashboard-view');
+          if (!dashEl || !dashEl.innerHTML || dashEl.innerHTML.trim() === '') {
+            DashboardView.render();
+          }
+        }
       } else {
         this.showCalendarView();
       }
@@ -147,99 +242,121 @@ const App = {
   },
 
   renderHeaderProfile() {
-    const profile = StorageService.getProfile();
-    if (!profile) return;
-
-    this.currentProfile = profile;
+    let currentUser = null;
+    if (typeof UserService !== 'undefined' && UserService.getCurrentUser) {
+      currentUser = UserService.getCurrentUser();
+    }
+    const session = (typeof AuthModal !== 'undefined') ? AuthModal.getSession() : null;
+    const isCoord = (currentUser && currentUser.role === 'coordinator') || (session && session.role === 'coordinator');
 
     const teacherNameEl = document.getElementById('header-teacher-name');
     const teacherRoleEl = document.getElementById('header-teacher-role');
     const teacherHomeroomEl = document.getElementById('header-teacher-homeroom');
     const teacherHoursEl = document.getElementById('header-teacher-hours');
     const teacherAvatarEl = document.getElementById('header-teacher-avatar');
-    const sidebarSubjectsListEl = document.getElementById('sidebar-subjects-list');
+    const adminToolsEl = document.getElementById('header-admin-tools');
+    const mainNavEl = document.getElementById('main-app-nav');
+    const btnLogout = document.getElementById('btn-header-logout');
 
-    if (teacherNameEl) teacherNameEl.textContent = profile.name || 'Docente';
-    
-    // Badge de rol
-    if (teacherRoleEl) {
-      if (profile.role === 'admin_teacher') {
-        teacherRoleEl.className = 'role-badge badge-role-admin';
-        teacherRoleEl.textContent = '👑 Admin / Docente';
-      } else if (profile.role === 'coordinator') {
-        teacherRoleEl.className = 'role-badge badge-role-coordinator';
-        teacherRoleEl.textContent = '🎓 Coordinación';
-      } else {
-        teacherRoleEl.className = 'role-badge badge-role-teacher';
-        teacherRoleEl.textContent = '👨‍🏫 Docente';
+    if (isCoord) {
+      if (document.body) document.body.classList.add('role-coordinator-active');
+      if (adminToolsEl) adminToolsEl.style.display = 'none';
+      if (mainNavEl) {
+        mainNavEl.style.display = 'flex';
+        // Para Marisol: Mostrar estrictamente las 2 pestañas (Calendario y Materias & Clases)
+        const navButtons = mainNavEl.querySelectorAll('.app-nav-btn');
+        navButtons.forEach(btn => {
+          const view = btn.getAttribute('data-view');
+          if (view === 'calendar' || view === 'sequences') {
+            btn.style.display = 'inline-flex';
+          } else {
+            btn.style.display = 'none';
+          }
+        });
       }
+      if (btnLogout) btnLogout.style.display = 'inline-flex';
+
+      if (teacherNameEl) teacherNameEl.textContent = 'Marisol Ruiz';
+      if (teacherRoleEl) {
+        teacherRoleEl.className = 'role-badge badge-role-coordinator';
+        teacherRoleEl.textContent = '🎓 Coordinación Académica';
+      }
+      if (teacherAvatarEl) teacherAvatarEl.textContent = 'MR';
+      if (teacherHomeroomEl) teacherHomeroomEl.textContent = 'Manuel Muñoz';
+      if (teacherHoursEl) teacherHoursEl.textContent = 'Supervisión Curricular';
+      return;
     }
 
-    if (teacherHomeroomEl) teacherHomeroomEl.textContent = profile.homeroom || 'Sin asignar';
-    if (teacherHoursEl) teacherHoursEl.textContent = `${profile.dailyHours || 5} horas/día`;
+    // Modo Administrador / Docente Titular (Manuel Muñoz)
+    if (document.body) document.body.classList.remove('role-coordinator-active');
+    if (adminToolsEl) adminToolsEl.style.display = 'flex';
+    if (mainNavEl) {
+      mainNavEl.style.display = 'flex';
+      const navButtons = mainNavEl.querySelectorAll('.app-nav-btn');
+      navButtons.forEach(btn => {
+        btn.style.display = 'inline-flex';
+      });
+    }
 
+    const hasWebSession = (typeof AuthModal !== 'undefined' && !AuthModal.isLocalEnvironment() && !!AuthModal.getSession());
+    if (btnLogout) btnLogout.style.display = hasWebSession ? 'inline-flex' : 'none';
+
+    const profile = StorageService.getProfile() || {};
+    this.currentProfile = profile;
+
+    if (teacherNameEl) teacherNameEl.textContent = profile.name || 'Manuel Muñoz';
+    if (teacherRoleEl) {
+      teacherRoleEl.className = 'role-badge badge-role-admin';
+      teacherRoleEl.textContent = '👑 Admin / Docente';
+    }
     if (teacherAvatarEl) {
-      const initials = (profile.name || 'D')
+      const initials = (profile.name || 'MM')
         .split(' ')
         .filter(Boolean)
         .slice(0, 2)
         .map(w => w[0].toUpperCase())
         .join('');
-      teacherAvatarEl.textContent = initials || 'D';
+      teacherAvatarEl.textContent = initials || 'MM';
     }
+    if (teacherHomeroomEl) teacherHomeroomEl.textContent = profile.homeroom || '7°';
+    if (teacherHoursEl) teacherHoursEl.textContent = `${profile.dailyHours || 6} horas/día`;
 
-    // Visibilidad de botones según rol
-    const btnCoord = document.getElementById('btn-coordinator-panel');
-    const btnManageUsers = document.getElementById('btn-manage-users-header');
-
-    if (btnCoord) {
-      btnCoord.style.display = (profile.role === 'admin_teacher' || profile.role === 'coordinator') ? 'inline-flex' : 'none';
-    }
-
-    if (btnManageUsers) {
-      btnManageUsers.style.display = (profile.role === 'admin_teacher') ? 'inline-flex' : 'none';
-    }
-
-    // Renderizar materias en la barra lateral
-    if (sidebarSubjectsListEl) {
-      if (profile.subjects && profile.subjects.length > 0) {
-        sidebarSubjectsListEl.innerHTML = profile.subjects.map(subObj => {
-          const name = typeof subObj === 'string' ? subObj : subObj.name;
-          const grades = typeof subObj === 'object' && subObj.grades ? subObj.grades : [];
-          const gradesPills = grades.length > 0
-            ? grades.map(g => `<span>${this.escapeHtml(g)}</span>`).join('')
-            : '<span style="color:var(--slate-400);">Ninguno</span>';
-
-          return `
-            <div class="subject-item-card">
-              <div class="subject-item-name">
-                <span class="subject-tag-dot"></span>
-                ${this.escapeHtml(name)}
-              </div>
-              <div class="subject-item-grades">
-                Grados: ${gradesPills}
-              </div>
-            </div>
-          `;
-        }).join('');
-      } else {
-        sidebarSubjectsListEl.innerHTML = `
-          <div style="font-size:0.8rem; color:var(--slate-400); font-style:italic; padding:0.5rem 0;">
-            ${profile.role === 'coordinator' ? 'Coordinación supervisa todas las asignaturas de la institución.' : 'Sin asignaturas asignadas.'}
-          </div>
-        `;
-      }
+    // Actualizar indicador visual de Firestore
+    if (typeof FirestoreService !== 'undefined') {
+      FirestoreService.renderCloudStatusIndicator();
     }
   },
 
   toggleUserDropdown(event) {
     if (event) event.stopPropagation();
+    const isCoord = (typeof UserService !== 'undefined' && UserService.isCoordinatorActive()) ||
+                    (typeof AuthModal !== 'undefined' && AuthModal.getSession()?.role === 'coordinator');
+    if (isCoord) return; // Coordinación no tiene acceso a menú de cambio de usuario
+
     const menu = document.getElementById('user-switcher-dropdown');
     if (!menu) return;
 
     const isOpen = menu.classList.contains('show');
     if (isOpen) {
       menu.classList.remove('show');
+      return;
+    }
+
+    // Si la sesión activa es de Coordinación (Marisol Ruiz), aislar completamente su menú sin acceso docente
+    if (typeof UserService !== 'undefined' && UserService.isCoordinatorActive()) {
+      menu.innerHTML = `
+        <div style="padding:0.75rem 1rem; border-bottom:1px solid var(--slate-100);">
+          <div style="font-weight:800; font-size:0.92rem; color:var(--slate-800);">Marisol Ruiz</div>
+          <div style="font-size:0.78rem; color:#2563eb; font-weight:600; margin-top:2px;">🎓 Coordinación Académica</div>
+          <div style="font-size:0.75rem; color:var(--slate-500); margin-top:2px;">Colegio Hogar Madre de Dios</div>
+        </div>
+        <div style="padding:0.6rem 0.75rem;">
+          <button type="button" class="btn btn-secondary btn-sm" style="width:100%; justify-content:center; color:#dc2626; border-color:#fca5a5; background:#fef2f2; font-weight:700;" onclick="AuthModal.logout(); document.getElementById('user-switcher-dropdown').classList.remove('show');">
+            🚪 Cerrar Sesión
+          </button>
+        </div>
+      `;
+      menu.classList.add('show');
       return;
     }
 
@@ -289,6 +406,17 @@ const App = {
     if (this.activeView === 'planner' && window.Planner) {
       window.Planner.saveCurrentPlan(false);
     }
+
+    // Si se intenta ingresar a Coordinación (Marisol Ruiz), solicitar contraseña
+    if (userId === 'usr_coordinacion') {
+      const menu = document.getElementById('user-switcher-dropdown');
+      if (menu) menu.classList.remove('show');
+      if (typeof AuthModal !== 'undefined') {
+        AuthModal.openLoginModal('coordinator');
+        return;
+      }
+    }
+
     UserService.setCurrentUser(userId);
     const menu = document.getElementById('user-switcher-dropdown');
     if (menu) menu.classList.remove('show');
@@ -298,7 +426,7 @@ const App = {
     this.showToast(`Has ingresado como: ${user.name}`, 'success');
 
     if (user.role === 'coordinator') {
-      CoordinatorView.openDashboard();
+      this.showCalendarView();
     } else {
       this.showCalendarView();
     }
@@ -370,9 +498,23 @@ const App = {
   },
 
   openDayPlanner(dateStr) {
+    const isCoord = (typeof UserService !== 'undefined' && UserService.isCoordinatorActive()) ||
+                    (typeof AuthModal !== 'undefined' && AuthModal.getSession()?.role === 'coordinator');
+    if (isCoord) {
+      if (typeof CoordinatorView !== 'undefined' && typeof CoordinatorView.openDayClassesReview === 'function') {
+        CoordinatorView.openDayClassesReview(dateStr);
+        return;
+      }
+    }
+
+    // Modo Docente / Administrador: Asegurar que no haya bloqueo de vista
+    if (document.body) {
+      document.body.classList.remove('role-coordinator-active');
+    }
+
     if (typeof DashboardView !== 'undefined' && typeof AppRouter !== 'undefined') {
       DashboardView.setDate(dateStr);
-      AppRouter.navigateTo('dashboard');
+      AppRouter.navigateTo('dashboard', { force: true });
       return;
     }
     if (window.Planner && typeof window.Planner.flushPendingSave === 'function') {
@@ -848,6 +990,167 @@ const App = {
       window.addEventListener('pagehide', () => {
         if (this.activeView === 'planner' && window.Planner) {
           window.Planner.saveCurrentPlan(false);
+        }
+      });
+
+      // Manejador global de la tecla Escape para cerrar cualquier ventana o modal abierto
+      window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' || e.keyCode === 27) {
+          // 1. Modal de inspección de secuencia didáctica de Coordinación
+          const inspectModal = document.getElementById('coordinator-inspect-plan-modal');
+          if (inspectModal) {
+            inspectModal.remove();
+            const dcm = document.getElementById('coordinator-day-classes-modal');
+            if (dcm) dcm.style.display = '';
+            return;
+          }
+
+          // 2. Visor de cuaderno docente de Coordinación
+          const readerModal = document.getElementById('coordinator-notebook-reader-modal');
+          if (readerModal) {
+            readerModal.remove();
+            const dcm = document.getElementById('coordinator-day-classes-modal');
+            if (dcm) dcm.style.display = '';
+            return;
+          }
+
+          // 3. Modal de visto bueno / retroalimentación de Coordinación
+          const feedbackModal = document.getElementById('coordinator-feedback-modal');
+          if (feedbackModal) {
+            feedbackModal.remove();
+            return;
+          }
+
+          // 4. Modal de clases del día de Coordinación
+          const dayClassesModal = document.getElementById('coordinator-day-classes-modal');
+          if (dayClassesModal && dayClassesModal.style.display !== 'none') {
+            dayClassesModal.remove();
+            return;
+          }
+
+          // 5. Dashboard de Coordinación
+          const coordDash = document.getElementById('coordinator-dashboard-modal');
+          if (coordDash && coordDash.classList.contains('active')) {
+            if (typeof CoordinatorView !== 'undefined' && CoordinatorView.closeDashboard) {
+              CoordinatorView.closeDashboard();
+            } else {
+              coordDash.classList.remove('active');
+            }
+            return;
+          }
+
+          // 6. Vista previa de imagen / anexo
+          const imgModal = document.getElementById('image-preview-modal-backdrop');
+          if (imgModal && imgModal.classList.contains('active')) {
+            imgModal.classList.remove('active');
+            return;
+          }
+
+          // 7. Centro de descargas
+          const dlModal = document.getElementById('day-download-modal-backdrop');
+          if (dlModal && dlModal.classList.contains('active')) {
+            this.closeDayDownloadModal();
+            return;
+          }
+
+          // 8. Modales del editor de clases
+          const navModal = document.getElementById('class-navigator-modal-backdrop');
+          if (navModal && navModal.classList.contains('active')) {
+            if (typeof ClassEditorView !== 'undefined' && ClassEditorView.closeClassNavigatorModal) {
+              ClassEditorView.closeClassNavigatorModal();
+            } else {
+              navModal.classList.remove('active');
+            }
+            return;
+          }
+
+          const changeDateModal = document.getElementById('class-change-date-modal-backdrop');
+          if (changeDateModal && changeDateModal.classList.contains('active')) {
+            if (typeof ClassEditorView !== 'undefined' && ClassEditorView.closeChangeDateModal) {
+              ClassEditorView.closeChangeDateModal();
+            } else {
+              changeDateModal.classList.remove('active');
+            }
+            return;
+          }
+
+          const changeNumModal = document.getElementById('editor-change-class-number-modal-backdrop');
+          if (changeNumModal && changeNumModal.classList.contains('active')) {
+            if (typeof ClassEditorView !== 'undefined' && ClassEditorView.closeChangeNumberModal) {
+              ClassEditorView.closeChangeNumberModal();
+            } else {
+              changeNumModal.classList.remove('active');
+            }
+            return;
+          }
+
+          // 9. Anexos de clase
+          const attModal = document.getElementById('class-attachments-modal-backdrop');
+          if (attModal && attModal.classList.contains('active')) {
+            attModal.classList.remove('active');
+            return;
+          }
+
+          // 10. Configuración docente / matriz
+          const setModal = document.getElementById('settings-modal-backdrop');
+          if (setModal && setModal.classList.contains('active')) {
+            this.closeSettingsModal();
+            return;
+          }
+
+          // 11. Importador inteligente
+          const impModal = document.getElementById('import-modal-backdrop');
+          if (impModal && impModal.classList.contains('active')) {
+            if (typeof ImportModal !== 'undefined' && ImportModal.close) {
+              ImportModal.close();
+            } else {
+              impModal.classList.remove('active');
+            }
+            return;
+          }
+
+          // 12. Otros modales institucionales
+          const currModal = document.getElementById('curriculum-modal-backdrop');
+          if (currModal && currModal.classList.contains('active')) {
+            if (typeof CurriculumManager !== 'undefined' && CurriculumManager.closeModal) CurriculumManager.closeModal();
+            else currModal.classList.remove('active');
+            return;
+          }
+
+          const evtModal = document.getElementById('school-events-modal-backdrop');
+          if (evtModal && evtModal.classList.contains('active')) {
+            if (typeof SchoolEventsManager !== 'undefined' && SchoolEventsManager.closeModal) SchoolEventsManager.closeModal();
+            else evtModal.classList.remove('active');
+            return;
+          }
+
+          const userModal = document.getElementById('user-manager-modal-backdrop');
+          if (userModal && userModal.classList.contains('active')) {
+            if (typeof UserManagerModal !== 'undefined' && UserManagerModal.close) UserManagerModal.close();
+            else userModal.classList.remove('active');
+            return;
+          }
+
+          // 13. Cualquier modal genérico restante que esté activo
+          const activeModals = document.querySelectorAll('.modal-backdrop.active, .coordinator-modal-backdrop.active');
+          if (activeModals && activeModals.length > 0) {
+            const topModal = activeModals[activeModals.length - 1];
+            topModal.classList.remove('active');
+            if (topModal.id && topModal.id.startsWith('coordinator-')) {
+              topModal.remove();
+            }
+            return;
+          }
+
+          // 14. Ocultar menús desplegables abiertos
+          const moreDropdown = document.getElementById('header-more-dropdown');
+          if (moreDropdown && moreDropdown.style.display !== 'none') {
+            moreDropdown.style.display = 'none';
+          }
+          const userDropdown = document.getElementById('user-switcher-dropdown');
+          if (userDropdown && userDropdown.classList.contains('active')) {
+            userDropdown.classList.remove('active');
+          }
         }
       });
     }

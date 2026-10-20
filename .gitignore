@@ -39,3 +39,6 @@ backups/
 *.pdf
 *.docx
 *.doc
+
+# Firebase cache
+.firebase/

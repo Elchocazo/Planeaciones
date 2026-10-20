@@ -6,12 +6,426 @@
   <title>Planeador de Clases Pedagógico - Gestión Docente</title>
   <meta name="description" content="Aplicación profesional para organizar y estructurar planeadores de clase docentes con vista de calendario y exportación a Word y PDF.">
   
-  <link rel="stylesheet" href="css/styles.css?v=4.2.3">
+  <link rel="stylesheet" href="css/styles.css?v=20261020-v1">
   
   <!-- Favicon SVG -->
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%234f46e5'><path d='M4 19.5A2.5 2.5 0 0 1 6.5 17H20'/><path d='M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z'/></svg>">
+
+  <!-- Estilos Críticos Inline para la Pantalla de Inicio (Inmunes a caché del navegador) -->
+  <style id="chmd-portal-critical-styles">
+    /* Ocultamiento absoluto si está en entorno local o ya autenticado */
+    html.portal-gate-hidden #institutional-portal-gate,
+    body.portal-gate-hidden #institutional-portal-gate,
+    #institutional-portal-gate.hidden {
+      display: none !important;
+    }
+
+    /* Bloqueo total de la app hasta que se autentique */
+    html.auth-locked,
+    body.auth-locked {
+      overflow: hidden !important;
+      height: 100vh !important;
+    }
+    html.auth-locked body .app-container,
+    body.auth-locked .app-container,
+    html.auth-locked #app-main-header,
+    body.auth-locked #app-main-header,
+    html.auth-locked .modal-backdrop:not(#institutional-portal-gate),
+    body.auth-locked .modal-backdrop:not(#institutional-portal-gate) {
+      display: none !important;
+    }
+
+    /* Overlay de Pantalla Completa del Portal */
+    .portal-gate-overlay {
+      position: fixed !important;
+      inset: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      z-index: 9999999 !important;
+      background: radial-gradient(circle at 50% 25%, #1e293b 0%, #0f172a 65%, #050811 100%) !important;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+      overflow-y: auto;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      box-sizing: border-box;
+    }
+    .portal-gate-overlay * {
+      box-sizing: border-box;
+    }
+    .portal-gate-container {
+      width: 100%;
+      max-width: 480px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.5rem;
+      margin: auto;
+    }
+    .portal-branding {
+      text-align: center;
+      color: #ffffff;
+    }
+    .portal-crest-badge {
+      width: 68px;
+      height: 68px;
+      margin: 0 auto 0.75rem auto;
+      background: rgba(255, 255, 255, 0.08);
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2.2rem;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35);
+    }
+    .portal-school-title {
+      font-size: 1.35rem;
+      font-weight: 800;
+      letter-spacing: 1px;
+      margin: 0 0 0.35rem 0;
+      color: #f8fafc;
+      text-transform: uppercase;
+    }
+    .portal-system-subtitle {
+      font-size: 0.88rem;
+      color: #94a3b8;
+      margin: 0;
+    }
+    .portal-card {
+      width: 100%;
+      background: #ffffff;
+      border-radius: 16px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1);
+      overflow: hidden;
+      animation: portalSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes portalSlideUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .portal-card-header {
+      padding: 1.75rem 1.75rem 1.1rem 1.75rem;
+      text-align: center;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    .portal-role-avatar {
+      width: 58px;
+      height: 58px;
+      border-radius: 50%;
+      margin: 0 auto 0.75rem auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.85rem;
+    }
+    .portal-role-avatar.coordinator {
+      background: #eff6ff;
+      border: 2px solid #bfdbfe;
+    }
+    .portal-role-avatar.admin {
+      background: #ecfdf5;
+      border: 2px solid #a7f3d0;
+    }
+    .portal-card-header h2 {
+      font-size: 1.25rem;
+      font-weight: 800;
+      color: #0f172a;
+      margin: 0 0 0.35rem 0;
+    }
+    .portal-target-subtitle {
+      font-size: 0.85rem;
+      color: #64748b;
+      margin: 0;
+      font-weight: 600;
+    }
+    .portal-card-body {
+      padding: 1.5rem 1.75rem 1.75rem 1.75rem;
+    }
+    .portal-info-box {
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-radius: 10px;
+      padding: 0.85rem 1rem;
+      font-size: 0.82rem;
+      color: #166534;
+      margin-bottom: 1.25rem;
+      display: flex;
+      gap: 0.75rem;
+      line-height: 1.45;
+      text-align: left;
+    }
+    .portal-info-box.admin {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      color: #334155;
+    }
+    .portal-form-group {
+      margin-bottom: 1.25rem;
+      text-align: left;
+    }
+    .portal-label {
+      display: block;
+      font-size: 0.84rem;
+      font-weight: 700;
+      color: #1e293b;
+      margin-bottom: 0.45rem;
+    }
+    .portal-input-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    .portal-input {
+      width: 100%;
+      padding: 0.75rem 2.75rem 0.75rem 1rem;
+      border: 1.5px solid #cbd5e1;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #0f172a;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .portal-input:focus {
+      border-color: #4f46e5;
+      box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+    }
+    .portal-btn-eye {
+      position: absolute;
+      right: 0.75rem;
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 1.1rem;
+      color: #94a3b8;
+      padding: 0.25rem;
+    }
+    .portal-error-alert {
+      margin-top: 0.5rem;
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #b91c1c;
+      padding: 0.5rem 0.75rem;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+    .portal-btn-primary {
+      width: 100%;
+      padding: 0.8rem 1rem;
+      background: #2563eb;
+      color: #ffffff;
+      border: none;
+      border-radius: 10px;
+      font-size: 0.98rem;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+    .portal-btn-primary:hover {
+      background: #1d4ed8;
+      transform: translateY(-1px);
+    }
+    .portal-btn-primary.admin {
+      background: #059669;
+      box-shadow: 0 4px 6px -1px rgba(5, 150, 105, 0.2);
+    }
+    .portal-btn-primary.admin:hover {
+      background: #047857;
+    }
+    .portal-btn-google {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      background: #ffffff;
+      color: #374151;
+      border: 1.5px solid #d1d5db;
+      border-radius: 10px;
+      font-size: 0.92rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.65rem;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+      margin-bottom: 0.85rem;
+      transition: background-color 0.2s;
+    }
+    .portal-btn-google:hover {
+      background: #f9fafb;
+    }
+    .portal-divider {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin: 0.85rem 0;
+      color: #94a3b8;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .portal-divider::before,
+    .portal-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: #e2e8f0;
+    }
+    .portal-switch-link {
+      color: #64748b;
+      font-size: 0.82rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+    .portal-switch-link:hover {
+      color: #2563eb;
+      text-decoration: underline;
+    }
+    .portal-footer {
+      text-align: center;
+      color: #64748b;
+      font-size: 0.76rem;
+      margin-top: 0.5rem;
+    }
+
+    /* Vista estricta para Coordinación Académica (Marisol Ruiz): Únicamente Calendario */
+    body.role-coordinator-active #header-admin-tools,
+    body.role-coordinator-active #main-app-nav,
+    body.role-coordinator-active .user-switcher-dropdown,
+    body.role-coordinator-active #dashboard-view,
+    body.role-coordinator-active #sequences-view,
+    body.role-coordinator-active #history-view,
+    body.role-coordinator-active #recovery-view {
+      display: none !important;
+    }
+    body.role-coordinator-active #calendar-view {
+      display: grid !important;
+    }
+    body.role-coordinator-active .teacher-identity {
+      cursor: default !important;
+    }
+  </style>
+
+  <!-- Detección Inmediata de Sesión Institucional (Bloqueo previo síncrono para cero fugas visuales) -->
+  <script>
+    (function() {
+      try {
+        var isLocal = window.location.protocol === 'file:' || 
+                      window.location.hostname === 'localhost' || 
+                      window.location.hostname === '127.0.0.1';
+        var session = null;
+        try { session = sessionStorage.getItem('chmd_session_auth'); } catch(e) {}
+
+        if (isLocal || session) {
+          // Entorno local o con sesión activa: Ocultar portal y permitir visualización normal
+          document.documentElement.classList.add('portal-gate-hidden');
+          document.documentElement.classList.remove('auth-locked');
+        } else {
+          // Entorno web remoto sin sesión: Bloquear y activar portal
+          document.documentElement.classList.remove('portal-gate-hidden');
+          document.documentElement.classList.add('auth-locked');
+        }
+      } catch(e) {}
+    })();
+  </script>
 </head>
 <body>
+
+  <!-- PÁGINA DE INICIO Y PORTAL INSTITUCIONAL DE ACCESO -->
+  <div id="institutional-portal-gate" class="portal-gate-overlay">
+    <div class="portal-gate-container">
+      
+      <!-- Encabezado Institucional -->
+      <div class="portal-branding">
+        <div class="portal-crest-badge">
+          🎓
+        </div>
+        <h1 class="portal-school-title">COLEGIO HOGAR MADRE DE DIOS</h1>
+        <p class="portal-system-subtitle">Sistema de Planeación Curricular & Supervisión Pedagógica</p>
+      </div>
+
+      <!-- Tarjeta 1: Acceso a Coordinación Académica (POR DEFECTO Y PÚBLICA) -->
+      <div class="portal-card" id="gate-card-coordinator">
+        <div class="portal-card-header">
+          <div class="portal-role-avatar coordinator">👩‍🏫</div>
+          <h2>Acceso a Coordinación Académica</h2>
+          <p class="portal-target-subtitle">Marisol Ruiz • Supervisión Curricular</p>
+        </div>
+
+        <div class="portal-card-body">
+          <div class="portal-info-box">
+            <span>ℹ️</span>
+            <div>
+              Portal habilitado para la revisión pedagógica, visto bueno oficial y descarga de planeaciones de clase del docente <strong>Manuel Muñoz</strong>.
+            </div>
+          </div>
+
+          <form onsubmit="AuthModal.handleGateCoordinatorSubmit(event)">
+            <div class="portal-form-group">
+              <label for="gate-coord-password" class="portal-label">Contraseña Institucional:</label>
+              <div class="portal-input-wrapper">
+                <input type="password" id="gate-coord-password" class="portal-input" placeholder="Ingresa la contraseña institucional" required autocomplete="current-password" autofocus />
+                <button type="button" class="portal-btn-eye" onclick="AuthModal.toggleGatePasswordVisibility()" title="Mostrar u ocultar contraseña">👁️</button>
+              </div>
+              <div id="gate-coord-error-msg" class="portal-error-alert" style="display:none;">
+                ⚠️ Contraseña incorrecta. Por favor intente nuevamente.
+              </div>
+            </div>
+
+            <button type="submit" class="portal-btn-primary" id="gate-btn-submit-coord">
+              🔐 Ingresar como Marisol Ruiz
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Tarjeta 2: Acceso Docente & Administrador (SOLO CON ENLACE PRIVADO /admin o #admin) -->
+      <div class="portal-card" id="gate-card-admin" style="display:none;">
+        <div class="portal-card-header">
+          <div class="portal-role-avatar admin">👨‍🏫</div>
+          <h2>Acceso Docente & Administrador</h2>
+          <p class="portal-target-subtitle">Manuel Muñoz • Planificación Curricular</p>
+        </div>
+
+        <div class="portal-card-body">
+          <div class="portal-info-box admin">
+            <span>🔒</span>
+            <div>
+              Acceso a la plataforma de edición, diseño de clases, calendario y sincronización directa con Firestore.
+            </div>
+          </div>
+
+          <!-- Botón oficial de Google Sign-in -->
+          <button type="button" class="portal-btn-google" onclick="AuthModal.signInWithGoogle()">
+            <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.616z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z"/><path fill="#FBBC05" d="M3.964 10.707c-.18-.54-.282-1.117-.282-1.707s.102-1.167.282-1.707V4.961H.957C.347 6.175 0 7.55 0 9s.347 2.825.957 4.039l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.961L3.964 7.293C4.672 5.166 6.656 3.58 9 3.58z"/></svg>
+            <span>Continuar con Google</span>
+          </button>
+
+          <div class="portal-divider">
+            <span>o acceso docente directo</span>
+          </div>
+
+          <button type="button" class="portal-btn-primary admin" onclick="AuthModal.handleGateAdminDirectLogin()">
+            🚀 Ingresar al Planeador de Clases
+          </button>
+        </div>
+      </div>
+
+      <!-- Pie de página Institucional -->
+      <div class="portal-footer">
+        Colegio Hogar Madre de Dios &bull; Plataforma Pedagógica v4.2 &bull; Sistema Protegido
+      </div>
+
+    </div>
+  </div>
 
   <!-- Contenedor Principal de la App -->
   <div class="app-container">
@@ -20,17 +434,17 @@
     <header class="main-header" id="app-main-header">
       <div class="teacher-identity-wrapper" style="position:relative;">
         <div class="teacher-identity" onclick="App.toggleUserDropdown(event)" style="cursor:pointer;" title="Clic para alternar entre perfiles de docentes o ingresar como Coordinación">
-          <div class="teacher-avatar" id="header-teacher-avatar">D</div>
+          <div class="teacher-avatar" id="header-teacher-avatar">M</div>
           <div class="teacher-meta">
             <h1>
-              <span id="header-teacher-name">Docente</span>
-              <span class="role-badge" id="header-teacher-role">Docente</span>
+              <span id="header-teacher-name">Manuel Muñoz</span>
+              <span class="role-badge badge-role-admin" id="header-teacher-role">👨‍💻 Admin / Docente</span>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-left:4px;"><polyline points="6 9 12 15 18 9"></polyline></svg>
             </h1>
             <div class="teacher-details">
               <div class="teacher-detail-item">
                 <span>Dirección de grupo:</span>
-                <strong id="header-teacher-homeroom">Sin asignar</strong>
+                <strong id="header-teacher-homeroom">7°</strong>
               </div>
               <span>•</span>
               <div class="teacher-detail-item">
@@ -41,6 +455,54 @@
           </div>
         </div>
 
+        <!-- Pre-hidratación sincrónica inmediata para evitar parpadeos o datos provisionales erróneos -->
+        <script>
+          (function() {
+            try {
+              var currentId = localStorage.getItem('school_current_active_user_v2') || 'usr_manuel';
+              var usersRaw = localStorage.getItem('school_teachers_users_v2');
+              var user = null;
+              if (usersRaw) {
+                var users = JSON.parse(usersRaw);
+                if (Array.isArray(users)) {
+                  user = users.find(function(u) { return u.id === currentId; });
+                }
+              }
+              if (!user) {
+                var profRaw = localStorage.getItem('teacher_planner_profile_v1');
+                if (profRaw) user = JSON.parse(profRaw);
+              }
+              if (user && user.name) {
+                var nameEl = document.getElementById('header-teacher-name');
+                var roleEl = document.getElementById('header-teacher-role');
+                var hrEl = document.getElementById('header-teacher-homeroom');
+                var hoursEl = document.getElementById('header-teacher-hours');
+                var avEl = document.getElementById('header-teacher-avatar');
+
+                if (nameEl) nameEl.textContent = user.name;
+                if (avEl) {
+                  var inits = user.name.split(' ').filter(Boolean).slice(0, 2).map(function(w) { return w[0].toUpperCase(); }).join('');
+                  avEl.textContent = inits || 'M';
+                }
+                if (roleEl) {
+                  if (user.role === 'admin_teacher') {
+                    roleEl.className = 'role-badge badge-role-admin';
+                    roleEl.textContent = '👨‍💻 Admin / Docente';
+                  } else if (user.role === 'coordinator') {
+                    roleEl.className = 'role-badge badge-role-coordinator';
+                    roleEl.textContent = '👩‍🏫 Coordinación';
+                  } else {
+                    roleEl.className = 'role-badge badge-role-teacher';
+                    roleEl.textContent = '👨‍🏫 Docente';
+                  }
+                }
+                if (hrEl) hrEl.textContent = user.homeroom || 'Sin asignar';
+                if (hoursEl) hoursEl.textContent = (user.dailyHours || 5) + ' horas/día';
+              }
+            } catch(e) {}
+          })();
+        </script>
+
         <!-- Menú Desplegable Rápido de Cambio de Docente / Rol -->
         <div class="dropdown-menu user-switcher-dropdown" id="user-switcher-dropdown">
           <!-- Renderizado dinámicamente -->
@@ -48,55 +510,77 @@
       </div>
 
       <div class="header-actions">
-        <!-- Botón Importar Planeación (Inteligente) -->
-        <button class="btn btn-secondary" id="btn-import-header" onclick="ImportModal.open(null, () => { if (typeof DashboardView !== 'undefined') DashboardView.render(); })" title="Importador Inteligente: Pegar planeación en texto o estructurada">
-          📥 Importar
+        <!-- Botón Salir / Cerrar Sesión Institucional (Visible para Marisol y sesiones web) -->
+        <button class="btn btn-secondary" id="btn-header-logout" onclick="AuthModal.logout()" title="Cerrar sesión institucional y volver al portal de inicio" style="display:none; color:#dc2626; border-color:#fca5a5; background:#fef2f2; font-weight:700;">
+          🚪 Salir
         </button>
 
-        <!-- Botón Panel de Coordinación (Supervisión, visto bueno y descargas) -->
-        <button class="btn btn-primary btn-coord-header" id="btn-coordinator-panel" onclick="CoordinatorView.openDashboard()" title="Panel de Coordinación: Supervisar planeaciones de los docentes, dar visto bueno y descargarlas en Word/PDF">
-          🎓 Panel de Coordinación
-        </button>
+        <!-- HERRAMIENTAS EXCLUSIVAS DEL ADMINISTRADOR / DOCENTE (100% ocultas para Marisol Ruiz) -->
+        <div class="header-admin-tools" id="header-admin-tools" style="display:flex; align-items:center; gap:0.4rem; flex-wrap:nowrap;">
 
-        <!-- Botón Gestión de Docentes (Administrador) -->
-        <button class="btn btn-secondary" id="btn-manage-users-header" onclick="UserManagerModal.open()" title="Crear y configurar docentes y roles">
-          👥 Docentes & Roles
-        </button>
+          <!-- Indicador de Sincronización en la Nube -->
+          <div id="firestore-cloud-status-badge" class="cloud-status-pill offline" onclick="FirestoreConfigModal.open()" title="Sincronización en la Nube con Google Cloud Firestore" style="white-space:nowrap; font-size:0.78rem; padding:4px 8px; cursor:pointer;">
+            <span class="status-dot gray"></span> <span>Nube</span>
+          </div>
 
-        <!-- Botón de Configuración y Asignación de Materias -->
-        <button class="btn btn-manage-contents" onclick="App.openSettingsModal('matrix')" title="Configurar materias y los grados a los que se imparten">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
-          Materias & Grados
-        </button>
-        <button class="btn btn-secondary" onclick="SchoolEventsManager.openModal()" title="Ver festivos en Colombia y configurar vacaciones, semana santa y exámenes">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-          Festivos & Eventos
-        </button>
+          <!-- Botón Importar Planeación -->
+          <button class="btn btn-secondary" id="btn-import-header" onclick="ImportModal.open(null, () => { if (typeof DashboardView !== 'undefined') DashboardView.render(); })" title="Importador Inteligente: Pegar planeación en texto o estructurada" style="white-space:nowrap; font-size:0.82rem; padding:5px 10px;">
+            📥 Importar
+          </button>
 
-        <button class="btn btn-secondary" onclick="CurriculumManager.openModal()" title="Configurar banco de temas, logros y DBAs por periodo">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
-          Malla Curricular
-        </button>
+          <!-- Botón Panel de Coordinación -->
+          <button class="btn btn-primary btn-coord-header" id="btn-coordinator-panel" onclick="CoordinatorView.openDashboard()" title="Panel de Coordinación: Supervisar planeaciones" style="white-space:nowrap; font-size:0.82rem; padding:5px 10px;">
+            👩‍🏫 Coordinación
+          </button>
 
-        <button class="btn btn-secondary" onclick="App.openSettingsModal('profile')" title="Editar información del perfil y horario">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-          Mi Perfil
-        </button>
-
-        <button class="btn btn-secondary btn-icon" onclick="StorageService.executeAutoSaveProtocol(true)" title="Ejecutar protocolo de guardado automático (Memoria, Base de Datos y Disco)" style="color:#059669; border-color:#a7f3d0; background:#ecfdf5;">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
-        </button>
-
-        <button class="btn btn-secondary btn-icon" onclick="StorageService.exportBackup()" title="Descargar copia de seguridad de mis planeaciones">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-        </button>
-
-        <label class="btn btn-secondary btn-icon" title="Restaurar copia de seguridad (JSON)" style="margin:0; cursor:pointer;">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-          <input type="file" id="import-backup-file" accept=".json" style="display: none;" />
-        </label>
+          <!-- Menú desplegable con herramientas secundarias -->
+          <div id="header-more-menu-wrapper" style="position:relative;">
+            <button class="btn btn-secondary" onclick="(function(){var m=document.getElementById('header-more-dropdown');m.style.display=(m.style.display==='none'||!m.style.display)?'block':'none';event.stopPropagation();})()" title="Más opciones de administración" style="white-space:nowrap; font-size:0.82rem; padding:5px 10px;">
+              ⚙️ Más ▾
+            </button>
+            <div id="header-more-dropdown" style="display:none; position:absolute; right:0; top:calc(100% + 4px); background:#fff; border:1px solid #e2e8f0; border-radius:10px; box-shadow:0 8px 24px rgba(0,0,0,0.14); z-index:9999; min-width:210px; padding:6px 0;">
+              <button onclick="UserManagerModal.open(); document.getElementById('header-more-dropdown').style.display='none';" style="display:flex; align-items:center; gap:8px; width:100%; padding:9px 16px; background:none; border:none; cursor:pointer; font-size:0.88rem; color:#334155;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='none'">
+                👥 Docentes &amp; Roles
+              </button>
+              <button onclick="App.openSettingsModal('matrix'); document.getElementById('header-more-dropdown').style.display='none';" style="display:flex; align-items:center; gap:8px; width:100%; padding:9px 16px; background:none; border:none; cursor:pointer; font-size:0.88rem; color:#334155;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='none'">
+                📚 Materias &amp; Grados
+              </button>
+              <button onclick="SchoolEventsManager.openModal(); document.getElementById('header-more-dropdown').style.display='none';" style="display:flex; align-items:center; gap:8px; width:100%; padding:9px 16px; background:none; border:none; cursor:pointer; font-size:0.88rem; color:#334155;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='none'">
+                📅 Festivos &amp; Eventos
+              </button>
+              <button onclick="CurriculumManager.openModal(); document.getElementById('header-more-dropdown').style.display='none';" style="display:flex; align-items:center; gap:8px; width:100%; padding:9px 16px; background:none; border:none; cursor:pointer; font-size:0.88rem; color:#334155;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='none'">
+                📋 Malla Curricular
+              </button>
+              <button onclick="App.openSettingsModal('profile'); document.getElementById('header-more-dropdown').style.display='none';" style="display:flex; align-items:center; gap:8px; width:100%; padding:9px 16px; background:none; border:none; cursor:pointer; font-size:0.88rem; color:#334155;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='none'">
+                👤 Mi Perfil
+              </button>
+              <hr style="margin:4px 0; border:none; border-top:1px solid #f1f5f9;">
+              <button onclick="StorageService.executeAutoSaveProtocol(true); document.getElementById('header-more-dropdown').style.display='none';" style="display:flex; align-items:center; gap:8px; width:100%; padding:9px 16px; background:none; border:none; cursor:pointer; font-size:0.88rem; color:#059669;" onmouseover="this.style.background='#f0fdf4'" onmouseout="this.style.background='none'">
+                💾 Guardar Ahora
+              </button>
+              <button onclick="StorageService.exportBackup(); document.getElementById('header-more-dropdown').style.display='none';" style="display:flex; align-items:center; gap:8px; width:100%; padding:9px 16px; background:none; border:none; cursor:pointer; font-size:0.88rem; color:#334155;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='none'">
+                ⬇️ Descargar Respaldo
+              </button>
+              <label style="display:flex; align-items:center; gap:8px; width:100%; padding:9px 16px; background:none; cursor:pointer; font-size:0.88rem; color:#334155; box-sizing:border-box;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='none'">
+                ⬆️ Restaurar Respaldo
+                <input type="file" id="import-backup-file" accept=".json" style="display:none;" />
+              </label>
+            </div>
+          </div>
+        </div>
       </div>
     </header>
+
+    <script>
+      // Cerrar menú "Más" al hacer clic fuera
+      document.addEventListener('click', function(e) {
+        var dropdown = document.getElementById('header-more-dropdown');
+        var wrapper = document.getElementById('header-more-menu-wrapper');
+        if (dropdown && wrapper && !wrapper.contains(e.target)) {
+          dropdown.style.display = 'none';
+        }
+      });
+    </script>
 
     <!-- BARRA DE NAVEGACIÓN PRINCIPAL (NUEVA ARQUITECTURA) -->
     <nav class="main-nav-tabs-bar" id="main-app-nav">
@@ -435,7 +919,7 @@
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" onclick="document.getElementById('swap-modal-backdrop').classList.remove('active')">Cancelar</button>
         <button type="button" class="btn btn-primary" style="background:#2563eb; border-color:#1d4ed8;" onclick="Planner.swapWithDate(document.getElementById('swap-target-date').value); document.getElementById('swap-modal-backdrop').classList.remove('active');">
-          🔄 Intercambiar Planeaciones
+           Intercambiar Planeaciones
         </button>
       </div>
     </div>
@@ -682,60 +1166,71 @@
   <!-- Contenedor de Notificaciones Toast -->
   <div class="toast-container" id="toast-container"></div>
 
+  <!-- Firebase SDK v10 (Compat) y Configuración Nube Firestore / Auth -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="js/firebase-config.js?v=20261002-v7"></script>
+
   <!-- Scripts de la Aplicación -->
-  <!-- 1. Almacenamiento base (JSZip se carga bajo demanda al exportar a Word) -->
-  <script src="js/idb-storage.js"></script>
+  <!-- 1. Almacenamiento base y perfiles (JSZip se carga bajo demanda al exportar a Word) -->
+  <script src="js/idb-storage.js?v=20261020-v2"></script>
+  <script src="js/storage.js?v=20261020-v2"></script>
+  <script src="js/holidays.js?v=20261020-v2"></script>
 
   <!-- 2. Datos curriculares modularizados bajo demanda -->
-  <script src="js/data/curriculum/matematicas.js?v=20260921-2"></script>
-  <script src="js/data/curriculum/sistemas.js?v=20260921-2"></script>
-  <script src="js/data/curriculum/robotica.js?v=20260921-2"></script>
-  <script src="js/data/curriculum/logica.js?v=20260921-2"></script>
-  <script src="js/data/curriculum/direccion_grupo.js?v=20260921-2"></script>
-  <script src="js/data/curriculum-data.js?v=20260921-2"></script>
+  <script src="js/data/curriculum/matematicas.js?v=20261020-v2"></script>
+  <script src="js/data/curriculum/sistemas.js?v=20261020-v2"></script>
+  <script src="js/data/curriculum/robotica.js?v=20261020-v2"></script>
+  <script src="js/data/curriculum/logica.js?v=20261020-v2"></script>
+  <script src="js/data/curriculum/direccion_grupo.js?v=20261020-v2"></script>
+  <script src="js/data/curriculum-data.js?v=20261020-v2"></script>
+  <script src="js/data/initial-classes-data.js?v=20261020-v2"></script>
 
   <!-- 3. Repositorios de datos desacoplados -->
-  <script src="js/repositories/schedule-repository.js?v=20260916-6"></script>
-  <script src="js/repositories/sequence-repository.js?v=20260916-6"></script>
-  <script src="js/repositories/class-repository.js?v=20260916-6"></script>
-  <script src="js/repositories/curriculum-repository.js?v=20260916-6"></script>
+  <script src="js/repositories/schedule-repository.js?v=20261020-v2"></script>
+  <script src="js/repositories/sequence-repository.js?v=20261020-v2"></script>
+  <script src="js/repositories/class-repository.js?v=20261020-v2"></script>
+  <script src="js/repositories/curriculum-repository.js?v=20261020-v2"></script>
 
   <!-- 4. Capa Core y Estado -->
-  <script src="js/core/app-state.js?v=20260921-1"></script>
-  <script src="js/core/router.js?v=20260921-1"></script>
+  <script src="js/core/app-state.js?v=20261020-v2"></script>
+  <script src="js/core/router.js?v=20261020-v2"></script>
+  <script src="js/core/pagination-engine.js?v=20261020-v2"></script>
 
   <!-- 5. Servicios de Dominio -->
-  <script src="js/users-service.js?v=20260921-1"></script>
-  <script src="js/services/class-service.js?v=20260921-1"></script>
-  <script src="js/services/sequence-service.js?v=20260921-1"></script>
-  <script src="js/services/schedule-service.js?v=20260921-1"></script>
-  <script src="js/services/recovery-service.js?v=20260921-1"></script>
-  <script src="js/services/migration-manager.js?v=20260921-1"></script>
-  <script src="js/services/backup-service.js?v=20260921-1"></script>
-  <script src="js/services/import-parser.js?v=20260921-1"></script>
-  <script src="js/services/import-service.js?v=20260921-1"></script>
+  <script src="js/users-service.js?v=20261020-v2"></script>
+  <script src="js/services/class-service.js?v=20261020-v2"></script>
+  <script src="js/services/sequence-service.js?v=20261020-v2"></script>
+  <script src="js/services/schedule-service.js?v=20261020-v2"></script>
+  <script src="js/services/recovery-service.js?v=20261020-v2"></script>
+  <script src="js/services/migration-manager.js?v=20261020-v2"></script>
+  <script src="js/services/backup-service.js?v=20261020-v2"></script>
+  <script src="js/services/import-parser.js?v=20261020-v2"></script>
+  <script src="js/services/import-service.js?v=20261020-v2"></script>
+  <script src="js/services/firestore-service.js?v=20261020-v2"></script>
 
   <!-- 6. Servicios auxiliares heredados pero necesarios -->
-  <script src="js/storage.js?v=20260921-1"></script>
-  <script src="js/plan-repository.js?v=20260921-1"></script>
-  <script src="js/curriculum.js?v=20260921-1"></script>
-  <script src="js/docx-generator.js?v=20260921-1"></script>
-  <script src="js/holidays.js?v=20260921-1"></script>
-  <script src="js/export/export-adapter.js?v=20260921-1"></script>
-  <script src="js/export.js?v=20260921-1"></script>
+  <script src="js/plan-repository.js?v=20261020-v2"></script>
+  <script src="js/curriculum.js?v=20261020-v2"></script>
+  <script src="js/docx-generator.js?v=20261020-v2"></script>
+  <script src="js/export/export-adapter.js?v=20261020-v2"></script>
+  <script src="js/export.js?v=20261020-v2"></script>
 
   <!-- 7. Vistas y Componentes UI -->
-  <script src="js/ui/curriculum-selector.js?v=20260921-1"></script>
-  <script src="js/ui/import-modal.js?v=20260921-1"></script>
-  <script src="js/ui/dashboard-view.js?v=20260921-1"></script>
-  <script src="js/ui/class-editor-view.js?v=20260921-1"></script>
-  <script src="js/ui/sequence-view.js?v=20260921-1"></script>
-  <script src="js/ui/history-view.js?v=20260921-1"></script>
-  <script src="js/ui/recovery-view.js?v=20260921-1"></script>
-  <script src="js/notebook-editor.js?v=20260921-7"></script>
-  <script src="js/coordinator-view.js?v=20260921-1"></script>
-  <script src="js/calendar.js?v=20260921-1"></script>
-  <script src="js/planner.js?v=20260921-1"></script>
-  <script src="js/app.js?v=20260921-1"></script>
+  <script src="js/ui/curriculum-selector.js?v=20261020-v2"></script>
+  <script src="js/ui/import-modal.js?v=20261020-v2"></script>
+  <script src="js/ui/dashboard-view.js?v=20261020-v2"></script>
+  <script src="js/ui/class-editor-view.js?v=20261020-v2"></script>
+  <script src="js/ui/sequence-view.js?v=20261020-v2"></script>
+  <script src="js/ui/history-view.js?v=20261020-v2"></script>
+  <script src="js/ui/recovery-view.js?v=20261020-v2"></script>
+  <script src="js/notebook-editor.js?v=20261020-v2"></script>
+  <script src="js/coordinator-view.js?v=20261020-v2"></script>
+  <script src="js/ui/auth-modal.js?v=20261020-v2"></script>
+  <script src="js/calendar.js?v=20261020-v2"></script>
+  <script src="js/planner.js?v=20261020-v2"></script>
+  <script src="js/app.js?v=20261020-v2"></script>
 </body>
 </html>
+

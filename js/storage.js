@@ -84,7 +84,18 @@ const StorageService = {
   getProfile() {
     try {
       if (typeof UserService !== 'undefined' && UserService.getCurrentUser) {
-        return UserService.getCurrentUser();
+        const u = UserService.getCurrentUser();
+        if (u && u.role === 'coordinator') {
+          const manuel = UserService.getUserById('usr_manuel');
+          if (manuel) {
+            return {
+              ...manuel,
+              activeReviewer: u.name,
+              activeReviewerRole: u.role
+            };
+          }
+        }
+        return u;
       }
 
       const data = localStorage.getItem(STORAGE_KEYS.PROFILE);
@@ -220,10 +231,23 @@ const StorageService = {
       const currentUserId = (typeof UserService !== 'undefined' && UserService.getCurrentUserId)
         ? UserService.getCurrentUserId()
         : 'usr_manuel';
+      let result = null;
       if (typeof PlanRepository !== 'undefined' && PlanRepository.saveClass) {
-        return PlanRepository.saveClass(currentUserId, dateStr, classId, classData, options);
+        result = PlanRepository.saveClass(currentUserId, dateStr, classId, classData, options);
       }
-      return null;
+      if (typeof ClassRepository !== 'undefined' && ClassRepository.saveClass) {
+        try {
+          ClassRepository.saveClass({
+            ...classData,
+            id: classId,
+            date: dateStr,
+            planId: 'plan_' + dateStr
+          }, currentUserId, options);
+        } catch (eCr) {
+          console.warn('[StorageService] Error sincronizando clase con ClassRepository:', eCr);
+        }
+      }
+      return result;
     } catch (e) {
       console.error('Error al guardar clase:', e);
       return null;
@@ -244,6 +268,18 @@ const StorageService = {
    */
   saveProfile(profileData) {
     try {
+      if (profileData && (profileData.id === 'usr_coordinacion' || profileData.role === 'coordinator')) {
+        // Blindaje: No sobreescribir el perfil docente con datos de supervisión de coordinación
+        if (typeof UserService !== 'undefined' && UserService.getAllUsers && UserService.saveAllUsers) {
+          const users = UserService.getAllUsers();
+          const idx = users.findIndex(u => u.id === 'usr_coordinacion');
+          if (idx >= 0) {
+            users[idx] = { ...users[idx], ...profileData };
+            UserService.saveAllUsers(users);
+          }
+        }
+        return true;
+      }
       localStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(profileData));
       if (typeof UserService !== 'undefined' && UserService.getAllUsers && UserService.saveAllUsers && UserService.getCurrentUserId) {
         const uid = profileData.id || UserService.getCurrentUserId();
@@ -298,11 +334,89 @@ const StorageService = {
       ? UserService.getCurrentUserId()
       : 'usr_manuel';
 
+    let plan = null;
     if (typeof PlanRepository !== 'undefined' && PlanRepository.getPlan) {
-      return PlanRepository.getPlan(currentUserId, dateStr);
+      plan = PlanRepository.getPlan(currentUserId, dateStr);
+    } else {
+      const plans = this.getAllPlans();
+      plan = plans[dateStr] || null;
     }
-    const plans = this.getAllPlans();
-    return plans[dateStr] || null;
+
+    // Salvaguarda cruzada: asegurar que TODAS las clases de ClassRepository para esta fecha estén reflejadas
+    if (typeof ClassRepository !== 'undefined' && ClassRepository.getByDate) {
+      const classSessions = ClassRepository.getByDate(dateStr, currentUserId) || [];
+      if (classSessions.length > 0) {
+        let planNeedsSync = false;
+        if (!plan) {
+          plan = {
+            id: 'plan_' + dateStr.replace(/-/g, ''),
+            date: dateStr,
+            period: classSessions[0]?.period || '1°',
+            classes: [],
+            version: 1
+          };
+          planNeedsSync = true;
+        }
+        if (!Array.isArray(plan.classes)) {
+          plan.classes = [];
+          planNeedsSync = true;
+        }
+
+        classSessions.forEach(cs => {
+          if (!cs) return;
+          const csId = cs.id || cs.classId;
+          const existingIdx = plan.classes.findIndex(c => c && (c.id === csId || c.classId === csId));
+
+          const convertedClass = {
+            id: cs.id,
+            classId: cs.id,
+            date: cs.date || dateStr,
+            dayOfWeek: cs.dayOfWeek || (typeof ExportService !== 'undefined' ? ExportService.getDayOfWeekName(dateStr) : ''),
+            dayNumber: String(cs.dayNumber || cs.sequenceNumber || 1),
+            sequenceNumber: cs.sequenceNumber || parseInt(cs.dayNumber, 10) || 1,
+            time: cs.time || '',
+            startTime: cs.startTime || '',
+            endTime: cs.endTime || '',
+            scheduleSlotId: cs.scheduleSlotId || null,
+            subject: cs.subjectName || cs.subject || '',
+            grade: cs.gradeName || cs.grade || '',
+            group: cs.group || cs.gradeName || cs.grade || '',
+            topic: cs.curriculum?.topic || cs.topic || '',
+            dba: cs.curriculum?.dba || cs.dba || '',
+            achievement: cs.curriculum?.achievement || cs.achievement || '',
+            description: cs.didacticSequence?.desarrollo || cs.pedagogy?.desarrollo || (cs.didacticSequence?.inicio ? `Inicio: ${cs.didacticSequence.inicio}\n\nDesarrollo: ${cs.didacticSequence.desarrollo || ''}\n\nCierre: ${cs.didacticSequence.cierre || ''}` : (cs.description || '')),
+            observations: cs.observations || cs.teacherNotebook?.additionalNotes || '',
+            notebookContent: cs.notebookContent || cs.teacherNotebook?.studentNotebookContent || '',
+            attachments: Array.isArray(cs.attachments) ? cs.attachments : [],
+            status: cs.status || 'planned',
+            version: cs.version || 1
+          };
+
+          if (existingIdx >= 0) {
+            const prev = plan.classes[existingIdx];
+            if (prev.sequenceNumber !== convertedClass.sequenceNumber ||
+                prev.dayNumber !== convertedClass.dayNumber ||
+                prev.topic !== convertedClass.topic ||
+                prev.version !== convertedClass.version) {
+              planNeedsSync = true;
+            }
+            plan.classes[existingIdx] = { ...prev, ...convertedClass };
+          } else {
+            plan.classes.push(convertedClass);
+            planNeedsSync = true;
+          }
+        });
+
+        if (planNeedsSync && typeof PlanRepository !== 'undefined') {
+          if (PlanRepository._cache) {
+            if (!PlanRepository._cache[currentUserId]) PlanRepository._cache[currentUserId] = {};
+            PlanRepository._cache[currentUserId][dateStr] = plan;
+          }
+        }
+      }
+    }
+
+    return plan;
   },
 
   /**
@@ -383,6 +497,22 @@ const StorageService = {
       if (success && !isSyncing && planData && Array.isArray(planData.classes)) {
         planData.classes.forEach(cls => {
           this.syncParallelClasses(cls, dateStr);
+        });
+      }
+
+      // Sincronización bidireccional inmediata con ClassRepository (Dashboard, Calendario y Secuencias)
+      if (success && planData && Array.isArray(planData.classes) && typeof ClassRepository !== 'undefined' && ClassRepository.saveClass) {
+        planData.classes.forEach(cls => {
+          if (!cls) return;
+          try {
+            ClassRepository.saveClass({
+              ...cls,
+              date: dateStr,
+              planId: planData.id || ('plan_' + dateStr)
+            }, currentUserId, options);
+          } catch (eCr) {
+            console.warn('[StorageService] Error sincronizando clase de plan con ClassRepository:', eCr);
+          }
         });
       }
 
@@ -660,15 +790,22 @@ const StorageService = {
         ? UserService.getCurrentUserId()
         : 'usr_manuel';
 
-      // 1. Delegación a ClassRepository optimizado (O(1)) si está disponible
-      if (typeof ClassRepository !== 'undefined' && ClassRepository.getNextSequenceNumber) {
-        const repoNext = ClassRepository.getNextSequenceNumber({
-          teacherId: currentUserId,
-          period: period || '1°',
-          subject: subject,
-          grade: grade,
-          group: grade
-        });
+      // 1. Delegación a ClassRepository por horario oficial y calendario
+      if (typeof ClassRepository !== 'undefined') {
+        if (dateStr && typeof ClassRepository.getScheduleSequenceNumber === 'function') {
+          const schedSeq = ClassRepository.getScheduleSequenceNumber(dateStr, subject, grade, currentUserId, { requireScheduledWeekday: true });
+          if (schedSeq !== null && schedSeq > 0) {
+            return schedSeq;
+          }
+        }
+        if (ClassRepository.getNextSequenceNumber) {
+          const repoNext = ClassRepository.getNextSequenceNumber({
+            teacherId: currentUserId,
+            period: period || '1°',
+            subject: subject,
+            grade: grade,
+            group: grade
+          });
 
         // Revisar si en el mismo día hay clases en memoria aún no persistidas
         let sameDayMax = 0;
@@ -688,7 +825,8 @@ const StorageService = {
             }
           });
         }
-        return Math.max(repoNext, sameDayMax + 1);
+          return Math.max(repoNext, sameDayMax + 1);
+        }
       }
 
       if (typeof PlanRepository !== 'undefined' && PlanRepository.calculateNextSequenceNumber) {
@@ -762,6 +900,8 @@ const StorageService = {
     const g = String(grade || '').trim().toUpperCase();
     if (g === '4A' || g === '4°A' || g === '4-A' || g === 'CUARTO A') return '4°A';
     if (g === '4B' || g === '4°B' || g === '4-B' || g === 'CUARTO B') return '4°B';
+    if (g === '1' || g === '1°' || g === '1-A' || g === 'PRIMERO') return '1°';
+    if (g === '2' || g === '2°' || g === '2-A' || g === 'SEGUNDO') return '2°';
     return String(grade || '').trim();
   },
 
@@ -775,7 +915,7 @@ const StorageService = {
   },
 
   /**
-   * Obtiene el grado paralelo espejo si aplica (ej: 4°A <-> 4°B para Sistemas)
+   * Obtiene el grado paralelo espejo si aplica (ej: 4°A <-> 4°B, 1° <-> 2° para Sistemas)
    */
   getParallelGrade(subject, grade) {
     const s = String(subject || '').trim().toLowerCase();
@@ -785,6 +925,8 @@ const StorageService = {
     const g = this.normalizeGrade(grade);
     if (g === '4°A') return '4°B';
     if (g === '4°B') return '4°A';
+    if (g === '1°') return '2°';
+    if (g === '2°') return '1°';
 
     const matchA = g.match(/^(\d+)°?A$/i);
     if (matchA) return `${matchA[1]}°B`;
@@ -1034,6 +1176,10 @@ const StorageService = {
     if (this._hasDiskEndpoint === false) return false;
     try {
       if (typeof window === 'undefined' || !window.fetch) return false;
+      if (typeof window !== 'undefined' && window.location && window.location.protocol === 'file:') {
+        this._hasDiskEndpoint = false;
+        return false;
+      }
       const dataToSync = payload || {
         version: '2.0',
         exportedAt: new Date().toISOString(),
@@ -1053,7 +1199,6 @@ const StorageService = {
         return false;
       }
     } catch (e) {
-      // Si la app corre desde file:// o el servidor node no está activo, se desactiva silenciosamente
       this._hasDiskEndpoint = false;
       return false;
     }
@@ -1093,25 +1238,33 @@ const StorageService = {
         ? UserService.getCurrentUserId()
         : 'usr_manuel';
 
-      // 4. Guardar snapshot histórico en IndexedDB solo si hubo modificaciones reales o guardado manual
+      // 4. Guardar snapshot histórico en IndexedDB y disco en tiempo inactivo (no bloqueante)
       if (isDirty || showFeedback) {
-        if (typeof IDBStorage !== 'undefined' && IDBStorage.saveSnapshot) {
-          await IDBStorage.saveSnapshot(currentUserId, {
-            profile,
-            plans: allPlans
-          });
-        }
         this.markClean();
-      }
+        const asyncBackup = async () => {
+          try {
+            if (typeof IDBStorage !== 'undefined' && IDBStorage.saveSnapshot) {
+              await IDBStorage.saveSnapshot(currentUserId, {
+                profile,
+                plans: allPlans
+              });
+            }
+            if (this._hasDiskEndpoint !== false) {
+              this.syncToDisk({
+                version: '2.0',
+                exportedAt: new Date().toISOString(),
+                profile,
+                plans: allPlans
+              });
+            }
+          } catch (e) {}
+        };
 
-      // 5. Enviar respaldo físico a disco si el endpoint existe
-      if (this._hasDiskEndpoint !== false) {
-        this.syncToDisk({
-          version: '2.0',
-          exportedAt: new Date().toISOString(),
-          profile,
-          plans: allPlans
-        });
+        if (typeof window !== 'undefined' && window.requestIdleCallback) {
+          window.requestIdleCallback(() => asyncBackup(), { timeout: 2000 });
+        } else {
+          setTimeout(asyncBackup, 50);
+        }
       }
 
       if (showFeedback && typeof App !== 'undefined' && App.showToast) {
@@ -1128,9 +1281,9 @@ const StorageService = {
   },
 
   /**
-   * Inicia el ciclo heartbeat de autoguardado inteligente en segundo plano cada 45 segundos
+   * Inicia el ciclo heartbeat de autoguardado inteligente en segundo plano cada 90 segundos
    */
-  startAutoSaveHeartbeat(intervalMs = 45000) {
+  startAutoSaveHeartbeat(intervalMs = 90000) {
     if (this._heartbeatStarted) return;
     this._heartbeatStarted = true;
 

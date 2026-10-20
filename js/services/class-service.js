@@ -117,13 +117,14 @@ class ClassServiceClass {
     const targetDate = dateStr || new Date().toISOString().slice(0, 10);
     const period = (typeof AppState !== 'undefined' && AppState.get('currentPeriod')) || '1°';
 
-    // Determinar siguiente consecutivo inmutable para esta materia y curso
+    // Determinar consecutivo por horario oficial y calendario para esta fecha, materia y curso
     const nextSeq = ClassRepository.getNextSequenceNumber({
       teacherId: tid,
       period: period,
       subject: slot.subjectName || slot.subject,
       grade: slot.gradeName || slot.grade,
-      group: slot.group
+      group: slot.group,
+      date: targetDate
     });
 
     // Obtener snapshot curricular sugerido
@@ -136,6 +137,41 @@ class ClassServiceClass {
           dba: curItem.dba || '',
           achievement: curItem.achievement || ''
         };
+      }
+    }
+
+    // Auto-heredar contenido si la clase espejo ya fue planeada (ej: crear en 4°B cuando 4°A ya está planeada)
+    let status = 'pending';
+    let pedagogyData = {
+      inicio: '',
+      desarrollo: '',
+      cierre: '',
+      recursos: '',
+      evaluacion: '',
+      tareas: ''
+    };
+    let teacherNotebookData = null;
+    let notebookContent = '';
+
+    const mirrorInfo = (typeof ClassRepository !== 'undefined' && ClassRepository.getMirrorGradeInfo)
+      ? ClassRepository.getMirrorGradeInfo(slot.gradeName || slot.grade, slot.group, slot.subjectName || slot.subject)
+      : null;
+
+    if (mirrorInfo) {
+      const classes = ClassRepository.getClasses({ teacherId: tid, period: period, subject: slot.subjectName || slot.subject }, tid);
+      const mirrorTarget = mirrorInfo.targetClean || `${mirrorInfo.gradeNum}${mirrorInfo.targetSection}`.toLowerCase();
+      const existingMirror = classes.find(c => {
+        const cGrd = String(c.gradeName || c.grade || '').replace(/[^0-9a-zA-Z]/g, '').toLowerCase();
+        const cGrp = String(c.group || '').replace(/[^0-9a-zA-Z]/g, '').toLowerCase();
+        return (cGrd === mirrorTarget || cGrp === mirrorTarget) && parseInt(c.sequenceNumber, 10) === nextSeq;
+      });
+
+      if (existingMirror && (existingMirror.status === 'planned' || existingMirror.status === 'completed')) {
+        curSnapshot = JSON.parse(JSON.stringify(existingMirror.curriculum || curSnapshot));
+        pedagogyData = JSON.parse(JSON.stringify(existingMirror.didacticSequence || existingMirror.pedagogy || pedagogyData));
+        teacherNotebookData = JSON.parse(JSON.stringify(existingMirror.teacherNotebook || {}));
+        notebookContent = existingMirror.notebookContent || existingMirror.teacherNotebook?.studentNotebookContent || '';
+        status = 'planned';
       }
     }
 
@@ -154,19 +190,14 @@ class ClassServiceClass {
       group: slot.group || slot.gradeName || slot.grade,
       period: period,
       sequenceNumber: nextSeq,
-      status: 'pending',
+      status: status,
       subjectType: slot.subjectType || 'academic',
       curriculum: curSnapshot,
-      pedagogy: {
-        inicio: '',
-        desarrollo: '',
-        cierre: '',
-        recursos: '',
-        evaluacion: '',
-        tareas: ''
-      },
+      didacticSequence: pedagogyData,
+      pedagogy: pedagogyData,
+      teacherNotebook: teacherNotebookData || undefined,
       observations: '',
-      notebookContent: '',
+      notebookContent: notebookContent,
       attachments: [],
       version: 1
     };

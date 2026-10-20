@@ -90,10 +90,41 @@ const ExportService = {
     const teacherName = profileData?.name || 'Docente';
     const period = planData?.period || profileData?.period || '1°';
 
-    const subjects = [...new Set(planData.classes.map(c => c.subject).filter(Boolean))];
-    const grades = [...new Set(planData.classes.map(c => c.grade).filter(Boolean))];
-    const subjectText = subjects.length > 0 ? subjects.join(' - ') : (profileData?.subjects?.[0]?.name || '');
-    const gradeText = grades.length > 0 ? grades.join(', ') : (profileData?.homeroom || '');
+    // 1. Extraer materias de las clases
+    let subjects = (planData.classes || []).map(c => {
+      let sub = c.subject || c.subjectName || c.subjectId || '';
+      if (!sub) {
+        const m = (c.description || c.sequence || c.topic || '').match(/Asignatura\s*:\s*([^\n\r<•]+)/i);
+        if (m) sub = m[1].trim();
+      }
+      return sub;
+    }).filter(Boolean);
+
+    // 2. Extraer grados de las clases
+    let grades = (planData.classes || []).map(c => {
+      let grd = c.grade || c.gradeName || c.gradeId || '';
+      if (!grd) {
+        const m = (c.description || c.sequence || c.topic || '').match(/Grado\s*:\s*([^\n\r<•]+)/i);
+        if (m) grd = m[1].trim();
+      }
+      return grd;
+    }).filter(Boolean);
+
+    // Si planData tiene subject o grade directos
+    if (subjects.length === 0 && (planData.subject || planData.subjectName)) {
+      subjects = [planData.subject || planData.subjectName];
+    }
+    if (grades.length === 0 && (planData.grade || planData.gradeName)) {
+      grades = [planData.grade || planData.gradeName];
+    }
+
+    const subjectText = subjects.length > 0 
+      ? [...new Set(subjects)].join(' - ') 
+      : 'Asignatura';
+
+    const gradeText = grades.length > 0 
+      ? [...new Set(grades)].join(', ') 
+      : 'Grado';
 
     const weekRange = this.getWeekRange(planData.date);
 
@@ -121,7 +152,10 @@ const ExportService = {
         }
 
         return paragraphs.map(pText => {
-          let escaped = this.escapeHtml(pText);
+          let cleaned = (typeof ImportParser !== 'undefined' && ImportParser.cleanDocumentArtifacts)
+            ? ImportParser.cleanDocumentArtifacts(pText)
+            : pText;
+          let escaped = this.escapeHtml(cleaned);
           escaped = escaped.replace(/&lt;br\/&gt;/g, '<br/>');
 
           // Soporte nativo para negritas markdown **texto**
@@ -153,18 +187,34 @@ const ExportService = {
         }).join('');
       };
 
-      const shortDate = this.formatShortDate(cls.date || planData.date);
-      const classNum = cls.dayNumber ? cls.dayNumber.replace(/[^0-9]/g, '') || String(idx + 1) : String(idx + 1);
-      const dayOfWeek = cls.dayOfWeek || this.getDayOfWeekName(planData.date);
+      const dateVal = cls.date || planData.date || '';
+      const shortDate = this.formatShortDate(dateVal);
 
-      const isDirGroup = cls.subject && String(cls.subject).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes('direccion de grupo');
+      let classNum = '';
+      if (cls.dayNumber) {
+        classNum = String(cls.dayNumber).replace(/[^0-9]/g, '') || String(cls.dayNumber);
+      }
+      if (!classNum) {
+        const m = ((cls.topic || '') + ' ' + (cls.description || '')).match(/Clase\s*#?\s*:?\s*#?(\d+)/i);
+        if (m) classNum = m[1];
+      }
+      if (!classNum) {
+        classNum = String(idx + 1);
+      }
+
+      const dayOfWeek = cls.dayOfWeek || this.getDayOfWeekName(dateVal);
+
+      const currentSub = cls.subject || cls.subjectName || cls.subjectId || '';
+      const currentGrd = cls.grade || cls.gradeName || cls.gradeId || '';
+
+      const isDirGroup = currentSub && String(currentSub).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes('direccion de grupo');
 
       let dbaRaw = isDirGroup ? '' : (cls.dba || '');
       let achievementRaw = isDirGroup ? '' : (cls.achievement || cls.performance || '');
       let topicRaw = isDirGroup ? '' : (cls.topic || '');
 
       if (!isDirGroup && (!dbaRaw || !topicRaw || !achievementRaw) && typeof CurriculumService !== 'undefined') {
-        const autoCur = CurriculumService.getAutoCurriculumItem(period, cls.subject, cls.grade, cls.dayNumber || classNum);
+        const autoCur = CurriculumService.getAutoCurriculumItem(period, currentSub, currentGrd, cls.dayNumber || classNum);
         if (autoCur) {
           if (!dbaRaw) dbaRaw = autoCur.dba;
           if (!achievementRaw) achievementRaw = autoCur.achievement;
@@ -190,7 +240,7 @@ const ExportService = {
       ].join('|');
       const phaseColonRegex = new RegExp(`(?<!^)(?<!\\()[ \\t]*(\\*{0,2}(?:${phasePrefixes})(?:[ \\t]*\\([^)]*\\))?\\*{0,2})\\s*:\\s*`, 'gi');
 
-      let descFormatted = (cls.description || '')
+      let descFormatted = (cls.description || cls.sequence || '')
         .replace(/(?:Recursos\s+did[aá]cticos?\s*:\s*(?:Y\s+)?MATERIALES|Recursos\s+did[aá]cticos?\s+y\s+materiales\s*:?)/gi, 'Recursos didácticos y materiales:')
         .replace(/(?:Tareas?(?:\s*[\/:]\s*Compromisos?)?\s*:\s*(?:Y\s+)?ACTIVIDADES\s+EXTRACLASE|Tareas?(?:\s*[\/:]\s*Compromisos?)?\s*y\s+actividades\s+extraclase\s*:?)/gi, 'Tareas / Compromisos:')
         .replace(phaseColonRegex, '\n\n$1: ')
@@ -632,6 +682,31 @@ const ExportService = {
     if (!printContainer) return;
 
     printContainer.innerHTML = this.generatePreparadorHTML(planData, profileData);
+
+    // Asegurar orientación horizontal (landscape) inequívoca para la hoja oficial del preparador
+    let printStyle = document.getElementById('preparador-print-orientation-style');
+    if (!printStyle) {
+      printStyle = document.createElement('style');
+      printStyle.id = 'preparador-print-orientation-style';
+      document.head.appendChild(printStyle);
+    }
+    printStyle.textContent = `
+      @page {
+        size: letter landscape !important;
+        margin: 0.6cm 0.8cm 0.6cm 0.8cm !important;
+      }
+    `;
+
+    const cleanup = () => {
+      if (printStyle && printStyle.parentNode) {
+        printStyle.remove();
+      }
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('afterprint', cleanup, { once: true });
+    }
+    setTimeout(cleanup, 2500);
+
     window.print();
   },
 

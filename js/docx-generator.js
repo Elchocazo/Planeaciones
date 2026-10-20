@@ -53,10 +53,10 @@ const DocxTemplateEngine = {
     const teacherName = profileData?.name || 'Docente';
     const period = planData?.period || profileData?.period || '1°';
 
-    const subjects = [...new Set((planData.classes || []).map(c => c.subject).filter(Boolean))];
-    const grades = [...new Set((planData.classes || []).map(c => c.grade).filter(Boolean))];
-    const subjectText = subjects.length > 0 ? subjects.join(' - ') : (profileData?.subjects?.[0]?.name || '');
-    const gradeText = grades.length > 0 ? grades.join(', ') : (profileData?.homeroom || '');
+    const subjects = [...new Set((planData.classes || []).map(c => c.subject || c.subjectName || c.subjectId).filter(Boolean))];
+    const grades = [...new Set((planData.classes || []).map(c => c.grade || c.gradeName || c.gradeId).filter(Boolean))];
+    const subjectText = subjects.length > 0 ? subjects.join(' - ') : (profileData?.subjects?.[0]?.name || 'Asignatura');
+    const gradeText = grades.length > 0 ? grades.join(', ') : (profileData?.homeroom || profileData?.grades?.[0] || '');
 
     const weekRange = (typeof ExportService !== 'undefined' && ExportService.getWeekRange)
       ? ExportService.getWeekRange(planData.date)

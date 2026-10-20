@@ -95,6 +95,23 @@ class PlannerComponent {
             if (cls.observations) cls.observations = this.cleanAsterisks(cls.observations);
           });
         }
+        // Filtrar clases de respaldo y deduplicar en memoria
+        if (Array.isArray(this.currentPlan.classes)) {
+          const isBackupFn = (typeof ClassRepository !== 'undefined' && ClassRepository.isBackupClass)
+            ? (c) => ClassRepository.isBackupClass(c)
+            : (c) => {
+                if (!c) return false;
+                if (c.isBackup || c.backup || c.isSnapshot || c.snapshot || c.isRespaldo || c.respaldo) return true;
+                const st = String(c.status || '').toLowerCase().trim();
+                if (st === 'backup' || st === 'respaldo' || st === 'snapshot' || st === 'orphaned') return true;
+                const src = String(c._source || c.source || '').toLowerCase().trim();
+                return (src.includes('backup') || src.includes('respaldo') || src.includes('snapshot')) && (!c.date || (!c.subjectName && !c.subject));
+              };
+          this.currentPlan.classes = this.currentPlan.classes.filter(c => !isBackupFn(c));
+          if (typeof ClassRepository !== 'undefined' && ClassRepository.deduplicateClasses) {
+            this.currentPlan.classes = ClassRepository.deduplicateClasses(this.currentPlan.classes);
+          }
+        }
         if (!this.currentPlan.period) this.currentPlan.period = profile?.period || '1°';
 
         // Consolidar únicamente en memoria clases contiguas de 2 horas si existen
@@ -825,6 +842,24 @@ class PlannerComponent {
     if (modal) modal.classList.add('active');
   }
 
+  openClassAttachmentsModalById(classId) {
+    if (!classId) return;
+    this.collectDataFromDOM();
+    const classIdx = (this.currentPlan?.classes || []).findIndex(c => c.id === classId || c.classId === classId);
+    if (classIdx !== -1) {
+      this.openClassAttachmentsModal(classIdx);
+    } else {
+      if (typeof AppRouter !== 'undefined') {
+        AppRouter.navigateTo('class-editor', { id: classId });
+        setTimeout(() => {
+          if (typeof ClassEditorView !== 'undefined' && ClassEditorView.scrollToAttachments) {
+            ClassEditorView.scrollToAttachments();
+          }
+        }, 250);
+      }
+    }
+  }
+
   closeClassAttachmentsModal() {
     const modal = document.getElementById('class-attachments-modal-backdrop');
     if (modal) modal.classList.remove('active');
@@ -930,7 +965,7 @@ class PlannerComponent {
     `;
   }
 
-  handleClassFileUpload(event) {
+  async handleClassFileUpload(event) {
     const classIdx = this.activeClassAttachmentIndex;
     if (classIdx === null || !this.currentPlan || !this.currentPlan.classes[classIdx]) return;
 
@@ -940,36 +975,78 @@ class PlannerComponent {
     const cls = this.currentPlan.classes[classIdx];
     if (!cls.attachments) cls.attachments = [];
 
-    Array.from(files).forEach(file => {
-      const reader = new FileReader();
+    for (const file of Array.from(files)) {
       const isImg = file.type.startsWith('image/');
-      const isPdf = file.type === 'application/pdf';
+      const isPdf = file.type === 'application/pdf' || (file.name && file.name.toLowerCase().endsWith('.pdf'));
 
       if (!isImg && !isPdf) {
         alert(`El archivo ${file.name} no es una imagen ni un PDF admitido.`);
-        return;
+        continue;
       }
 
-      reader.onload = (e) => {
-        const dataUrl = e.target.result;
-        const sizeText = file.size > 1024 * 1024 
-          ? (file.size / (1024 * 1024)).toFixed(1) + ' MB'
-          : (file.size / 1024).toFixed(0) + ' KB';
+      if (isImg) {
+        try {
+          const compressFn = window.ClassEditorView?._compressImage 
+            || window.NotebookEditor?._compressImage;
+          let dataUrl = compressFn ? await compressFn(file, 1280, 0.82) : null;
+          if (!dataUrl) {
+            dataUrl = await new Promise((resolve) => {
+              const reader = new FileReader();
+              reader.onload = (e) => resolve(e.target.result);
+              reader.readAsDataURL(file);
+            });
+          }
+          const commaIdx = dataUrl.indexOf(',');
+          const approxBytes = Math.round((dataUrl.length - (commaIdx + 1)) * 0.75);
+          const sizeText = approxBytes > 1024 * 1024 
+            ? (approxBytes / (1024 * 1024)).toFixed(1) + ' MB'
+            : Math.max(1, Math.round(approxBytes / 1024)) + ' KB';
 
-        cls.attachments.push({
-          name: file.name,
-          type: file.type,
-          sizeText: sizeText,
-          dataUrl: dataUrl
+          cls.attachments.push({
+            name: file.name,
+            type: file.type || 'image/jpeg',
+            sizeText: sizeText,
+            dataUrl: dataUrl
+          });
+        } catch (err) {
+          console.error('[Planner] Error procesando imagen:', err);
+        }
+      } else {
+        await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const dataUrl = e.target.result;
+            const sizeText = file.size > 1024 * 1024 
+              ? (file.size / (1024 * 1024)).toFixed(1) + ' MB'
+              : Math.max(1, Math.round(file.size / 1024)) + ' KB';
+
+            cls.attachments.push({
+              name: file.name,
+              type: file.type || 'application/pdf',
+              sizeText: sizeText,
+              dataUrl: dataUrl
+            });
+            resolve();
+          };
+          reader.readAsDataURL(file);
         });
+      }
+    }
 
-        this.renderClassAttachmentsModal();
-        this.saveCurrentPlan(true);
-        App.showToast(`Anexo agregado a la clase: ${file.name}`, 'success');
-      };
+    // Sincronizar en ClassRepository
+    if (cls.id && typeof ClassRepository !== 'undefined') {
+      const repoClass = ClassRepository.getClass(cls.id);
+      if (repoClass) {
+        repoClass.attachments = JSON.parse(JSON.stringify(cls.attachments));
+        ClassRepository.saveClass(repoClass);
+      }
+    }
 
-      reader.readAsDataURL(file);
-    });
+    this.renderClassAttachmentsModal();
+    this.saveCurrentPlan(true);
+    if (typeof App !== 'undefined' && App.showToast) {
+      App.showToast(`Archivos agregados exitosamente a la clase`, 'success');
+    }
 
     event.target.value = '';
   }
@@ -979,10 +1056,22 @@ class PlannerComponent {
     if (classIdx === null || !this.currentPlan || !this.currentPlan.classes[classIdx]) return;
 
     if (!confirm('¿Deseas eliminar este archivo adjunto de esta clase?')) return;
-    this.currentPlan.classes[classIdx].attachments.splice(attIdx, 1);
+    const cls = this.currentPlan.classes[classIdx];
+    cls.attachments.splice(attIdx, 1);
+
+    if (cls.id && typeof ClassRepository !== 'undefined') {
+      const repoClass = ClassRepository.getClass(cls.id);
+      if (repoClass) {
+        repoClass.attachments = JSON.parse(JSON.stringify(cls.attachments));
+        ClassRepository.saveClass(repoClass);
+      }
+    }
+
     this.renderClassAttachmentsModal();
     this.saveCurrentPlan(false);
-    App.showToast('Anexo eliminado de la clase', 'info');
+    if (typeof App !== 'undefined' && App.showToast) {
+      App.showToast('Anexo eliminado de la clase', 'info');
+    }
   }
 
   handleFileUpload(event) {

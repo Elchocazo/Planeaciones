@@ -22,6 +22,8 @@ class ClassEditorViewClass {
 
   init() {
     this.container = document.getElementById('class-editor-view');
+    if (this._initialized) return;
+    this._initialized = true;
 
     // Suscribirse al estado global para actualizar badges de guardado
     if (typeof AppState !== 'undefined') {
@@ -32,20 +34,16 @@ class ClassEditorViewClass {
       });
     }
 
-    // Auto-redimensionamiento dinámico en tiempo real ante escritura o pegado
-    if (this.container) {
-      this.container.addEventListener('input', (e) => {
-        if (e.target && e.target.tagName === 'TEXTAREA') {
-          this.autoResizeTextarea(e.target);
-        }
-      });
-    }
-
     if (typeof window !== 'undefined') {
       window.addEventListener('resize', () => {
         if (this.container && this.container.offsetParent !== null) {
           this.autoResizeAllTextareas();
         }
+      });
+
+      window.addEventListener('paste', (e) => {
+        if (!this.container || this.container.offsetParent === null || !this.currentClass) return;
+        this.handlePaste(e);
       });
     }
   }
@@ -65,6 +63,9 @@ class ClassEditorViewClass {
     }
 
     this.currentClass = JSON.parse(JSON.stringify(cls));
+    if (!Array.isArray(this.currentClass.attachments)) {
+      this.currentClass.attachments = [];
+    }
     this.activeTab = 'secuencia';
     ClassService.setCurrentEditingClass(cls.id);
 
@@ -156,11 +157,36 @@ class ClassEditorViewClass {
                 <h2 class="class-title-subject" style="margin:0;">
                   ${cls.subjectName} — ${cls.gradeName}
                 </h2>
-                <!-- Botón / Badge Interactivo para Modificar el # de Clase -->
-                <button type="button" class="class-header-seq-btn" onclick="ClassEditorView.openChangeNumberModal()" style="display:inline-flex; align-items:center; gap:5px; background:var(--primary-600); color:#ffffff; border:none; padding:4px 10px; border-radius:14px; font-size:0.85rem; font-weight:700; cursor:pointer; box-shadow:0 1px 3px rgba(0,0,0,0.1); transition:all 0.15s ease;" title="Haga clic para modificar el número de clase y continuar el conteo">
-                  <span>Clase #${cls.sequenceNumber}</span>
-                  <span style="font-size:0.75rem; background:rgba(255,255,255,0.22); padding:1px 6px; border-radius:8px;">✏️ Cambiar #</span>
-                </button>
+                <!-- Control Directo e Interactivo del Número de Clase -->
+                <div class="class-header-seq-control" style="display:inline-flex; align-items:center; gap:6px; background:#1e40af; border:1.5px solid #60a5fa; padding:3px 10px; border-radius:12px; box-shadow:0 1px 4px rgba(0,0,0,0.15);">
+                  <span style="color:#ffffff; font-weight:800; font-size:0.86rem; letter-spacing:0.02em;">Clase #</span>
+                  <input type="number" 
+                    id="editor-input-seq-number" 
+                    class="editor-input-seq-num" 
+                    value="${cls.sequenceNumber}" 
+                    min="1" 
+                    max="999" 
+                    onchange="ClassEditorView.onSequenceNumberChange(this.value)"
+                    oninput="ClassEditorView.onFieldInput(event)"
+                    style="width:52px; height:27px; text-align:center; font-weight:800; font-size:0.95rem; border-radius:6px; border:1px solid #bfdbfe; color:#1e3a8a; background:#ffffff; padding:0 2px; outline:none;"
+                    title="Editar directamente el número de clase" />
+                  <button type="button" 
+                    onclick="ClassEditorView.openChangeNumberModal()" 
+                    style="background:rgba(255,255,255,0.22); border:none; color:#ffffff; font-size:0.75rem; font-weight:700; padding:3px 8px; border-radius:6px; cursor:pointer; transition:all 0.15s;" 
+                    title="Opciones avanzadas y propagar conteo consecutivo hacia adelante">
+                    ⚙️ Propagar
+                  </button>
+                </div>
+                ${(() => {
+                  const mInfo = typeof ClassRepository !== 'undefined' && ClassRepository.getMirrorGradeInfo
+                    ? ClassRepository.getMirrorGradeInfo(cls.gradeName, cls.group, cls.subjectName || cls.subject)
+                    : null;
+                  return mInfo ? `
+                    <span class="editor-mirror-badge" style="background:#f0fdf4; color:#15803d; border:1px solid #bbf7d0; padding:2px 8px; border-radius:12px; font-size:0.75rem; font-weight:700; display:inline-flex; align-items:center; gap:4px;" title="Al guardar esta clase se sincroniza automáticamente con la Clase #${cls.sequenceNumber} de ${mInfo.targetGradeName}">
+                      🔗 Ligada con ${mInfo.targetGradeName}
+                    </span>
+                  ` : '';
+                })()}
               </div>
 
               <div style="display:flex; align-items:center; gap:8px; margin-top:5px; flex-wrap:wrap;">
@@ -193,6 +219,9 @@ class ClassEditorViewClass {
             </button>
             <button type="button" class="btn btn-secondary" onclick="ClassEditorView.openImportModal()" title="Importar planeación inteligente desde texto o portapapeles">
               📥 Importar
+            </button>
+            <button type="button" id="editor-header-attachments-btn" class="btn btn-secondary" onclick="ClassEditorView.scrollToAttachments()" title="Ver y adjuntar archivos o imágenes a esta clase" style="background:#eff6ff; color:#1e40af; border-color:#bfdbfe; font-weight:600;">
+              📎 Anexos (${(cls.attachments || []).length})
             </button>
             <button type="button" class="btn btn-success btn-save-main" onclick="ClassEditorView.saveCurrentClass()" title="Guardar exclusivamente esta clase">
               💾 Guardar clase
@@ -424,6 +453,57 @@ class ClassEditorViewClass {
             </section>
           `}
 
+          <!-- SECCIÓN DE ARCHIVOS E IMÁGENES ADJUNTAS A LA CLASE -->
+          <section id="editor-attachments-section" class="editor-section attachments-box" style="margin-top: 1.5rem; background: #ffffff; border: 1px solid var(--slate-200); border-radius: 12px; padding: 1.25rem; box-shadow: var(--shadow-sm);">
+            <div class="section-header-bar" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.85rem; flex-wrap: wrap; gap: 10px;">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="width: 34px; height: 34px; border-radius: 8px; background: #eff6ff; display: flex; align-items: center; justify-content: center; color: #1d4ed8; font-size: 1.2rem;">
+                  📎
+                </div>
+                <div>
+                  <h3 style="margin: 0; font-size: 1.05rem; font-weight: 700; color: var(--slate-800); display: flex; align-items: center; gap: 8px;">
+                    Archivos e Imágenes Adjuntas de la Clase
+                    <span id="editor-attachments-count-badge" style="font-size: 0.75rem; background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; padding: 1px 8px; border-radius: 10px; font-weight: 700;">
+                      ${(cls.attachments || []).length}
+                    </span>
+                  </h3>
+                  <p style="margin: 2px 0 0; font-size: 0.8rem; color: var(--slate-500);">
+                    Adjunta fotos del tablero, esquemas, talleres impresos o guías PDF vinculadas a esta sesión de clase.
+                  </p>
+                </div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <label class="btn btn-primary btn-sm" style="cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-weight: 600; padding: 6px 14px; border-radius: 8px;">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                  Adjuntar Imagen o PDF
+                  <input type="file" id="editor-attachment-file-input" accept="image/*,application/pdf" multiple style="display:none;" onchange="ClassEditorView.handleFileInput(event)" />
+                </label>
+              </div>
+            </div>
+
+            <!-- Zona Interactiva de Arrastrar y Soltar / Pegado -->
+            <div class="attachments-dropzone" 
+              id="editor-attachments-dropzone"
+              onclick="document.getElementById('editor-attachment-file-input').click()"
+              ondragover="ClassEditorView.onDragOver(event)"
+              ondragleave="ClassEditorView.onDragLeave(event)"
+              ondrop="ClassEditorView.onDrop(event)"
+              style="border: 2px dashed #93c5fd; background: #f8fafc; border-radius: 10px; padding: 1.25rem; text-align: center; cursor: pointer; transition: all 0.2s ease;">
+              <div style="font-size: 1.8rem; margin-bottom: 4px;">🖼️ 📄</div>
+              <p style="font-size: 0.88rem; font-weight: 700; color: #1e3a8a; margin: 0 0 4px 0;">
+                Haz clic aquí o arrastra imágenes y archivos PDF
+              </p>
+              <p style="font-size: 0.75rem; color: var(--slate-500); margin: 0;">
+                Compresión inteligente en cliente &bull; También puedes presionar <kbd style="background:#e2e8f0; border-radius:3px; padding:1px 5px; font-size:0.75rem; font-weight:700;">Ctrl + V</kbd> para pegar capturas de pantalla directamente.
+              </p>
+            </div>
+
+            <!-- Galería de Anexos -->
+            <div id="editor-attachments-container" style="margin-top: 1rem;">
+              ${this._renderAttachmentsGrid(cls.attachments || [])}
+            </div>
+          </section>
+
           <!-- Barra de Pie con Botón Guardar y Continuar -->
           <div class="editor-bottom-bar">
             <button type="button" class="btn btn-secondary" onclick="ClassEditorView.goBack()" title="Volver a la sección anterior">
@@ -454,6 +534,20 @@ class ClassEditorViewClass {
     }
   }
 
+  onSequenceNumberChange(val) {
+    const num = parseInt(val, 10);
+    if (isNaN(num) || num <= 0) return;
+    this.currentClass.sequenceNumber = num;
+    this.currentClass.dayNumber = String(num);
+    if (typeof AppState !== 'undefined') {
+      AppState.set('isDirty', true);
+      AppState.set('saveStatus', 'dirty');
+    }
+    if (typeof ClassService !== 'undefined' && ClassService.scheduleAutoSave) {
+      ClassService.scheduleAutoSave(this.currentClass);
+    }
+  }
+
   onFieldInput(event) {
     if (typeof AppState !== 'undefined') {
       AppState.set('isDirty', true);
@@ -465,13 +559,28 @@ class ClassEditorViewClass {
       this.autoResizeTextarea(target);
     }
 
-    // Sincronizar campos del DOM a memoria
-    this._syncFromDomToCurrentClass();
+    // Sincronizar campos del DOM a memoria de forma instantánea sin regexes bloqueantes al teclear
+    this._syncFromDomToCurrentClass(false);
     ClassService.scheduleAutoSave(this.currentClass);
   }
 
-  _syncFromDomToCurrentClass() {
+  _syncFromDomToCurrentClass(clean = false) {
     if (!this.currentClass) return;
+
+    const processVal = (val) => {
+      if (!val) return '';
+      return clean ? this.cleanBrokenLinebreaks(val) : val;
+    };
+
+    // Número de clase
+    const seqEl = document.getElementById('editor-input-seq-number');
+    if (seqEl) {
+      const parsedSeq = parseInt(seqEl.value, 10);
+      if (!isNaN(parsedSeq) && parsedSeq > 0) {
+        this.currentClass.sequenceNumber = parsedSeq;
+        this.currentClass.dayNumber = String(parsedSeq);
+      }
+    }
 
     // Campos curriculares
     const topicEl = document.getElementById('editor-input-topic');
@@ -500,37 +609,37 @@ class ClassEditorViewClass {
 
       const inicioEl = document.getElementById('editor-input-inicio');
       if (inicioEl) {
-        this.currentClass.didacticSequence.inicio = this.cleanBrokenLinebreaks(inicioEl.value.trim());
+        this.currentClass.didacticSequence.inicio = processVal(inicioEl.value.trim());
         this.currentClass.pedagogy.inicio = this.currentClass.didacticSequence.inicio;
       }
       const desEl = document.getElementById('editor-input-desarrollo');
       if (desEl) {
-        this.currentClass.didacticSequence.desarrollo = this.cleanBrokenLinebreaks(desEl.value.trim());
+        this.currentClass.didacticSequence.desarrollo = processVal(desEl.value.trim());
         this.currentClass.pedagogy.desarrollo = this.currentClass.didacticSequence.desarrollo;
       }
       const cierreEl = document.getElementById('editor-input-cierre');
       if (cierreEl) {
-        this.currentClass.didacticSequence.cierre = this.cleanBrokenLinebreaks(cierreEl.value.trim());
+        this.currentClass.didacticSequence.cierre = processVal(cierreEl.value.trim());
         this.currentClass.pedagogy.cierre = this.currentClass.didacticSequence.cierre;
       }
       const recEl = document.getElementById('editor-input-recursos');
       if (recEl) {
-        this.currentClass.didacticSequence.recursos = this.cleanBrokenLinebreaks(recEl.value.trim());
+        this.currentClass.didacticSequence.recursos = processVal(recEl.value.trim());
         this.currentClass.pedagogy.recursos = this.currentClass.didacticSequence.recursos;
       }
       const evalEl = document.getElementById('editor-input-evaluacion');
       if (evalEl) {
-        this.currentClass.didacticSequence.evaluation = this.cleanBrokenLinebreaks(evalEl.value.trim());
+        this.currentClass.didacticSequence.evaluation = processVal(evalEl.value.trim());
         this.currentClass.pedagogy.evaluacion = this.currentClass.didacticSequence.evaluation;
       }
       const tareasEl = document.getElementById('editor-input-tareas');
       if (tareasEl) {
-        this.currentClass.didacticSequence.tareas = this.cleanBrokenLinebreaks(tareasEl.value.trim());
+        this.currentClass.didacticSequence.tareas = processVal(tareasEl.value.trim());
         this.currentClass.pedagogy.tareas = this.currentClass.didacticSequence.tareas;
       }
       const obsEl = document.getElementById('editor-input-observaciones');
       if (obsEl) {
-        this.currentClass.observations = this.cleanBrokenLinebreaks(obsEl.value.trim());
+        this.currentClass.observations = processVal(obsEl.value.trim());
         this.currentClass.pedagogy.observaciones = this.currentClass.observations;
       }
     }
@@ -540,29 +649,29 @@ class ClassEditorViewClass {
       if (!this.currentClass.teacherNotebook) this.currentClass.teacherNotebook = {};
 
       const qEl = document.getElementById('editor-input-nb-question');
-      if (qEl) this.currentClass.teacherNotebook.question = this.cleanBrokenLinebreaks(qEl.value.trim());
+      if (qEl) this.currentClass.teacherNotebook.question = processVal(qEl.value.trim());
 
       const dynEl = document.getElementById('editor-input-nb-dynamics');
-      if (dynEl) this.currentClass.teacherNotebook.dynamics = this.cleanBrokenLinebreaks(dynEl.value.trim());
+      if (dynEl) this.currentClass.teacherNotebook.dynamics = processVal(dynEl.value.trim());
 
       const studEl = document.getElementById('editor-input-nb-student-content');
       if (studEl) {
-        const cleaned = this.cleanBrokenLinebreaks(studEl.value.trim());
+        const cleaned = processVal(studEl.value.trim());
         this.currentClass.teacherNotebook.studentNotebookContent = cleaned;
         this.currentClass.notebookContent = cleaned;
       }
 
       const actEl = document.getElementById('editor-input-nb-practical-activity');
-      if (actEl) this.currentClass.teacherNotebook.practicalActivity = this.cleanBrokenLinebreaks(actEl.value.trim());
+      if (actEl) this.currentClass.teacherNotebook.practicalActivity = processVal(actEl.value.trim());
 
       const notesEl = document.getElementById('editor-input-nb-notes');
-      if (notesEl) this.currentClass.teacherNotebook.additionalNotes = this.cleanBrokenLinebreaks(notesEl.value.trim());
+      if (notesEl) this.currentClass.teacherNotebook.additionalNotes = processVal(notesEl.value.trim());
     }
   }
 
   _collectFormValues() {
     if (!this.currentClass) return null;
-    this._syncFromDomToCurrentClass();
+    this._syncFromDomToCurrentClass(true);
     return JSON.parse(JSON.stringify(this.currentClass));
   }
 
@@ -570,11 +679,35 @@ class ClassEditorViewClass {
     const data = this._collectFormValues();
     if (!data) return false;
 
+    // Si tiene contenido temático o pedagógico real, promover estado a 'planned'
+    const hasContent = Boolean(
+      (data.curriculum?.topic && String(data.curriculum.topic).trim().length > 0 && String(data.curriculum.topic).trim() !== 'Sin tema planeado todavía') ||
+      (data.topic && String(data.topic).trim().length > 0 && String(data.topic).trim() !== 'Sin tema planeado todavía') ||
+      (data.didacticSequence?.inicio && String(data.didacticSequence.inicio).trim().length > 0) ||
+      (data.didacticSequence?.desarrollo && String(data.didacticSequence.desarrollo).trim().length > 0) ||
+      (data.pedagogy?.inicio && String(data.pedagogy.inicio).trim().length > 0) ||
+      (data.pedagogy?.desarrollo && String(data.pedagogy.desarrollo).trim().length > 0) ||
+      (data.notebookContent && String(data.notebookContent).trim().length > 0) ||
+      (data.teacherNotebook?.studentNotebookContent && String(data.teacherNotebook.studentNotebookContent).trim().length > 0)
+    );
+    if (hasContent) {
+      data.status = 'planned';
+      if (this.currentClass) this.currentClass.status = 'planned';
+    }
+
     const saved = ClassService.saveClassNow(data, { isAutoSave: false });
     if (saved) {
       this.currentClass = saved;
+      if (typeof AppState !== 'undefined') {
+        AppState.set('currentClassId', saved.id);
+        if (saved.date) AppState.set('currentDate', saved.date);
+      }
+      const mInfo = typeof ClassRepository !== 'undefined' && ClassRepository.getMirrorGradeInfo
+        ? ClassRepository.getMirrorGradeInfo(saved.gradeName, saved.group, saved.subjectName || saved.subject)
+        : null;
+      const mirrorMsg = mInfo ? ` y sincronizada con ${mInfo.targetGradeName}` : '';
       if (showFeedback && typeof App !== 'undefined' && App.showToast) {
-        App.showToast(`✓ Clase #${saved.sequenceNumber} guardada exitosamente`, 'success');
+        App.showToast(`✓ Clase #${saved.sequenceNumber} guardada${mirrorMsg} exitosamente`, 'success');
       }
       return true;
     } else {
@@ -980,16 +1113,22 @@ class ClassEditorViewClass {
     this.currentClass.sequenceNumber = newNum;
     this.currentClass.dayNumber = String(newNum);
 
+    const tid = (typeof ClassRepository !== 'undefined' && ClassRepository._getCurrentTeacherId) ? ClassRepository._getCurrentTeacherId() : 'usr_manuel';
+
     if (typeof ClassRepository !== 'undefined' && ClassRepository.saveClass) {
-      ClassRepository.saveClass(this.currentClass);
+      const saved = ClassRepository.saveClass(this.currentClass, tid);
+      if (saved) this.currentClass = saved;
     }
+
+    const seqInput = document.getElementById('editor-input-seq-number');
+    if (seqInput) seqInput.value = newNum;
 
     let nextNum = newNum + 1;
 
     if (propagate) {
       try {
-        const tid = (typeof ClassRepository !== 'undefined' && ClassRepository._getCurrentTeacherId) ? ClassRepository._getCurrentTeacherId() : 'usr_manuel';
         const currentDate = this.currentClass.date;
+        const curPeriod = String(this.currentClass.period || '1°').trim();
 
         if (typeof ClassRepository !== 'undefined' && ClassRepository.getAllClasses) {
           const allClasses = ClassRepository.getAllClasses(tid);
@@ -997,12 +1136,13 @@ class ClassEditorViewClass {
             if (!c.date) return false;
             if (c.date < currentDate) return false;
             if (c.date === currentDate && c.id === this.currentClass.id) return false;
+            if (curPeriod && String(c.period || '1°').trim() !== curPeriod) return false;
             const sub = String(c.subjectName || c.subject || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
             const grd = String(c.gradeName || c.grade || '').toLowerCase().replace(/[^0-9a-z]/gi, '').trim();
             return sub === targetSub && grd === targetGrd;
           }).sort((a, b) => {
-            if (a.date !== b.date) return a.date.localeCompare(b.date);
-            return (a.sequenceNumber || 0) - (b.sequenceNumber || 0);
+            if (a.date !== b.date) return (a.date || '').localeCompare(b.date || '');
+            return (parseInt(a.sequenceNumber, 10) || 0) - (parseInt(b.sequenceNumber, 10) || 0);
           });
 
           futureClasses.forEach(fc => {
@@ -1071,16 +1211,15 @@ class ClassEditorViewClass {
   }
 
   goBack() {
+    this._syncFromDomToCurrentClass();
+    if (typeof AppState !== 'undefined' && AppState.get('isDirty')) {
+      this.saveCurrentClass(false);
+    }
     if (typeof AppRouter !== 'undefined' && AppRouter.goBack) {
       AppRouter.goBack();
     } else {
-      if (typeof AppState !== 'undefined' && AppState.get('isDirty')) {
-        const leave = confirm('Tienes cambios sin guardar. ¿Deseas salir?');
-        if (!leave) return;
-        AppState.set('isDirty', false);
-      }
       if (typeof AppRouter !== 'undefined') {
-        AppRouter.navigateTo('dashboard');
+        AppRouter.navigateTo('sequences');
       }
     }
   }
@@ -1351,14 +1490,18 @@ class ClassEditorViewClass {
 
   cleanBrokenLinebreaks(text) {
     if (!text || typeof text !== 'string') return '';
+    let cleaned = text;
+    if (typeof window !== 'undefined' && window.ImportParser && typeof window.ImportParser.cleanDocumentArtifacts === 'function') {
+      cleaned = window.ImportParser.cleanDocumentArtifacts(cleaned);
+    }
     if (typeof window !== 'undefined' && window.ImportParser && typeof window.ImportParser.cleanBrokenLinebreaks === 'function') {
-      return window.ImportParser.cleanBrokenLinebreaks(text);
+      return window.ImportParser.cleanBrokenLinebreaks(cleaned);
     }
     let clean = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
     // 1. Reparar "Criterios de" e "Instrumentos de" huérfanos sin la palabra "evaluación"
-    clean = clean.replace(/(?:^|\n)\s*Criterios\s+de(?!\s+evaluaci[oó]n)\s*(?:\n+|:\s*\n*|\s*:\s*|\s+)*(?=[•\-\*]|\n|$)/gi, '\nCriterios de evaluación:\n');
-    clean = clean.replace(/(?:^|\n)\s*Instrumentos\s+de(?!\s+evaluaci[oó]n)\s*(?:\n+|:\s*\n*|\s*:\s*|\s+)*(?=[•\-\*]|\n|$)/gi, '\nInstrumentos de evaluación:\n');
+    clean = clean.replace(/(?:^|\n)\s*Criterios\s+de(?!\s+evaluaci[oó]n)[\s:]*(?=[•\-\*]|\n|$)/gi, '\nCriterios de evaluación:\n');
+    clean = clean.replace(/(?:^|\n)\s*Instrumentos\s+de(?!\s+evaluaci[oó]n)[\s:]*(?=[•\-\*]|\n|$)/gi, '\nInstrumentos de evaluación:\n');
 
     // 2. Unir palabras clave partidas por salto de línea específicamente
     clean = clean.replace(/(?:^|\n)\s*(Criterios\s+de)\s*\n+\s*evaluaci[oó]n\b/gi, '\nCriterios de evaluación:');
@@ -1395,12 +1538,378 @@ class ClassEditorViewClass {
     clean = clean.replace(/([^\n])\n*((?:Criterios|Instrumentos)\s+de\s+evaluaci[oó]n:)/gi, '$1\n\n$2');
 
     // 10. Eliminar saltos dobles innecesarios entre un encabezado con dos puntos (:) y su primera viñeta
-    clean = clean.replace(/([^\n:]+:)\s*\n{2,}([•]|[-*](?!\*))/g, '$1\n$2');
+    clean = clean.replace(/([^\n:]{1,120}:)\s*\n{2,}([•]|[-*](?!\*))/g, '$1\n$2');
 
     // 11. Normalizar saltos triples o excesivos
     clean = clean.replace(/\n{3,}/g, '\n\n');
 
     return clean.trim();
+  }
+
+  // =========================================================================
+  // GESTIÓN DE ARCHIVOS E IMÁGENES ADJUNTAS (Req. Regla 5 y 6 GEMINI.md)
+  // =========================================================================
+
+  scrollToAttachments() {
+    const el = document.getElementById('editor-attachments-section');
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.style.boxShadow = '0 0 0 3px #60a5fa';
+      setTimeout(() => {
+        el.style.boxShadow = 'var(--shadow-sm)';
+      }, 1500);
+    }
+  }
+
+  handleFileInput(e) {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      Array.from(files).forEach(file => {
+        this.addFileAttachment(file);
+      });
+    }
+    e.target.value = '';
+  }
+
+  onDragOver(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const dropzone = document.getElementById('editor-attachments-dropzone');
+    if (dropzone) {
+      dropzone.style.borderColor = '#2563eb';
+      dropzone.style.background = '#eff6ff';
+    }
+  }
+
+  onDragLeave(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const dropzone = document.getElementById('editor-attachments-dropzone');
+    if (dropzone) {
+      dropzone.style.borderColor = '#93c5fd';
+      dropzone.style.background = '#f8fafc';
+    }
+  }
+
+  onDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const dropzone = document.getElementById('editor-attachments-dropzone');
+    if (dropzone) {
+      dropzone.style.borderColor = '#93c5fd';
+      dropzone.style.background = '#f8fafc';
+    }
+    const files = e.dataTransfer?.files;
+    if (files && files.length > 0) {
+      Array.from(files).forEach(file => {
+        this.addFileAttachment(file);
+      });
+    }
+  }
+
+  handlePaste(e) {
+    const clipboardData = e.clipboardData || (window.clipboardData);
+    if (!clipboardData) return;
+    const items = clipboardData.items;
+    if (!items || items.length === 0) return;
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.type && item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) {
+          e.preventDefault();
+          const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+          const fallbackName = `captura_clase_${this.currentClass.sequenceNumber || 'adjunto'}_${timestamp}.png`;
+          this.addFileAttachment(file, fallbackName);
+          break;
+        }
+      }
+    }
+  }
+
+  async addFileAttachment(file, fallbackName = null) {
+    if (!file || !this.currentClass) return;
+    if (!Array.isArray(this.currentClass.attachments)) {
+      this.currentClass.attachments = [];
+    }
+
+    const isImg = file.type && file.type.startsWith('image/');
+    const isPdf = file.type === 'application/pdf' || (file.name && file.name.toLowerCase().endsWith('.pdf'));
+
+    if (!isImg && !isPdf) {
+      if (typeof App !== 'undefined' && App.showToast) {
+        App.showToast(`El formato de "${file.name || 'archivo'}" no es compatible. Usa imágenes o documentos PDF.`, 'warning');
+      } else {
+        alert('Formato no compatible. Por favor sube imágenes (PNG, JPG, WebP) o documentos PDF.');
+      }
+      return;
+    }
+
+    try {
+      if (typeof App !== 'undefined' && App.showToast) {
+        App.showToast(isImg ? 'Procesando y optimizando imagen con Canvas off-screen...' : 'Cargando archivo adjunto...', 'info');
+      }
+
+      let dataUrl = null;
+      let finalSizeText = '';
+
+      if (isImg) {
+        // Regla 6: Compresión y optimización de imágenes en cliente (max 1280px, calidad 0.82)
+        dataUrl = await this._compressImage(file, 1280, 0.82);
+        if (!dataUrl) {
+          throw new Error('No se pudo procesar la compresión de la imagen.');
+        }
+        const commaIdx = dataUrl.indexOf(',');
+        const approxBytes = Math.round((dataUrl.length - (commaIdx + 1)) * 0.75);
+        finalSizeText = this._formatFileSize(approxBytes);
+      } else {
+        dataUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (ev) => resolve(ev.target.result);
+          reader.onerror = (err) => reject(err);
+          reader.readAsDataURL(file);
+        });
+        finalSizeText = this._formatFileSize(file.size);
+      }
+
+      const fileName = file.name || fallbackName || (isImg ? 'imagen_adjunta.jpg' : 'documento.pdf');
+
+      this.currentClass.attachments.push({
+        name: fileName,
+        type: file.type || (isImg ? 'image/jpeg' : 'application/pdf'),
+        sizeText: finalSizeText,
+        dataUrl: dataUrl
+      });
+
+      // Guardar inmediatamente en ClassRepository para asegurar persistencia
+      this._syncFromDomToCurrentClass();
+      if (typeof ClassRepository !== 'undefined') {
+        ClassRepository.saveClass(this.currentClass);
+      }
+
+      // Actualizar contenedor de anexos en la interfaz
+      this._updateAttachmentsUI();
+
+      if (typeof App !== 'undefined' && App.showToast) {
+        App.showToast(`✓ Archivo adjuntado: ${fileName} (${finalSizeText})`, 'success');
+      }
+    } catch (err) {
+      console.error('[ClassEditorView] Error adjuntando archivo:', err);
+      if (typeof App !== 'undefined' && App.showToast) {
+        App.showToast('Error al adjuntar el archivo. Intenta de nuevo.', 'error');
+      }
+    }
+  }
+
+  _compressImage(fileOrDataUrl, maxWidth = 1280, quality = 0.82) {
+    return new Promise((resolve) => {
+      if (!fileOrDataUrl) return resolve(null);
+      if (typeof window === 'undefined' || typeof document === 'undefined') {
+        return resolve(typeof fileOrDataUrl === 'string' ? fileOrDataUrl : null);
+      }
+
+      const img = new Image();
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return resolve(typeof fileOrDataUrl === 'string' ? fileOrDataUrl : null);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+
+        try {
+          // Intentar WebP primero, si no es soportado usar JPEG según Regla 6
+          let compressed = canvas.toDataURL('image/webp', quality);
+          if (!compressed || !compressed.startsWith('data:image/webp')) {
+            compressed = canvas.toDataURL('image/jpeg', quality);
+          }
+          resolve(compressed);
+        } catch (e) {
+          try {
+            resolve(canvas.toDataURL('image/jpeg', quality));
+          } catch (e2) {
+            resolve(typeof fileOrDataUrl === 'string' ? fileOrDataUrl : null);
+          }
+        }
+      };
+      img.onerror = () => {
+        resolve(typeof fileOrDataUrl === 'string' ? fileOrDataUrl : null);
+      };
+
+      if (typeof fileOrDataUrl === 'string') {
+        img.src = fileOrDataUrl;
+      } else if (fileOrDataUrl instanceof Blob) {
+        const reader = new FileReader();
+        reader.onload = (e) => { img.src = e.target.result; };
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(fileOrDataUrl);
+      } else {
+        resolve(null);
+      }
+    });
+  }
+
+  _formatFileSize(bytes) {
+    if (!bytes || isNaN(bytes)) return '0 KB';
+    if (bytes > 1024 * 1024) {
+      return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+    return Math.max(1, Math.round(bytes / 1024)) + ' KB';
+  }
+
+  _updateAttachmentsUI() {
+    if (!this.currentClass) return;
+    const atts = this.currentClass.attachments || [];
+
+    // Actualizar badge de conteo en la sección
+    const countBadge = document.getElementById('editor-attachments-count-badge');
+    if (countBadge) {
+      countBadge.textContent = String(atts.length);
+    }
+
+    // Actualizar botón de la cabecera
+    const headerBtn = document.getElementById('editor-header-attachments-btn');
+    if (headerBtn) {
+      headerBtn.innerHTML = `📎 Anexos (${atts.length})`;
+    }
+
+    // Actualizar grid de anexos
+    const container = document.getElementById('editor-attachments-container');
+    if (container) {
+      container.innerHTML = this._renderAttachmentsGrid(atts);
+    }
+  }
+
+  _renderAttachmentsGrid(atts) {
+    if (!atts || atts.length === 0) {
+      return `
+        <div style="text-align: center; padding: 1.5rem 1rem; color: var(--slate-400); font-size: 0.85rem; font-style: italic; background: #f8fafc; border-radius: 8px; border: 1px dashed var(--slate-200);">
+          Esta clase aún no tiene archivos ni imágenes adjuntas. Usa la zona superior para arrastrar o subir fotografías de tableros, talleres impresos o guías en PDF.
+        </div>
+      `;
+    }
+
+    const cardsHtml = atts.map((att, idx) => {
+      const isImg = att.type && att.type.startsWith('image/');
+      const isPdf = att.type === 'application/pdf' || (att.name && att.name.toLowerCase().endsWith('.pdf'));
+
+      return `
+        <div class="attachment-card" style="background:#ffffff; border:1px solid #e2e8f0; border-radius:10px; padding:10px; display:flex; align-items:center; gap:12px; box-shadow:0 1px 3px rgba(0,0,0,0.05); transition:all 0.15s ease;">
+          <div class="attachment-preview-box" style="width:52px; height:52px; border-radius:8px; background:#f1f5f9; display:flex; align-items:center; justify-content:center; overflow:hidden; flex-shrink:0; cursor:pointer;" onclick="ClassEditorView.previewAttachment(${idx})">
+            ${isImg 
+              ? `<img src="${att.dataUrl}" alt="${this._escape(att.name)}" style="width:100%; height:100%; object-fit:cover;" title="Clic para ampliar" />`
+              : `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="9" y1="15" x2="15" y2="15"></line></svg>`
+            }
+          </div>
+          <div style="flex:1; min-width:0;">
+            <div style="font-weight:700; font-size:0.86rem; color:#1e293b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${this._escape(att.name)}">
+              ${this._escape(att.name)}
+            </div>
+            <div style="display:flex; align-items:center; gap:6px; margin-top:4px;">
+              <span style="font-size:0.65rem; font-weight:700; padding:1px 6px; border-radius:4px; ${isPdf ? 'background:#fee2e2; color:#b91c1c; border:1px solid #fca5a5;' : 'background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd;'}">
+                ${isPdf ? 'DOCUMENTO PDF' : 'IMAGEN'}
+              </span>
+              <span style="font-size:0.75rem; color:#64748b; font-weight:500;">
+                ${att.sizeText || 'Archivo'}
+              </span>
+            </div>
+          </div>
+          <div style="display:flex; align-items:center; gap:4px; flex-shrink:0;">
+            ${isImg ? `
+              <button type="button" class="btn btn-secondary btn-sm" onclick="ClassEditorView.previewAttachment(${idx})" title="Ver imagen ampliada" style="padding:4px 7px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              </button>
+            ` : `
+              <button type="button" class="btn btn-secondary btn-sm" onclick="ClassEditorView.previewAttachment(${idx})" title="Ver PDF" style="padding:4px 7px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+              </button>
+            `}
+            <a href="${att.dataUrl}" download="${this._escape(att.name)}" class="btn btn-secondary btn-sm" title="Descargar anexo a tu equipo" style="display:inline-flex; align-items:center; padding:4px 7px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            </a>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="ClassEditorView.deleteAttachment(${idx})" title="Eliminar anexo" style="padding:4px 7px; color:#dc2626; border-color:#fecaca; background:#fef2f2;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div class="attachments-grid" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:10px;">
+        ${cardsHtml}
+      </div>
+    `;
+  }
+
+  deleteAttachment(idx) {
+    if (!this.currentClass || !this.currentClass.attachments || !this.currentClass.attachments[idx]) return;
+    const att = this.currentClass.attachments[idx];
+    if (!confirm(`¿Deseas eliminar el archivo adjunto "${att.name}" de esta clase?`)) return;
+
+    this.currentClass.attachments.splice(idx, 1);
+    this._syncFromDomToCurrentClass();
+    if (typeof ClassRepository !== 'undefined') {
+      ClassRepository.saveClass(this.currentClass);
+    }
+    this._updateAttachmentsUI();
+    if (typeof App !== 'undefined' && App.showToast) {
+      App.showToast('Archivo adjunto eliminado', 'info');
+    }
+  }
+
+  previewAttachment(idx) {
+    if (!this.currentClass || !this.currentClass.attachments || !this.currentClass.attachments[idx]) return;
+    const att = this.currentClass.attachments[idx];
+    const isImg = att.type && att.type.startsWith('image/');
+    if (isImg) {
+      this.previewImage(att.dataUrl, att.name);
+    } else {
+      this.openPdfAttachment(att.dataUrl);
+    }
+  }
+
+  previewImage(dataUrl, name) {
+    const modalBackdrop = document.getElementById('image-preview-modal-backdrop');
+    const modalImg = document.getElementById('preview-modal-image-tag');
+    const modalTitle = document.getElementById('preview-modal-title');
+    if (modalBackdrop && modalImg) {
+      modalImg.src = dataUrl;
+      if (modalTitle) modalTitle.textContent = name || 'Vista previa de imagen';
+      modalBackdrop.classList.add('active');
+    } else {
+      const win = window.open();
+      if (win) {
+        win.document.write(`<img src="${dataUrl}" style="max-width:100%; height:auto;" />`);
+      }
+    }
+  }
+
+  openPdfAttachment(dataUrl) {
+    const win = window.open();
+    if (win) {
+      win.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head><title>Visualizador de Documento</title></head>
+          <body style="margin:0; background:#333;">
+            <iframe src="${dataUrl}" style="border:none; width:100vw; height:100vh;"></iframe>
+          </body>
+        </html>
+      `);
+    }
   }
 
   _escape(str) {

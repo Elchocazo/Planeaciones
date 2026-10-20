@@ -210,8 +210,10 @@ const PlanRepository = {
   getPlan(teacherId, date) {
     if (!date) return null;
     const tid = teacherId || this._getCurrentTeacherId();
-    const all = this.getAllPlans(tid);
-    const plan = all[date];
+    if (!this._cache[tid] || Object.keys(this._cache[tid]).length === 0) {
+      this.getAllPlans(tid);
+    }
+    const plan = this._cache[tid] ? this._cache[tid][date] : null;
     if (!plan) return null;
     return JSON.parse(JSON.stringify(plan));
   },
@@ -224,7 +226,10 @@ const PlanRepository = {
   calculateNextSequenceNumber(teacherId, date, period = '1°', subject = '', grade = '', currentDayClasses = []) {
     if (!subject || !grade) return 1;
     const tid = teacherId || this._getCurrentTeacherId();
-    const allPlans = this.getAllPlans(tid);
+    if (!this._cache[tid] || Object.keys(this._cache[tid]).length === 0) {
+      this.getAllPlans(tid);
+    }
+    const allPlans = this._cache[tid] || {};
 
     const norm = (s) => String(s || '').trim().toLowerCase();
     const targetSub = norm(subject);
@@ -447,6 +452,29 @@ const PlanRepository = {
       this._syncToDisk(tid);
     }, 1500);
 
+    // 9. Sincronización automática con Google Cloud Firestore
+    if (typeof FirestoreService !== 'undefined' && typeof FirestoreService.savePlan === 'function') {
+      FirestoreService.savePlan(tid, date, finalizedPlan).catch(err => {
+        console.warn('[PlanRepository] Error al sincronizar con Firestore:', err);
+      });
+    }
+
+    // 10. Sincronización inmediata con ClassRepository (Dashboard, Calendario y Secuencias)
+    if (!options.isClassSync && typeof ClassRepository !== 'undefined' && typeof ClassRepository.saveClass === 'function' && Array.isArray(finalizedPlan.classes)) {
+      finalizedPlan.classes.forEach(cls => {
+        if (!cls) return;
+        try {
+          ClassRepository.saveClass({
+            ...cls,
+            date: date,
+            planId: finalizedPlan.id || ('plan_' + date)
+          }, tid, { ...options, isPlanSync: true });
+        } catch (eCr) {
+          console.warn('[PlanRepository] Error al sincronizar clase con ClassRepository:', eCr);
+        }
+      });
+    }
+
     return finalizedPlan;
   },
 
@@ -636,6 +664,15 @@ const PlanRepository = {
     console.log(`[CLASS] classId: ${classId} date: ${date} seq: ${updatedClass.dayNumber} v: ${nextClassVersion}`);
     console.log(`[SAVE] sequence: ${Boolean(updatedClass.description)} observations: ${Boolean(updatedClass.observations)} notebook: ${Boolean(updatedClass.notebookContent)}`);
 
+    // Sincronización inmediata con ClassRepository (Dashboard, Calendario y Secuencias)
+    if (typeof ClassRepository !== 'undefined' && typeof ClassRepository.saveClass === 'function') {
+      try {
+        ClassRepository.saveClass(updatedClass, tid, options);
+      } catch (eCr) {
+        console.warn('[PlanRepository] Error al sincronizar clase con ClassRepository:', eCr);
+      }
+    }
+
     return updatedClass;
   },
 
@@ -752,10 +789,14 @@ const PlanRepository = {
    */
   _getCurrentTeacherId() {
     if (typeof UserService !== 'undefined' && UserService.getCurrentUserId) {
-      return UserService.getCurrentUserId() || 'usr_manuel';
+      const uid = UserService.getCurrentUserId();
+      if (uid === 'usr_coordinacion') return 'usr_manuel';
+      return uid || 'usr_manuel';
     }
     if (typeof localStorage !== 'undefined') {
-      return localStorage.getItem('school_current_active_user_v2') || 'usr_manuel';
+      const uid = localStorage.getItem('school_current_active_user_v2');
+      if (uid === 'usr_coordinacion') return 'usr_manuel';
+      return uid || 'usr_manuel';
     }
     return 'usr_manuel';
   },

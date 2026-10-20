@@ -63,9 +63,11 @@ const CoordinatorView = {
             </div>
 
             <!-- Botón Gestión de Docentes (si es admin) -->
-            <button type="button" class="btn btn-secondary btn-sm" onclick="UserManagerModal.open()" title="Crear y administrar perfiles de docentes">
-              👥 Administrar Docentes
-            </button>
+            ${(typeof UserService !== 'undefined' && UserService.getCurrentUser().role === 'admin_teacher') ? `
+              <button type="button" class="btn btn-secondary btn-sm" onclick="UserManagerModal.open()" title="Crear y administrar perfiles de docentes">
+                👥 Administrar Docentes
+              </button>
+            ` : ''}
 
             <!-- Cerrar -->
             <button type="button" class="btn-close-modal" onclick="CoordinatorView.closeDashboard()" title="Cerrar">&times;</button>
@@ -92,7 +94,15 @@ const CoordinatorView = {
 
     const allUsers = UserService.getAllUsers();
     const teachers = allUsers.filter(u => u.role !== 'coordinator');
-    const summary = UserService.getAllTeachersAuditSummary(this.selectedPeriod);
+    let summary = UserService.getAllTeachersAuditSummary(this.selectedPeriod);
+    const isMarisol = (typeof UserService !== 'undefined' && UserService.isCoordinatorActive());
+
+    // Priorizar siempre a Manuel Muñoz al tope de la lista
+    summary.sort((a, b) => {
+      if (a.user.id === 'usr_manuel') return -1;
+      if (b.user.id === 'usr_manuel') return 1;
+      return (a.user.name || '').localeCompare(b.user.name || '');
+    });
 
     // Calcular métricas globales
     let totalClasses = 0;
@@ -106,6 +116,28 @@ const CoordinatorView = {
     });
 
     container.innerHTML = `
+      ${isMarisol ? `
+        <!-- Banner de Supervisión Oficial: Marisol Ruiz -->
+        <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:0.9rem 1.25rem; margin-bottom:1.25rem; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.75rem;">
+          <div style="display:flex; align-items:center; gap:0.75rem;">
+            <div style="font-size:2rem; background:#dbeafe; width:48px; height:48px; border-radius:50%; display:flex; align-items:center; justify-content:center;">🎓</div>
+            <div>
+              <div style="font-weight:800; font-size:1.05rem; color:#1e3a8a;">
+                Sesión Oficial: Marisol Ruiz — Coordinación Académica
+              </div>
+              <div style="font-size:0.82rem; color:#2563eb; margin-top:2px;">
+                Revisión pedagógica, visto bueno oficial y descarga de planeaciones de <strong>Manuel Muñoz</strong>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex; align-items:center; gap:0.5rem;">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="AuthModal.logout()" style="font-size:0.8rem; padding:0.35rem 0.75rem; color:#dc2626; border-color:#fca5a5; background:#fef2f2; font-weight:700;">
+              🚪 Cerrar Sesión
+            </button>
+          </div>
+        </div>
+      ` : ''}
+
       <!-- 1. Tarjetas de Resumen Global -->
       <div class="coord-stats-grid">
         <div class="coord-stat-card">
@@ -219,9 +251,9 @@ const CoordinatorView = {
                 </thead>
                 <tbody>
                   ${dates.map(dateStr => {
-                    const plan = plans[dateStr];
-                    const count = plan.classes ? plan.classes.length : 0;
-                    const review = plan.coordinatorReview;
+                    const { plan, classes: validClasses } = CoordinatorView._getPlanAndClasses(user.id, dateStr);
+                    const count = validClasses ? validClasses.length : 0;
+                    const review = plan?.coordinatorReview;
                     const dayName = ExportService.getDayOfWeekName(dateStr);
 
                     let statusBadge = `<span class="badge-review pending">⏳ Pendiente de Visto Bueno</span>`;
@@ -302,53 +334,163 @@ const CoordinatorView = {
 
   /**
    * Inspecciona en pantalla completa la planeación oficial de un docente
+   * @param {string} teacherId - ID del docente
+   * @param {string} dateStr - Fecha en formato YYYY-MM-DD
+   * @param {string|null} classId - ID único de la clase a mostrar (o null para ver todas)
    */
-  inspectPlan(teacherId, dateStr) {
-    const teacher = UserService.getUserById(teacherId);
-    const plans = UserService.getTeacherPlans(teacherId);
-    const plan = plans[dateStr];
+  inspectPlan(teacherId, dateStr, classIndexOrId = null) {
+    const tid = teacherId || 'usr_manuel';
+    const teacher = (typeof UserService !== 'undefined' && UserService.getUserById) 
+      ? (UserService.getUserById(tid) || { name: 'Manuel Muñoz' }) 
+      : { name: 'Manuel Muñoz' };
 
-    if (!plan || !plan.classes || plan.classes.length === 0) {
-      alert('Esta fecha no contiene clases registradas.');
+    // Si se especificó un ID de clase explícito, intentar resolver directamente desde ClassRepository
+    let directClass = null;
+    if (classIndexOrId && typeof classIndexOrId === 'string' && typeof ClassRepository !== 'undefined') {
+      directClass = ClassRepository.getClass(classIndexOrId, tid);
+      if (directClass) {
+        if (!dateStr || dateStr !== directClass.date) {
+          dateStr = directClass.date || dateStr || new Date().toISOString().split('T')[0];
+        }
+      }
+    }
+
+    const { plan, classes } = this._getPlanAndClasses(tid, dateStr);
+
+    if (directClass && !classes.find(c => c.id === directClass.id)) {
+      classes.push(directClass);
+    }
+
+    if ((!classes || classes.length === 0) && !directClass) {
+      alert('Esta fecha o clase no contiene planeaciones registradas.');
       return;
     }
 
-    const htmlSheet = ExportService.generateHtmlSheet(plan, teacher);
+    // Remover modal previo si ya estuviera abierto
+    const existing = document.getElementById('coordinator-inspect-plan-modal');
+    if (existing) existing.remove();
+
+    // BUG FIX 1: Ocultar el modal de clases para que el inspect quede al frente
+    const dayClassesModal = document.getElementById('coordinator-day-classes-modal');
+    if (dayClassesModal) dayClassesModal.style.display = 'none';
+
+    let planToRender = plan;
+    let subtitleText = `Fecha: ${dateStr} • Periodo: ${plan.period || '1°'}`;
+    let singleClassFound = directClass || null;
+
+    if (!singleClassFound && classIndexOrId !== null && classIndexOrId !== undefined && classIndexOrId !== 'null') {
+      // 1. Prioridad: acceso directo por índice numérico (infalible)
+      if (!isNaN(Number(classIndexOrId))) {
+        const numIdx = Number(classIndexOrId);
+        if (numIdx >= 0 && numIdx < classes.length) {
+          singleClassFound = classes[numIdx];
+        }
+      }
+
+      // 2. Búsqueda por ID único de clase
+      if (!singleClassFound) {
+        singleClassFound = classes.find(c =>
+          c.id === classIndexOrId || c._id === classIndexOrId || String(c.id) === String(classIndexOrId)
+        );
+      }
+
+      // 3. Fallback usando el mapa global __classIdMap
+      if (!singleClassFound && window.__classIdMap && typeof window.__classIdMap[classIndexOrId] !== 'undefined') {
+        const idx = window.__classIdMap[classIndexOrId];
+        singleClassFound = classes[idx];
+      }
+    }
+
+    if (singleClassFound) {
+      // Normalizar campos subject y grade para garantizar que ExportService los lea sin caer al perfil
+      let finalSubject = singleClassFound.subject || singleClassFound.subjectName || singleClassFound.subjectId || '';
+      let finalGrade = singleClassFound.grade || singleClassFound.gradeName || singleClassFound.gradeId || '';
+
+      if (!finalSubject) {
+        const m = ((singleClassFound.description || '') + ' ' + (singleClassFound.sequence || '') + ' ' + (singleClassFound.topic || '')).match(/Asignatura\s*:\s*([^\n\r<•]+)/i);
+        if (m) finalSubject = m[1].trim();
+      }
+      if (!finalGrade) {
+        const m = ((singleClassFound.description || '') + ' ' + (singleClassFound.sequence || '') + ' ' + (singleClassFound.topic || '')).match(/Grado\s*:\s*([^\n\r<•]+)/i);
+        if (m) finalGrade = m[1].trim();
+      }
+
+      finalSubject = finalSubject || 'Asignatura';
+      finalGrade = finalGrade || '';
+
+      const normalizedClass = {
+        ...singleClassFound,
+        date: singleClassFound.date || dateStr,
+        subject: finalSubject,
+        subjectName: finalSubject,
+        grade: finalGrade,
+        gradeName: finalGrade
+      };
+
+      planToRender = {
+        ...plan,
+        date: dateStr,
+        subject: finalSubject,
+        subjectName: finalSubject,
+        grade: finalGrade,
+        gradeName: finalGrade,
+        classes: [normalizedClass]
+      };
+      subtitleText = `Secuencia Didáctica: <strong>${finalSubject} ${finalGrade}</strong> • Fecha: ${dateStr}`;
+    }
+
+    const htmlSheet = ExportService.generateHtmlSheet(planToRender, teacher);
 
     const inspectModal = document.createElement('div');
+    inspectModal.id = 'coordinator-inspect-plan-modal';
     inspectModal.className = 'coordinator-modal-backdrop active';
-    inspectModal.style.zIndex = '3000';
+    inspectModal.style.zIndex = '3700'; // AL FRENTE DE TODO
+
+    // Función de cierre: elimina inspectModal y restaura el modal de clases
+    const closeInspectAndRestore = `document.getElementById('coordinator-inspect-plan-modal')?.remove(); var _dcm=document.getElementById('coordinator-day-classes-modal'); if(_dcm)_dcm.style.display=''`;
+
+
     inspectModal.innerHTML = `
-      <div class="coordinator-modal-card" style="max-width:980px; height:92vh;">
-        <div class="coordinator-modal-header">
-          <div style="display:flex; align-items:center; gap:0.5rem;">
-            <span style="font-size:1.2rem;">👁️</span>
+      <div class="coordinator-modal-card" style="max-width:1020px; height:94vh; display:flex; flex-direction:column; box-shadow:0 25px 60px rgba(0,0,0,0.5);">
+        <div class="coordinator-modal-header" style="background:#f8fafc; border-bottom:1px solid #e2e8f0; padding:1rem 1.5rem;">
+          <div style="display:flex; align-items:center; gap:0.6rem;">
+            <span style="font-size:1.4rem;">📋</span>
             <div>
-              <h3 style="margin:0; font-size:1.1rem; color:var(--slate-900);">
-                Preparador Oficial: ${teacher.name}
+              <h3 style="margin:0; font-size:1.15rem; color:var(--slate-900); font-weight:800;">
+                Tabla de Secuencia Didáctica Oficial
               </h3>
-              <div style="font-size:0.8rem; color:var(--slate-500);">
-                Fecha: ${dateStr} • Periodo: ${plan.period || '3°'}
+              <div style="font-size:0.82rem; color:var(--slate-600); margin-top:2px;">
+                Docente: <strong>${teacher.name}</strong> • ${subtitleText}
               </div>
             </div>
           </div>
 
-          <div style="display:flex; gap:0.5rem;">
-            <button type="button" class="btn btn-primary btn-sm" onclick="CoordinatorView.downloadTeacherDocx('${teacherId}', '${dateStr}')">
+          <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+            ${(singleClassFound && classes.length > 1) ? `
+              <button type="button" class="btn btn-secondary btn-sm" onclick="CoordinatorView.inspectPlan('${tid}', '${dateStr}', null)" style="font-weight:700; color:#1e40af; background:#eff6ff; border-color:#bfdbfe;" title="Ver todas las clases del día">
+                📑 Ver Todas las Clases (${classes.length})
+              </button>
+            ` : (classes.length > 1 ? `
+              <button type="button" class="btn btn-secondary btn-sm" onclick="CoordinatorView.inspectPlan('${tid}', '${dateStr}', '${classes[0].id || '0'}')" style="font-weight:700; color:#0f766e; background:#f0fdfa; border-color:#99f6e4;" title="Ver solo la primera clase">
+                🔍 Ver Clase Individual
+              </button>
+            ` : '')}
+
+            <button type="button" class="btn btn-primary btn-sm" onclick="CoordinatorView.downloadTeacherDocx('${tid}', '${dateStr}', '${(singleClassFound?.id || classIndexOrId || '')}')" style="display:inline-flex; align-items:center; gap:5px; font-weight:700;">
               📄 Descargar Word (.docx)
             </button>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="CoordinatorView.downloadTeacherPdf('${teacherId}', '${dateStr}')">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="CoordinatorView.downloadTeacherPdf('${tid}', '${dateStr}', '${(singleClassFound?.id || classIndexOrId || '')}')" style="display:inline-flex; align-items:center; gap:5px; font-weight:700;">
               🖨️ Imprimir / PDF
             </button>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="CoordinatorView.openFeedbackModal('${teacherId}', '${dateStr}'); this.closest('.coordinator-modal-backdrop').remove();">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="CoordinatorView.openFeedbackModal('${tid}', '${dateStr}'); ${closeInspectAndRestore};" style="display:inline-flex; align-items:center; gap:5px; font-weight:700;">
               ✍️ Visto Bueno
             </button>
-            <button type="button" class="btn-close-modal" onclick="this.closest('.coordinator-modal-backdrop').remove()">&times;</button>
+            <button type="button" class="btn-close-modal" onclick="${closeInspectAndRestore}" title="Cerrar tabla y volver a las clases">&times;</button>
           </div>
         </div>
 
         <div style="flex:1; overflow-y:auto; background:#f1f5f9; padding:1.5rem; display:flex; justify-content:center;">
-          <div style="background:#fff; width:100%; max-width:850px; padding:2rem; box-shadow:0 4px 15px rgba(0,0,0,0.1); border-radius:4px;">
+          <div style="background:#fff; width:100%; max-width:880px; padding:2rem; box-shadow:0 4px 15px rgba(0,0,0,0.1); border-radius:6px;">
             ${htmlSheet}
           </div>
         </div>
@@ -357,15 +499,385 @@ const CoordinatorView = {
     document.body.appendChild(inspectModal);
   },
 
+
+  /**
+   * Obtiene la planeación y las clases de un docente para una fecha combinando todas las fuentes de almacenamiento
+   */
+  _getPlanAndClasses(teacherId, dateStr) {
+    const tid = teacherId || 'usr_manuel';
+    let classes = [];
+
+    // 1. Obtener desde ClassRepository
+    if (typeof ClassRepository !== 'undefined') {
+      if (typeof ClassRepository.getByDate === 'function') {
+        classes = ClassRepository.getByDate(dateStr, tid) || [];
+      } else if (typeof ClassRepository.getClasses === 'function') {
+        classes = ClassRepository.getClasses({ date: dateStr }, tid) || [];
+      }
+    }
+
+    // 2. Obtener desde PlanRepository o StorageService o UserService
+    let plan = null;
+    if (typeof PlanRepository !== 'undefined' && PlanRepository.getPlan) {
+      plan = PlanRepository.getPlan(tid, dateStr);
+    }
+    if (!plan && typeof StorageService !== 'undefined' && StorageService.getPlan) {
+      plan = StorageService.getPlan(dateStr);
+    }
+    if (!plan && typeof StorageService !== 'undefined' && StorageService.getPlanByDate) {
+      plan = StorageService.getPlanByDate(dateStr);
+    }
+    if (!plan && typeof UserService !== 'undefined' && UserService.getTeacherPlans) {
+      const plans = UserService.getTeacherPlans(tid);
+      plan = plans ? plans[dateStr] : null;
+    }
+
+    // 3. Cruzar datos si uno de los dos está vacío
+    if ((!classes || classes.length === 0) && plan && Array.isArray(plan.classes)) {
+      classes = plan.classes;
+    }
+
+    const isBackupFn = (typeof ClassRepository !== 'undefined' && ClassRepository.isBackupClass)
+      ? (c) => ClassRepository.isBackupClass(c)
+      : (c) => {
+          if (!c) return false;
+          if (c.isBackup || c.backup || c.isSnapshot || c.snapshot || c.isRespaldo || c.respaldo) return true;
+          const st = String(c.status || '').toLowerCase().trim();
+          if (st === 'backup' || st === 'respaldo' || st === 'snapshot' || st === 'orphaned') return true;
+          const src = String(c._source || c.source || '').toLowerCase().trim();
+          return (src.includes('backup') || src.includes('respaldo') || src.includes('snapshot')) && (!c.date || (!c.subjectName && !c.subject));
+        };
+
+    // 4. Filtrar rigurosamente clases marcadas como respaldo
+    classes = classes.filter(c => !isBackupFn(c));
+
+    // 5. Deduplicar copias redundantes generadas por importaciones repetidas de respaldo
+    if (typeof ClassRepository !== 'undefined' && ClassRepository.deduplicateClasses) {
+      classes = ClassRepository.deduplicateClasses(classes);
+    }
+
+    if (!plan) {
+      plan = { date: dateStr, classes: classes, period: '1°' };
+    } else {
+      plan = JSON.parse(JSON.stringify(plan));
+      plan.classes = classes;
+    }
+
+    return { plan, classes, teacherId: tid };
+  },
+
+  /**
+   * Vista Exclusiva de Coordinación: Revisión de clases del día con cuaderno, tabla y descargas
+   */
+  openDayClassesReview(dateStr, teacherId = 'usr_manuel') {
+    const tid = teacherId || 'usr_manuel';
+    const teacher = (typeof UserService !== 'undefined' && UserService.getUserById) 
+      ? (UserService.getUserById(tid) || { name: 'Manuel Muñoz' }) 
+      : { name: 'Manuel Muñoz' };
+
+    const { plan, classes } = this._getPlanAndClasses(tid, dateStr);
+
+    const dayName = (typeof ExportService !== 'undefined' && ExportService.getDayOfWeekName) 
+      ? ExportService.getDayOfWeekName(dateStr) 
+      : '';
+    const formattedDate = (typeof ExportService !== 'undefined' && ExportService.formatDate) 
+      ? ExportService.formatDate(dateStr) 
+      : dateStr;
+
+    // Remover modal previo si existe
+    const existing = document.getElementById('coordinator-day-classes-modal');
+    if (existing) existing.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'coordinator-day-classes-modal';
+    modal.className = 'coordinator-modal-backdrop active';
+    modal.style.zIndex = '3100';
+
+    let classesHtml = '';
+    if (!classes || classes.length === 0) {
+      classesHtml = `
+        <div style="text-align:center; padding:3rem 1.5rem; color:var(--slate-500); background:#f8fafc; border-radius:12px; border:1px dashed #cbd5e1;">
+          <div style="font-size:2.5rem; margin-bottom:0.75rem;">📅</div>
+          <h4 style="margin:0 0 0.5rem 0; font-size:1.1rem; color:var(--slate-700); font-weight:700;">No hay clases programadas</h4>
+          <p style="margin:0; font-size:0.88rem;">El docente ${teacher.name} no tiene secuencias didácticas registradas para esta fecha.</p>
+        </div>
+      `;
+    } else {
+      classesHtml = classes.map((cls, idx) => {
+        const topic = cls.topic || cls.curriculum?.topic || 'Sin tema registrado';
+        const achievement = cls.achievement || cls.curriculum?.achievement || '';
+        const dba = cls.dba || cls.curriculum?.dba || '';
+        const subject = cls.subject || cls.subjectName || 'Asignatura';
+        const grade = cls.grade || cls.gradeName || '';
+        const time = cls.time || `${cls.startTime || ''} - ${cls.endTime || ''}`.trim() || 'Horario regular';
+        // Generar ID estable si no existe: combina fecha, materia, grado y índice
+        const clsId = cls.id || cls._id || `${dateStr.replace(/-/g,'')}_${subject.replace(/\s+/g,'')}_${grade.replace(/\s+/g,'')}_${idx}`;
+        cls.id = clsId;
+        window.__classIdMap = window.__classIdMap || {};
+        window.__classIdMap[clsId] = idx;
+
+
+        return `
+          <div class="coord-class-card" style="background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; padding:1.25rem; margin-bottom:1rem; box-shadow:0 2px 4px rgba(0,0,0,0.04);">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:0.75rem; flex-wrap:wrap; gap:8px;">
+              <div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span style="background:#eff6ff; color:#1d4ed8; font-weight:800; font-size:0.95rem; padding:3px 10px; border-radius:6px; border:1px solid #bfdbfe;">
+                    ${subject} ${grade}
+                  </span>
+                  <span style="font-size:0.83rem; font-weight:700; color:#64748b;">
+                    ⏰ ${time}
+                  </span>
+                  ${cls.dayNumber ? `<span style="font-size:0.8rem; background:#f1f5f9; color:#475569; padding:2px 8px; border-radius:4px; font-weight:600;">Clase #${cls.dayNumber}</span>` : ''}
+                </div>
+                <h4 style="margin:0.5rem 0 0.25rem 0; font-size:1.02rem; font-weight:800; color:#0f172a;">
+                  ${topic}
+                </h4>
+                ${achievement ? `
+                  <div style="font-size:0.84rem; color:#334155; margin-top:4px; line-height:1.4;">
+                    <strong>Desempeño:</strong> ${achievement}
+                  </div>
+                ` : ''}
+              </div>
+            </div>
+
+            <!-- Acciones requeridas por Coordinación: Ver Cuaderno, Ver Tabla de Secuencia, Descargar -->
+            <div style="display:flex; flex-wrap:wrap; gap:0.6rem; margin-top:1rem; padding-top:0.85rem; border-top:1px solid #f1f5f9;">
+              <button type="button" class="btn btn-secondary btn-sm" onclick="CoordinatorView.openClassNotebookReader('${tid}', '${dateStr}', ${idx})" style="display:inline-flex; align-items:center; gap:6px; font-weight:700; color:#1e40af; background:#eff6ff; border-color:#bfdbfe;">
+                📖 Ver Cuaderno Docente
+              </button>
+
+              <button type="button" class="btn btn-secondary btn-sm" onclick="CoordinatorView.inspectPlan('${tid}', '${dateStr}', ${idx})" style="display:inline-flex; align-items:center; gap:6px; font-weight:700; color:#0f766e; background:#f0fdfa; border-color:#99f6e4;">
+                📋 Ver Tabla de Secuencia Didáctica
+              </button>
+
+              <button type="button" class="btn btn-primary btn-sm" onclick="CoordinatorView.downloadTeacherDocx('${tid}', '${dateStr}')" style="display:inline-flex; align-items:center; gap:6px; font-weight:700;">
+                📄 Descargar Word (.docx)
+              </button>
+
+              <button type="button" class="btn btn-secondary btn-sm" onclick="CoordinatorView.downloadTeacherPdf('${tid}', '${dateStr}')" style="display:inline-flex; align-items:center; gap:6px; font-weight:700;">
+                🖨️ Descargar PDF
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    const review = plan?.coordinatorReview || {};
+
+    modal.innerHTML = `
+      <div class="coordinator-modal-card" style="max-width:850px; max-height:92vh; display:flex; flex-direction:column;">
+        <div class="coordinator-modal-header" style="background:#f8fafc; border-bottom:1px solid #e2e8f0; padding:1.25rem 1.5rem;">
+          <div style="display:flex; align-items:center; gap:0.75rem;">
+            <div style="width:42px; height:42px; border-radius:50%; background:#eff6ff; color:#1d4ed8; display:flex; align-items:center; justify-content:center; font-size:1.3rem; border:1px solid #bfdbfe;">
+              🎓
+            </div>
+            <div>
+              <h3 style="margin:0; font-size:1.15rem; font-weight:800; color:#0f172a;">
+                Planeaciones del Día: ${dayName}, ${formattedDate}
+              </h3>
+              <div style="font-size:0.83rem; color:#64748b; margin-top:2px;">
+                Docente titular: <strong>${teacher.name}</strong> • ${classes.length} clase(s) programada(s)
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex; align-items:center; gap:0.5rem;">
+            <button type="button" class="btn-close-modal" onclick="document.getElementById('coordinator-day-classes-modal')?.remove()">&times;</button>
+          </div>
+        </div>
+
+        <div style="flex:1; overflow-y:auto; padding:1.5rem; background:#f8fafc;">
+          ${classesHtml}
+
+          <!-- Sección de Visto Bueno y Observaciones de Coordinación -->
+          <div style="background:#ffffff; border:1.5px solid #bbf7d0; border-radius:12px; padding:1.25rem; margin-top:1.25rem;">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:0.75rem;">
+              <span style="font-size:1.2rem;">✍️</span>
+              <h4 style="margin:0; font-size:0.95rem; font-weight:800; color:#166534;">
+                Visto Bueno Pedagógico & Observaciones de Coordinación
+              </h4>
+            </div>
+
+            <textarea id="coord-day-notes" class="form-input" rows="3" placeholder="Escribe aquí tus observaciones pedagógicas o recomendaciones para el docente..." style="width:100%; box-sizing:border-box; font-size:0.88rem; line-height:1.45; border-radius:8px; margin-bottom:0.75rem;">${review.notes || ''}</textarea>
+
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+              <div style="font-size:0.8rem; color:#64748b;">
+                ${review.status === 'approved' ? `✅ Visto Bueno emitido el ${new Date(review.reviewedAt || Date.now()).toLocaleDateString()}` : 'Aún sin visto bueno oficial'}
+              </div>
+
+              <div style="display:flex; gap:0.5rem;">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="CoordinatorView.saveDayReview('${tid}', '${dateStr}', 'needs_review')" style="font-weight:700; color:#b45309; border-color:#fde68a; background:#fffbeb;">
+                  ⚠️ Solicitar Ajuste
+                </button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="CoordinatorView.saveDayReview('${tid}', '${dateStr}', 'approved')" style="font-weight:700; background:#059669; border-color:#059669;">
+                  ✅ Emitir Visto Bueno Oficial
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+  },
+
+  /**
+   * Visor de lectura limpio del Cuaderno Docente para Coordinación (Solo Lectura)
+   */
+  openClassNotebookReader(teacherId, dateStr, classIndex) {
+    const tid = teacherId || 'usr_manuel';
+    const { classes } = this._getPlanAndClasses(tid, dateStr);
+    const cls = classes[classIndex] || {};
+    const subject = cls.subject || cls.subjectName || 'Clase';
+    const grade = cls.grade || cls.gradeName || '';
+    const topic = cls.topic || cls.curriculum?.topic || 'Sin tema';
+
+    let contentHtml = cls.notebookContent;
+    if (!contentHtml || contentHtml.trim().length < 20) {
+      const ped = cls.pedagogy || {};
+      contentHtml = `
+        <div style="font-family:'Segoe UI', sans-serif; padding:1.5rem; line-height:1.6; color:#1e293b;">
+          <h3 style="color:#1e40af; border-bottom:2px solid #bfdbfe; padding-bottom:6px; margin-top:0;">1. Fase de Inicio / Saberes Previos</h3>
+          <p>${ped.inicio || 'No especificado'}</p>
+          <h3 style="color:#1e40af; border-bottom:2px solid #bfdbfe; padding-bottom:6px; margin-top:1.5rem;">2. Fase de Desarrollo / Conceptualización</h3>
+          <p>${ped.desarrollo || 'No especificado'}</p>
+          <h3 style="color:#1e40af; border-bottom:2px solid #bfdbfe; padding-bottom:6px; margin-top:1.5rem;">3. Fase de Cierre / Evaluación Formativa</h3>
+          <p>${ped.cierre || 'No especificado'}</p>
+          ${ped.recursos ? `<h3 style="color:#1e40af; border-bottom:2px solid #bfdbfe; padding-bottom:6px; margin-top:1.5rem;">Recursos Didácticos</h3><p>${ped.recursos}</p>` : ''}
+        </div>
+      `;
+    }
+
+    const existing = document.getElementById('coordinator-notebook-reader-modal');
+    if (existing) existing.remove();
+
+    const readerModal = document.createElement('div');
+    readerModal.id = 'coordinator-notebook-reader-modal';
+    readerModal.className = 'coordinator-modal-backdrop active';
+    readerModal.style.zIndex = '3700'; // AL FRENTE (Por encima del modal de clases en 3100)
+    readerModal.innerHTML = `
+      <div class="coordinator-modal-card" style="max-width:920px; height:92vh; display:flex; flex-direction:column; box-shadow:0 25px 60px rgba(0,0,0,0.5);">
+        <div class="coordinator-modal-header" style="background:#f8fafc; border-bottom:1px solid #e2e8f0; padding:1rem 1.5rem;">
+          <div style="display:flex; align-items:center; gap:0.6rem;">
+            <span style="font-size:1.3rem;">📖</span>
+            <div>
+              <h3 style="margin:0; font-size:1.1rem; font-weight:800; color:#0f172a;">
+                Cuaderno Pedagógico: ${subject} ${grade}
+              </h3>
+              <div style="font-size:0.8rem; color:#64748b;">
+                ${dateStr} • Tema: ${topic}
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex; align-items:center; gap:0.5rem;">
+            <button type="button" class="btn btn-primary btn-sm" onclick="CoordinatorView.downloadTeacherDocx('${tid}', '${dateStr}')">
+              📄 Descargar Word
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="CoordinatorView.downloadTeacherPdf('${tid}', '${dateStr}')">
+              🖨️ Descargar PDF
+            </button>
+            <button type="button" class="btn-close-modal" onclick="document.getElementById('coordinator-notebook-reader-modal')?.remove()" title="Cerrar cuaderno y volver">&times;</button>
+          </div>
+        </div>
+
+        <div style="flex:1; overflow-y:auto; padding:2rem; background:#cbd5e1; display:flex; justify-content:center;">
+          <div style="background:#ffffff; width:100%; max-width:820px; min-height:100%; box-shadow:0 8px 25px rgba(0,0,0,0.15); border-radius:4px; padding:2.5rem; box-sizing:border-box;">
+            ${contentHtml}
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(readerModal);
+  },
+
+  /**
+   * Guarda y sincroniza el Visto Bueno oficial de Coordinación
+   */
+  async saveDayReview(teacherId, dateStr, status = 'approved') {
+    const notes = document.getElementById('coord-day-notes')?.value.trim() || '';
+    const reviewData = {
+      status,
+      notes,
+      reviewedAt: new Date().toISOString(),
+      reviewedBy: 'Marisol Ruiz'
+    };
+
+    if (typeof UserService !== 'undefined' && UserService.saveCoordinatorReview) {
+      UserService.saveCoordinatorReview(teacherId, dateStr, reviewData);
+    }
+    if (typeof PlanRepository !== 'undefined') {
+      const plan = PlanRepository.getPlan(teacherId, dateStr) || { date: dateStr, classes: [] };
+      plan.coordinatorReview = reviewData;
+      PlanRepository.savePlan(teacherId, dateStr, plan, { skipBroadcast: true });
+    }
+
+    if (typeof FirestoreService !== 'undefined' && FirestoreService.isReady()) {
+      await FirestoreService.savePlanToCloud(teacherId, dateStr, { coordinatorReview: reviewData }).catch(() => {});
+    }
+
+    if (typeof App !== 'undefined') {
+      App.showToast(status === 'approved' ? '¡Visto Bueno oficial emitido y sincronizado!' : 'Observación guardada con éxito.', 'success');
+    }
+
+    const modal = document.getElementById('coordinator-day-classes-modal');
+    if (modal) modal.remove();
+  },
+
   /**
    * Descarga la planeación de un docente en Word (.docx)
    */
-  async downloadTeacherDocx(teacherId, dateStr) {
-    const teacher = UserService.getUserById(teacherId);
-    const plans = UserService.getTeacherPlans(teacherId);
-    const plan = plans[dateStr];
+  async downloadTeacherDocx(teacherId, dateStr, classIndexOrId = null) {
+    const tid = teacherId || 'usr_manuel';
+    const teacher = (typeof UserService !== 'undefined' && UserService.getUserById) 
+      ? (UserService.getUserById(tid) || { name: 'Manuel Muñoz' }) 
+      : { name: 'Manuel Muñoz' };
 
-    if (!plan || !plan.classes || plan.classes.length === 0) {
+    let directClass = null;
+    if (classIndexOrId && typeof classIndexOrId === 'string' && typeof ClassRepository !== 'undefined') {
+      directClass = ClassRepository.getClass(classIndexOrId, tid);
+      if (directClass) {
+        if (!dateStr || dateStr !== directClass.date) {
+          dateStr = directClass.date || dateStr || new Date().toISOString().split('T')[0];
+        }
+      }
+    }
+
+    let { plan, classes } = this._getPlanAndClasses(tid, dateStr);
+
+    if (directClass) {
+      const normClass = {
+        ...directClass,
+        date: directClass.date || dateStr,
+        subject: directClass.subject || directClass.subjectName || 'Asignatura',
+        grade: directClass.grade || directClass.gradeName || ''
+      };
+      plan = {
+        ...plan,
+        date: dateStr,
+        subject: normClass.subject,
+        grade: normClass.grade,
+        classes: [normClass]
+      };
+      classes = [normClass];
+    } else if (classIndexOrId !== null && classIndexOrId !== undefined && classIndexOrId !== '') {
+      let found = null;
+      if (!isNaN(Number(classIndexOrId))) {
+        found = classes[Number(classIndexOrId)];
+      } else {
+        found = classes.find(c => c.id === classIndexOrId || c._id === classIndexOrId);
+      }
+      if (found) {
+        plan = { ...plan, classes: [found] };
+        classes = [found];
+      }
+    }
+
+    if (!classes || classes.length === 0) {
       alert('Esta fecha no contiene clases registradas para exportar.');
       return;
     }
@@ -384,22 +896,58 @@ const CoordinatorView = {
   /**
    * Descarga o imprime la planeación de un docente en PDF
    */
-  downloadTeacherPdf(teacherId, dateStr) {
-    const teacher = UserService.getUserById(teacherId);
-    const plans = UserService.getTeacherPlans(teacherId);
-    const plan = plans[dateStr];
+  downloadTeacherPdf(teacherId, dateStr, classIndexOrId = null) {
+    const tid = teacherId || 'usr_manuel';
+    const teacher = (typeof UserService !== 'undefined' && UserService.getUserById) 
+      ? (UserService.getUserById(tid) || { name: 'Manuel Muñoz' }) 
+      : { name: 'Manuel Muñoz' };
 
-    if (!plan || !plan.classes || plan.classes.length === 0) {
+    let directClass = null;
+    if (classIndexOrId && typeof classIndexOrId === 'string' && typeof ClassRepository !== 'undefined') {
+      directClass = ClassRepository.getClass(classIndexOrId, tid);
+      if (directClass) {
+        if (!dateStr || dateStr !== directClass.date) {
+          dateStr = directClass.date || dateStr || new Date().toISOString().split('T')[0];
+        }
+      }
+    }
+
+    let { plan, classes } = this._getPlanAndClasses(tid, dateStr);
+
+    if (directClass) {
+      const normClass = {
+        ...directClass,
+        date: directClass.date || dateStr,
+        subject: directClass.subject || directClass.subjectName || 'Asignatura',
+        grade: directClass.grade || directClass.gradeName || ''
+      };
+      plan = {
+        ...plan,
+        date: dateStr,
+        subject: normClass.subject,
+        grade: normClass.grade,
+        classes: [normClass]
+      };
+      classes = [normClass];
+    } else if (classIndexOrId !== null && classIndexOrId !== undefined && classIndexOrId !== '') {
+      let found = null;
+      if (!isNaN(Number(classIndexOrId))) {
+        found = classes[Number(classIndexOrId)];
+      } else {
+        found = classes.find(c => c.id === classIndexOrId || c._id === classIndexOrId);
+      }
+      if (found) {
+        plan = { ...plan, classes: [found] };
+        classes = [found];
+      }
+    }
+
+    if (!classes || classes.length === 0) {
       alert('Esta fecha no contiene clases registradas para imprimir.');
       return;
     }
 
-    const htmlSheet = ExportService.generateHtmlSheet(plan, teacher);
-    const printContainer = document.getElementById('printable-report');
-    if (printContainer) {
-      printContainer.innerHTML = htmlSheet;
-      setTimeout(() => window.print(), 250);
-    }
+    ExportService.exportToPdf(plan, teacher);
   },
 
   /**
@@ -746,3 +1294,7 @@ const UserManagerModal = {
 
 window.CoordinatorView = CoordinatorView;
 window.UserManagerModal = UserManagerModal;
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = CoordinatorView;
+}

@@ -1,0 +1,36 @@
+{
+  "hosting": {
+    "public": ".",
+    "rewrites": [
+      {
+        "source": "/admin",
+        "destination": "/index.html"
+      },
+      {
+        "source": "/admin/**",
+        "destination": "/index.html"
+      }
+    ],
+    "ignore": [
+      "firebase.json",
+      ".firebaserc",
+      "firestore.rules",
+      "README.md",
+      "ARCHITECTURE.md",
+      "DATA_MODEL.md",
+      "GEMINI.md",
+      "scripts/**",
+      "backups/**",
+      "**/.*",
+      "**/node_modules/**"
+    ]
+  },
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "auth": {
+    "providers": {
+      "googleSignIn": true
+    }
+  }
+}

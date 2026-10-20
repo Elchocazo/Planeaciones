@@ -17,6 +17,15 @@ const DEFAULT_SCHOOL_EVENTS = [
     description: 'Primera semana lectiva del año escolar e inducción de estudiantes'
   },
   {
+    id: 'evt_sep_induccion_sin_clases',
+    name: 'Jornada de Inducción Institucional (Sin Clases)',
+    startDate: '2026-09-02',
+    endDate: '2026-09-04',
+    type: 'no_lectivo',
+    color: '#059669',
+    description: 'Semana de inducción sin clases regulares (únicamente hubo clase de Matemáticas 7° el martes 1 de septiembre)'
+  },
+  {
     id: 'evt_oct_receso',
     name: 'Semana de Receso Escolar (Vacaciones de Octubre)',
     startDate: '2026-10-05',
@@ -173,11 +182,31 @@ const HolidayService = {
    */
   getSchoolEvents() {
     try {
+      if (typeof localStorage === 'undefined') {
+        return JSON.parse(JSON.stringify(DEFAULT_SCHOOL_EVENTS));
+      }
       const data = localStorage.getItem(STORAGE_EVENTS_KEY);
       if (!data) return JSON.parse(JSON.stringify(DEFAULT_SCHOOL_EVENTS));
       const parsed = JSON.parse(data);
-      if (!parsed.some(e => e.id === 'evt_inicio_clases')) {
-        parsed.unshift(DEFAULT_SCHOOL_EVENTS[0]);
+      let modified = false;
+
+      // Asegurar que eventos críticos de receso y calendario oficial siempre existan con sus fechas exactas
+      DEFAULT_SCHOOL_EVENTS.forEach(defEvt => {
+        const idx = parsed.findIndex(e => e.id === defEvt.id);
+        if (idx === -1) {
+          parsed.push(JSON.parse(JSON.stringify(defEvt)));
+          modified = true;
+        } else if (defEvt.type === 'vacaciones' || defEvt.type === 'semana_santa' || defEvt.type === 'no_lectivo') {
+          if (parsed[idx].startDate !== defEvt.startDate || parsed[idx].endDate !== defEvt.endDate) {
+            parsed[idx].startDate = defEvt.startDate;
+            parsed[idx].endDate = defEvt.endDate;
+            modified = true;
+          }
+        }
+      });
+
+      if (modified) {
+        try { localStorage.setItem(STORAGE_EVENTS_KEY, JSON.stringify(parsed)); } catch (e) {}
       }
       return parsed;
     } catch (e) {
@@ -191,6 +220,7 @@ const HolidayService = {
    */
   saveSchoolEvents(eventsList) {
     try {
+      if (typeof localStorage === 'undefined') return false;
       localStorage.setItem(STORAGE_EVENTS_KEY, JSON.stringify(eventsList));
       return true;
     } catch (e) {
@@ -224,6 +254,191 @@ const HolidayService = {
       holidayName: holidayMatch ? holidayMatch.name : null,
       events: matchingEvents
     };
+  },
+
+  /**
+   * Determina si una fecha corresponde a receso académico, vacaciones, o día no lectivo
+   */
+  isRecessOrNonSchoolDay(dateStr) {
+    if (!dateStr) return { isRecess: false, name: null, type: null, description: null, isHoliday: false };
+    const info = this.getDateInformation(dateStr);
+    if (info.isHoliday) {
+      return {
+        isRecess: true,
+        name: `Festivo Oficial: ${info.holidayName}`,
+        type: 'festivo',
+        description: 'Día festivo nacional en Colombia',
+        isHoliday: true
+      };
+    }
+    const recessEvt = info.events.find(e => {
+      const t = String(e.type || '').toLowerCase();
+      const n = String(e.name || '').toLowerCase();
+      return t === 'vacaciones' || t === 'receso' || t === 'semana_santa' || t === 'no_lectivo' ||
+             n.includes('receso') || n.includes('vacaciones') || n.includes('descanso');
+    });
+    if (recessEvt) {
+      return {
+        isRecess: true,
+        name: recessEvt.name,
+        type: recessEvt.type || 'receso',
+        description: recessEvt.description || 'Semana o día de receso académico sin clases obligatorias',
+        event: recessEvt,
+        isHoliday: false
+      };
+    }
+    return { isRecess: false, name: null, type: null, description: null, isHoliday: false };
+  },
+
+  /**
+   * Obtiene el rango de lunes a viernes para la semana que contiene a una fecha
+   */
+  getWeekRange(dateStr) {
+    const parts = dateStr.split('-');
+    const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    const day = d.getDay(); // 0=Dom, 1=Lun ... 6=Sab
+    const diffToMonday = day === 0 ? -6 : 1 - day;
+    const monday = new Date(d);
+    monday.setDate(d.getDate() + diffToMonday);
+    const friday = new Date(monday);
+    friday.setDate(monday.getDate() + 4);
+
+    const fmt = (dt) => {
+      const y = dt.getFullYear();
+      const m = String(dt.getMonth() + 1).padStart(2, '0');
+      const dayNum = String(dt.getDate()).padStart(2, '0');
+      return `${y}-${m}-${dayNum}`;
+    };
+
+    return {
+      mondayStr: fmt(monday),
+      fridayStr: fmt(friday)
+    };
+  },
+
+  /**
+   * Dispara la realineación inmediata de números de clase y notifica a las vistas
+   */
+  _triggerSequenceRealign(dateStr) {
+    if (typeof ClassRepository !== 'undefined') {
+      if (typeof ClassRepository.clearScheduleSequenceCache === 'function') {
+        ClassRepository.clearScheduleSequenceCache();
+      }
+      if (typeof ClassRepository.realignSequenceNumbersToSchedule === 'function') {
+        ClassRepository.realignSequenceNumbersToSchedule();
+      }
+    }
+    if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+      try {
+        window.dispatchEvent(new CustomEvent('school_events_updated', { detail: { date: dateStr } }));
+        window.dispatchEvent(new CustomEvent('class_sequence_updated', { detail: { date: dateStr } }));
+      } catch (e) {}
+    }
+  },
+
+  /**
+   * Marca toda la semana de una fecha como receso escolar
+   */
+  setRecessForWeek(dateStr, name = 'Semana de Receso Escolar') {
+    const { mondayStr, fridayStr } = this.getWeekRange(dateStr);
+    const events = this.getSchoolEvents();
+    const filtered = events.filter(e => !(e.startDate === mondayStr && e.endDate === fridayStr));
+    filtered.push({
+      id: 'evt_receso_' + mondayStr.replace(/-/g, ''),
+      name: name,
+      startDate: mondayStr,
+      endDate: fridayStr,
+      type: 'vacaciones',
+      color: '#f59e0b',
+      description: 'Semana de receso académico y descanso institucional'
+    });
+    this.saveSchoolEvents(filtered);
+    this._triggerSequenceRealign(dateStr);
+    return { startDate: mondayStr, endDate: fridayStr, name };
+  },
+
+  /**
+   * Marca un único día como receso o no lectivo
+   */
+  setRecessForSingleDay(dateStr, name = 'Día de Receso / No Lectivo') {
+    const events = this.getSchoolEvents();
+    const filtered = events.filter(e => !(e.startDate === dateStr && e.endDate === dateStr && (e.type === 'vacaciones' || e.type === 'receso' || e.type === 'no_lectivo')));
+    filtered.push({
+      id: 'evt_receso_dia_' + dateStr.replace(/-/g, ''),
+      name: name,
+      startDate: dateStr,
+      endDate: dateStr,
+      type: 'no_lectivo',
+      color: '#f59e0b',
+      description: 'Día de descanso pedagógico o institucional'
+    });
+    this.saveSchoolEvents(filtered);
+    this._triggerSequenceRealign(dateStr);
+    return { startDate: dateStr, endDate: dateStr, name };
+  },
+
+  /**
+   * Alterna (marca o desmarca) una fecha como día sin clases / no lectivo en 1 solo clic
+   */
+  toggleNonTeachingDay(dateStr, name = 'Día sin clases') {
+    if (!dateStr || typeof dateStr !== 'string') return { isNonTeaching: false, dateStr, name };
+    const events = this.getSchoolEvents();
+    const existingIdx = events.findIndex(e => {
+      const isDate = (e.startDate === dateStr && e.endDate === dateStr) || (dateStr >= e.startDate && dateStr <= e.endDate);
+      const isRecessType = e.type === 'vacaciones' || e.type === 'receso' || e.type === 'no_lectivo' ||
+                           String(e.name || '').toLowerCase().includes('receso') ||
+                           String(e.name || '').toLowerCase().includes('sin clase');
+      return isDate && isRecessType;
+    });
+
+    let isNonTeachingNow = false;
+    if (existingIdx >= 0) {
+      events.splice(existingIdx, 1);
+      this.saveSchoolEvents(events);
+      isNonTeachingNow = false;
+    } else {
+      events.push({
+        id: 'evt_no_clases_' + dateStr.replace(/-/g, ''),
+        name: name || 'Día sin clases',
+        startDate: dateStr,
+        endDate: dateStr,
+        type: 'no_lectivo',
+        color: '#f59e0b',
+        description: 'Día marcado sin clases ni planeación docente requerida'
+      });
+      this.saveSchoolEvents(events);
+      isNonTeachingNow = true;
+    }
+    this._triggerSequenceRealign(dateStr);
+    return { isNonTeaching: isNonTeachingNow, dateStr, name };
+  },
+
+  /**
+   * Determina si una fecha específica está marcada como día sin clases / no lectivo
+   */
+  isNonTeachingDay(dateStr) {
+    if (!dateStr) return false;
+    if (typeof ClassRepository !== 'undefined' && typeof ClassRepository._isRecessOrNonSchoolDay === 'function') {
+      return ClassRepository._isRecessOrNonSchoolDay(dateStr);
+    }
+    const info = this.isRecessOrNonSchoolDay(dateStr);
+    return Boolean(info && info.isRecess);
+  },
+
+  /**
+   * Quita cualquier evento de receso para la fecha dada
+   */
+  removeRecessForDate(dateStr) {
+    const events = this.getSchoolEvents();
+    const filtered = events.filter(e => {
+      const isMatch = dateStr >= e.startDate && dateStr <= e.endDate;
+      const isRecessType = e.type === 'vacaciones' || e.type === 'receso' || e.type === 'no_lectivo' ||
+                           String(e.name).toLowerCase().includes('receso') || String(e.name).toLowerCase().includes('vacaciones') ||
+                           String(e.name).toLowerCase().includes('sin clase');
+      return !(isMatch && isRecessType);
+    });
+    this.saveSchoolEvents(filtered);
+    this._triggerSequenceRealign(dateStr);
   }
 };
 
@@ -266,9 +481,12 @@ const SchoolEventsManager = {
           <button type="button" class="btn-close-modal" onclick="SchoolEventsManager.closeModal()">&times;</button>
         </div>
         
-        <div class="settings-tabs-nav" style="padding: 0.75rem 1.5rem 0; border-bottom: 1px solid var(--slate-200);">
+        <div class="settings-tabs-nav" style="padding: 0.75rem 1.5rem 0; border-bottom: 1px solid var(--slate-200); display:flex; gap:8px; flex-wrap:wrap;">
           <button class="settings-tab-btn" id="tab-btn-school-events" onclick="SchoolEventsManager.switchTab('events')">
-            🏖️ Semanas Especiales, Vacaciones y Exámenes
+            🏖️ Semanas Especiales y Vacaciones
+          </button>
+          <button class="settings-tab-btn" id="tab-btn-no-classes" onclick="SchoolEventsManager.switchTab('no_classes')">
+            🚫 Días sin Clases / No Lectivos
           </button>
           <button class="settings-tab-btn" id="tab-btn-colombia-holidays" onclick="SchoolEventsManager.switchTab('holidays')">
             🇨🇴 Festivos Oficiales Colombia
@@ -298,11 +516,81 @@ const SchoolEventsManager = {
 
     // Actualizar estados de pestañas
     const tabEvents = document.getElementById('tab-btn-school-events');
+    const tabNoClasses = document.getElementById('tab-btn-no-classes');
     const tabHolidays = document.getElementById('tab-btn-colombia-holidays');
     if (tabEvents) tabEvents.classList.toggle('active', this.activeTab === 'events');
+    if (tabNoClasses) tabNoClasses.classList.toggle('active', this.activeTab === 'no_classes');
     if (tabHolidays) tabHolidays.classList.toggle('active', this.activeTab === 'holidays');
 
-    if (this.activeTab === 'events') {
+    if (this.activeTab === 'no_classes') {
+      const events = HolidayService.getSchoolEvents();
+      const noClassEvents = events.filter(e => {
+        const t = String(e.type || '').toLowerCase();
+        const n = String(e.name || '').toLowerCase();
+        return t === 'no_lectivo' || t === 'receso' || t === 'vacaciones' || n.includes('sin clase') || n.includes('receso');
+      });
+
+      body.innerHTML = `
+        <div style="margin-bottom: 1.25rem;">
+          <div style="background:#fffbeb; border:1px solid #fef3c7; border-left:4px solid #f59e0b; border-radius:var(--radius-sm); padding:0.85rem 1rem; margin-bottom:1.25rem;">
+            <p style="font-size:0.88rem; color:#92400e; margin:0; line-height:1.45;">
+              <strong>💡 Control Rápido de Días sin Clases:</strong> Cualquier día o rango marcado aquí se descuenta automáticamente de la numeración de clases. No generará tarjetas pendientes ni requerirá planeaciones pedagógicas.
+            </p>
+          </div>
+
+          <!-- Formulario rápido para agregar día sin clase -->
+          <div style="background:#f8fafc; border:1px solid var(--slate-200); border-radius:var(--radius-md); padding:1rem; margin-bottom:1.25rem; display:flex; flex-wrap:wrap; gap:0.75rem; align-items:flex-end;">
+            <div style="flex:1; min-width:160px;">
+              <label style="display:block; font-size:0.78rem; font-weight:700; color:var(--slate-600); margin-bottom:0.25rem;">Fecha:</label>
+              <input type="date" id="input-new-no-class-date" class="form-input" style="width:100%; padding:0.35rem 0.5rem; font-size:0.88rem;" value="${new Date().toISOString().split('T')[0]}" />
+            </div>
+            <div style="flex:2; min-width:200px;">
+              <label style="display:block; font-size:0.78rem; font-weight:700; color:var(--slate-600); margin-bottom:0.25rem;">Motivo / Descripción:</label>
+              <input type="text" id="input-new-no-class-name" class="form-input" placeholder="Ej: Jornada Pedagógica, Inducción, Paro, Evento Deportivo" style="width:100%; padding:0.35rem 0.5rem; font-size:0.88rem;" />
+            </div>
+            <button type="button" class="btn btn-primary btn-sm" onclick="SchoolEventsManager.addNonTeachingDayFromForm()" style="height:35px; white-space:nowrap; background:#f59e0b; border-color:#d97706; font-weight:700;">
+              + Marcar Día sin Clase
+            </button>
+          </div>
+
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
+            <h4 style="margin:0; font-size:0.95rem; color:var(--slate-800);">Días y Semanas sin Clases Activas (${noClassEvents.length})</h4>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="SchoolEventsManager.realignSequences()" style="display:inline-flex; align-items:center; gap:5px; font-size:0.82rem; font-weight:700; background:#eff6ff; color:#1d4ed8; border-color:#bfdbfe;">
+              ⚡ Re-numerar clases ahora
+            </button>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 0.6rem; max-height: 380px; overflow-y: auto;">
+            ${noClassEvents.length === 0 ? `
+              <div style="text-align:center; padding:2rem; color:var(--slate-400); font-size:0.9rem;">
+                No hay días marcados como sin clases.
+              </div>
+            ` : noClassEvents.map((evt) => {
+              const origIdx = events.findIndex(e => e.id === evt.id);
+              const isRange = evt.startDate !== evt.endDate;
+              return `
+                <div style="background: #ffffff; border: 1px solid #fed7aa; border-left: 4px solid #f97316; border-radius: var(--radius-sm); padding: 0.65rem 0.85rem; display: flex; justify-content: space-between; align-items: center; flex-wrap:wrap; gap:0.5rem;">
+                  <div>
+                    <strong style="font-size:0.88rem; color: #9a3412; display:block;">${this.escapeHtml(evt.name)}</strong>
+                    <span style="font-size:0.75rem; color: #64748b;">
+                      📅 ${evt.startDate} ${isRange ? `al ${evt.endDate}` : ''} • ${this.escapeHtml(evt.description || 'Día sin clases')}
+                    </span>
+                  </div>
+                  <div style="display:flex; align-items:center; gap:6px;">
+                    <span class="role-badge" style="background:#fff7ed; color:#c2410c; border:1px solid #ffedd5; font-size:0.72rem;">Sin clase</span>
+                    ${origIdx >= 0 ? `
+                      <button class="btn-table-action delete" onclick="SchoolEventsManager.deleteEvent(${origIdx})" title="Quitar y habilitar clases">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                      </button>
+                    ` : ''}
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `;
+    } else if (this.activeTab === 'events') {
       const events = HolidayService.getSchoolEvents();
 
       body.innerHTML = `
@@ -451,11 +739,45 @@ const SchoolEventsManager = {
     App.showToast('Fechas restablecidas a los valores por defecto', 'info');
   },
 
+  addNonTeachingDayFromForm() {
+    const dateInput = document.getElementById('input-new-no-class-date');
+    const nameInput = document.getElementById('input-new-no-class-name');
+    if (!dateInput || !dateInput.value) {
+      if (typeof App !== 'undefined' && App.showToast) App.showToast('Por favor selecciona una fecha', 'warning');
+      return;
+    }
+    const dateStr = dateInput.value;
+    const nameStr = (nameInput && nameInput.value.trim()) ? nameInput.value.trim() : 'Día sin clases';
+    HolidayService.setRecessForSingleDay(dateStr, nameStr);
+    this.renderModalContent();
+    if (window.Calendar && window.Calendar.render) window.Calendar.render();
+    if (window.DashboardView && window.DashboardView.render) window.DashboardView.render();
+    if (typeof App !== 'undefined' && App.showToast) App.showToast(`Día ${dateStr} marcado como sin clases y numeración actualizada`, 'success');
+  },
+
+  realignSequences() {
+    let count = 0;
+    if (typeof ClassRepository !== 'undefined') {
+      if (typeof ClassRepository.clearScheduleSequenceCache === 'function') {
+        ClassRepository.clearScheduleSequenceCache();
+      }
+      if (typeof ClassRepository.realignSequenceNumbersToSchedule === 'function') {
+        count = ClassRepository.realignSequenceNumbersToSchedule();
+      }
+    }
+    if (window.Calendar && window.Calendar.render) window.Calendar.render();
+    if (window.DashboardView && window.DashboardView.render) window.DashboardView.render();
+    if (typeof App !== 'undefined' && App.showToast) {
+      App.showToast(`¡Numeración actualizada con éxito! (${count} clases realineadas)`, 'success');
+    }
+  },
+
   getEventIcon(type) {
     switch (type) {
       case 'vacaciones': return '🏖️';
       case 'semana_santa': return '✝️';
       case 'examenes': return '📝';
+      case 'no_lectivo': return '🚫';
       case 'evento_especial': return '🔬';
       default: return '📌';
     }
@@ -472,6 +794,11 @@ const SchoolEventsManager = {
   }
 };
 
-window.HolidayService = HolidayService;
-window.SchoolEventsManager = SchoolEventsManager;
+if (typeof window !== 'undefined') {
+  window.HolidayService = HolidayService;
+  window.SchoolEventsManager = SchoolEventsManager;
+}
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { HolidayService, SchoolEventsManager };
+}
 

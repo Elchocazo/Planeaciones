@@ -16,7 +16,7 @@ const CURRICULUM_SISTEMAS = {
         },
         {
           "id": "sis-1-1-2",
-          "topic": "¿Qué es la tecnología? Necesidades humanas que satisface",
+          "topic": "¿Qué es la tecnología? Necesidades humanas que satisface y evolución histórica",
           "dba": "• Reconoce las características y funciones de algunos objetos tecnológicos para comprender su utilidad en la vida cotidiana.\n• Identifica las partes que componen los objetos tecnológicos para desarrollar curiosidad y pensamiento analítico.\n• Explora las posibilidades de uso de programas o aplicaciones informáticas para expresar ideas y fortalecer su aprendizaje.\n• Describe las acciones que realizan los objetos tecnológicos para entender cómo contribuyen a resolver problemas.\n• Utiliza programas o aplicaciones informáticas para comunicarse y compartir información de forma segura y respetuosa.",
           "achievement": "Reconoce que la tecnología surge del ingenio humano para resolver problemas y mejorar la calidad de vida de las personas.",
           "suggestedSequence": "Inicio: Cuento infantil sobre la invención de la rueda y las herramientas de los primeros humanos. Desarrollo: Diálogo guiado comparando cómo se hacían las tareas antes y cómo se hacen ahora con la tecnología. Cierre: Modelado con plastilina de una herramienta inventada por el estudiante."
@@ -39,24 +39,31 @@ const CURRICULUM_SISTEMAS = {
       "2°": [
         {
           "id": "sis-2-1-1",
-          "topic": "Concepto, origen y evolución histórica de los objetos tecnológicos cotidianos",
+          "topic": "Los objetos que nos rodean y los artefactos tecnológicos del hogar y la escuela",
           "dba": "• Reconoce artefactos creados por el ser humano para satisfacer necesidades cotidianas en el hogar y la escuela.\n• Identifica la evolución histórica de herramientas cotidianas y su relación con el bienestar humano.\n• Utiliza funciones básicas del procesador de texto, explorador de archivos y periféricos del computador de forma segura y autónoma.",
-          "achievement": "Reconoce la evolución histórica de artefactos cotidianos y cómo han transformado la vida del ser humano.",
-          "suggestedSequence": "Inicio: Comparación entre la vela, la lámpara de aceite y la bombilla eléctrica. Desarrollo: Línea de tiempo sencilla mostrando la evolución de artefactos de comunicación y transporte. Cierre: Taller de ilustración comparando un objeto antiguo con su versión moderna."
+          "achievement": "Identifica objetos tecnológicos en su entorno cotidiano y describe la función que cumplen para facilitar las actividades diarias.",
+          "suggestedSequence": "Inicio: Recorrido de observación por el aula identificando objetos creados por el ser humano. Desarrollo: Clasificación de artefactos según el lugar donde se usan (cocina, aula, transporte). Cierre: Dibujo en el cuaderno de su artefacto tecnológico favorito explicando para qué sirve."
         },
         {
           "id": "sis-2-1-2",
-          "topic": "Impacto de la tecnología en la comunicación, el transporte y el hogar",
+          "topic": "¿Qué es la tecnología? Necesidades humanas que satisface y evolución histórica",
           "dba": "• Reconoce artefactos creados por el ser humano para satisfacer necesidades cotidianas en el hogar y la escuela.\n• Identifica la evolución histórica de herramientas cotidianas y su relación con el bienestar humano.\n• Utiliza funciones básicas del procesador de texto, explorador de archivos y periféricos del computador de forma segura y autónoma.",
-          "achievement": "Describe los beneficios y desafíos que genera la tecnología en las actividades cotidianas de su comunidad.",
-          "suggestedSequence": "Inicio: Pregunta problematizadora: ¿Cómo se comunicaban las personas antes de que existieran los celulares? Desarrollo: Análisis de los cambios positivos en la medicina, educación y transporte gracias a la tecnología. Cierre: Taller de redacción de oraciones sobre el beneficio de un invento tecnológico."
+          "achievement": "Reconoce que la tecnología surge del ingenio humano para resolver problemas y mejorar la calidad de vida de las personas.",
+          "suggestedSequence": "Inicio: Cuento infantil sobre la invención de la rueda y las herramientas de los primeros humanos. Desarrollo: Diálogo guiado comparando cómo se hacían las tareas antes y cómo se hacen ahora con la tecnología. Cierre: Modelado con plastilina de una herramienta inventada por el estudiante."
         },
         {
           "id": "sis-2-1-3",
-          "topic": "Uso responsable, sostenible y reciclaje de materiales y artefactos tecnológicos",
+          "topic": "Cuidado y uso responsable de nuestros útiles escolares y dispositivos electrónicos",
           "dba": "• Reconoce artefactos creados por el ser humano para satisfacer necesidades cotidianas en el hogar y la escuela.\n• Identifica la evolución histórica de herramientas cotidianas y su relación con el bienestar humano.\n• Utiliza funciones básicas del procesador de texto, explorador de archivos y periféricos del computador de forma segura y autónoma.",
-          "achievement": "Propone acciones para el cuidado del medio ambiente frente a los residuos electrónicos y el ahorro de energía.",
-          "suggestedSequence": "Inicio: Observación de imágenes sobre la basura tecnológica (pilas, cables rotos). Desarrollo: Pautas de ahorro de energía (apagar monitores) y reciclaje adecuado de pilas y aparatos en desuso. Cierre: Elaboración de afiches promoviendo el reciclaje tecnológico en el colegio."
+          "achievement": "Aplica normas de cuidado, orden y respeto al manipular materiales escolares y aparatos tecnológicos.",
+          "suggestedSequence": "Inicio: Conversación sobre qué le pasa a los objetos si no los cuidamos o se caen al suelo. Desarrollo: Elaboración conjunta del decálogo de cuidado de los dispositivos y útiles del salón. Cierre: Compromiso individual firmado con huella dactilar para el buen uso de los recursos."
+        },
+        {
+          "id": "sis-2-1-4",
+          "topic": "Diferencias entre objetos naturales y objetos artificiales (creados por el hombre)",
+          "dba": "• Reconoce artefactos creados por el ser humano para satisfacer necesidades cotidianas en el hogar y la escuela.\n• Identifica la evolución histórica de herramientas cotidianas y su relación con el bienestar humano.\n• Utiliza funciones básicas del procesador de texto, explorador de archivos y periféricos del computador de forma segura y autónoma.",
+          "achievement": "Distingue elementos de la naturaleza de artefactos artificiales elaborados por el ser humano mediante comparación directa.",
+          "suggestedSequence": "Inicio: Exploración en el patio recolectando hojas, piedras y comparándolas con lápices y tijeras. Desarrollo: Tabla comparativa de dos columnas clasificando elementos naturales vs. artificiales. Cierre: Taller de recorte y pegado de imágenes en la categoría correcta."
         }
       ],
       "3°": [
@@ -301,24 +308,38 @@ const CURRICULUM_SISTEMAS = {
       "2°": [
         {
           "id": "sis-2-2-1",
-          "topic": "Estructura y bloques del teclado: Teclas alfanuméricas, numéricas, de función y control",
+          "topic": "El computador como herramienta de trabajo, aprendizaje y juego",
           "dba": "• Reconoce artefactos creados por el ser humano para satisfacer necesidades cotidianas en el hogar y la escuela.\n• Identifica la evolución histórica de herramientas cotidianas y su relación con el bienestar humano.\n• Utiliza funciones básicas del procesador de texto, explorador de archivos y periféricos del computador de forma segura y autónoma.",
-          "achievement": "Identifica las zonas del teclado (alfanumérica, numérica, de navegación y control) y su función específica.",
-          "suggestedSequence": "Inicio: Observación de un teclado gigante en pantalla reconociendo los diferentes colores por bloques. Desarrollo: Uso de teclas especiales: Bloq Mayús, Retroceso (borrar), Supr, flechas de dirección y Shift. Cierre: Práctica guiada escribiendo oraciones combinando mayúsculas, minúsculas y números."
+          "achievement": "Reconoce el computador como un artefacto electrónico que procesa información y apoya el aprendizaje escolar.",
+          "suggestedSequence": "Inicio: Visita guiada a la sala de sistemas observando los computadores encendidos. Desarrollo: Explicación de los usos del computador en escuelas, hospitales, bancos y hogares. Cierre: Identificación oral de las actividades que les gustaría realizar en el computador."
         },
         {
           "id": "sis-2-2-2",
-          "topic": "Posición correcta de las manos y ergonomía frente al computador",
+          "topic": "Procedimiento seguro de encendido y apagado del computador",
           "dba": "• Reconoce artefactos creados por el ser humano para satisfacer necesidades cotidianas en el hogar y la escuela.\n• Identifica la evolución histórica de herramientas cotidianas y su relación con el bienestar humano.\n• Utiliza funciones básicas del procesador de texto, explorador de archivos y periféricos del computador de forma segura y autónoma.",
-          "achievement": "Adopta una postura corporal adecuada frente al computador y ubica las manos correctamente sobre el teclado.",
-          "suggestedSequence": "Inicio: Dinámica de pausas activas y estiramiento de muñecas y espalda. Desarrollo: Explicación de la postura correcta: espalda recta, pies apoyados y vista al nivel de la pantalla. Cierre: Práctica de digitación usando ambas manos sin encorvar la espalda."
+          "achievement": "Sigue los pasos secuenciales correctos para encender y apagar el computador sin dañar los componentes.",
+          "suggestedSequence": "Inicio: Explicación de por qué no se debe desconectar directamente el cable de energía. Desarrollo: Práctica guiada presionando el botón Power y usando la opción Inicio -> Apagar en Windows. Cierre: Lista de chequeo donde cada niño demuestra que sabe encender y apagar su equipo."
         },
         {
           "id": "sis-2-2-3",
-          "topic": "Concepto de archivo y carpeta en el explorador de Windows",
+          "topic": "Partes principales del computador: Monitor (pantalla), teclado, mouse (ratón) y CPU",
           "dba": "• Reconoce artefactos creados por el ser humano para satisfacer necesidades cotidianas en el hogar y la escuela.\n• Identifica la evolución histórica de herramientas cotidianas y su relación con el bienestar humano.\n• Utiliza funciones básicas del procesador de texto, explorador de archivos y periféricos del computador de forma segura y autónoma.",
-          "achievement": "Comprende la diferencia entre un archivo (documento, foto) y una carpeta como contenedor de información.",
-          "suggestedSequence": "Inicio: Metáfora de la mochila escolar: los cuadernos son archivos y los bolsillos son carpetas. Desarrollo: Navegación por el explorador de Windows reconociendo íconos de documentos y carpetas amarillas. Cierre: Creación de una carpeta personal con su nombre en la ubicación indicada."
+          "achievement": "Identifica y nombra las partes físicas fundamentales del computador describiendo la función de cada una.",
+          "suggestedSequence": "Inicio: Canción infantil sobre las partes del computador y señalización en el equipo real. Desarrollo: Asociación: el monitor muestra imágenes, el teclado escribe, el mouse señala y la CPU piensa. Cierre: Coloreado y rotulación de una ficha gráfica con las partes del computador."
+        },
+        {
+          "id": "sis-2-2-4",
+          "topic": "Manejo del mouse: Clic, doble clic, arrastre y coordinación visomotriz",
+          "dba": "• Reconoce artefactos creados por el ser humano para satisfacer necesidades cotidianas en el hogar y la escuela.\n• Identifica la evolución histórica de herramientas cotidianas y su relación con el bienestar humano.\n• Utiliza funciones básicas del procesador de texto, explorador de archivos y periféricos del computador de forma segura y autónoma.",
+          "achievement": "Desarrolla destreza en el agarre del mouse ejecutando clics, doble clic y arrastre en actividades interactivas.",
+          "suggestedSequence": "Inicio: Postura ergonómica de la mano sobre el mouse y explicación de los botones izquierdo y derecho. Desarrollo: Juegos interactivos de puntería, reventar burbujas y arrastrar piezas de rompecabezas. Cierre: Observación formativa del dominio motriz fino al interactuar con el puntero."
+        },
+        {
+          "id": "sis-2-2-5",
+          "topic": "Normas de convivencia y cuidado en la sala de sistemas",
+          "dba": "• Reconoce artefactos creados por el ser humano para satisfacer necesidades cotidianas en el hogar y la escuela.\n• Identifica la evolución histórica de herramientas cotidianas y su relación con el bienestar humano.\n• Utiliza funciones básicas del procesador de texto, explorador de archivos y periféricos del computador de forma segura y autónoma.",
+          "achievement": "Cumple las normas de aseo, orden, silencio y no ingreso de alimentos a la sala de cómputo.",
+          "suggestedSequence": "Inicio: Dramatización sobre qué ocurre si se derrama líquido sobre un teclado. Desarrollo: Socialización de las reglas de oro de la sala de sistemas (manos limpias, orden, respeto). Cierre: Elaboración de carteles ilustrados con las normas para decorar la sala."
         }
       ],
       "3°": [
@@ -549,24 +570,31 @@ const CURRICULUM_SISTEMAS = {
       "2°": [
         {
           "id": "sis-2-3-1",
-          "topic": "Introducción al procesador de textos (Word / WordPad): Entorno de trabajo y escritura básica",
+          "topic": "Explorando el programa Paint: El lienzo digital y la barra de herramientas",
           "dba": "• Reconoce artefactos creados por el ser humano para satisfacer necesidades cotidianas en el hogar y la escuela.\n• Identifica la evolución histórica de herramientas cotidianas y su relación con el bienestar humano.\n• Utiliza funciones básicas del procesador de texto, explorador de archivos y periféricos del computador de forma segura y autónoma.",
-          "achievement": "Reconoce la ventana del procesador de textos y escribe párrafos cortos aplicando signos de puntuación.",
-          "suggestedSequence": "Inicio: Comparación entre escribir a mano en una hoja y escribir en la pantalla de Word. Desarrollo: Reconocimiento del cursor parpadeante, barra de herramientas y hoja en blanco de trabajo. Cierre: Redacción de una pequeña anécdota personal de tres renglones."
+          "achievement": "Reconoce la interfaz del programa de dibujo Paint identificando el área de trabajo y la barra de opciones.",
+          "suggestedSequence": "Inicio: Apertura del programa Paint desde el menú de inicio guiados por el docente. Desarrollo: Exploración libre de la ventana: barra de título, lienzo en blanco y paleta de colores. Cierre: Realización del primer trazo libre en la pantalla y cambio de color."
         },
         {
           "id": "sis-2-3-2",
-          "topic": "Edición y formato de texto: Tipo de letra (fuente), tamaño, color, negrita, cursiva y subrayado",
+          "topic": "Herramientas de dibujo en Paint: Lápiz, pinceles, borrador y figuras geométricas básicas",
           "dba": "• Reconoce artefactos creados por el ser humano para satisfacer necesidades cotidianas en el hogar y la escuela.\n• Identifica la evolución histórica de herramientas cotidianas y su relación con el bienestar humano.\n• Utiliza funciones básicas del procesador de texto, explorador de archivos y periféricos del computador de forma segura y autónoma.",
-          "achievement": "Modifica la apariencia del texto seleccionado cambiando fuente, tamaño, estilo y color de manera armónica.",
-          "suggestedSequence": "Inicio: Observación de titulares de revistas con diferentes tipografías llamativas. Desarrollo: Selección de texto con el mouse y aplicación de botones: Negrita (N), Cursiva (K), Subrayado (S) y colores. Cierre: Ejercicio de personalización de un poema escolar con distintos formatos."
+          "achievement": "Utiliza herramientas de lápiz, pincel, borrador y figuras geométricas para crear composiciones gráficas sencillas.",
+          "suggestedSequence": "Inicio: Demostración del uso de formas geométricas (círculo, cuadrado, triángulo) para dibujar una casa. Desarrollo: Práctica guiada combinando formas y usando el bote de pintura para rellenar con color. Cierre: Exposición en pantalla de los dibujos de casas y paisajes creados por los estudiantes."
         },
         {
           "id": "sis-2-3-3",
-          "topic": "Alineación de párrafos e inserción de imágenes sencillas",
+          "topic": "El teclado: Reconocimiento de letras, números, barra espaciadora y tecla Enter",
           "dba": "• Reconoce artefactos creados por el ser humano para satisfacer necesidades cotidianas en el hogar y la escuela.\n• Identifica la evolución histórica de herramientas cotidianas y su relación con el bienestar humano.\n• Utiliza funciones básicas del procesador de texto, explorador de archivos y periféricos del computador de forma segura y autónoma.",
-          "achievement": "Aplica alineaciones (izquierda, centrada, derecha) e inserta imágenes ilustrativas en sus escritos.",
-          "suggestedSequence": "Inicio: Explicación de por qué los títulos van centrados y los textos a la izquierda. Desarrollo: Práctica de alineación y uso del menú Insertar -> Imágenes para acompañar la redacción. Cierre: Creación de una tarjeta de felicitación con título centrado, mensaje e imagen decorativa."
+          "achievement": "Localiza en el teclado las letras de su nombre, los dígitos numéricos, el espaciador y el salto de línea.",
+          "suggestedSequence": "Inicio: Búsqueda tipo 'caza del tesoro' de las vocales en el teclado del computador. Desarrollo: Identificación de la barra espaciadora para separar palabras y la tecla Enter para bajar de renglón. Cierre: Escritura de su nombre completo y edad en el procesador de notas infantiles."
+        },
+        {
+          "id": "sis-2-3-4",
+          "topic": "Creación y guardado de dibujos digitales expresando ideas y emociones",
+          "dba": "• Reconoce artefactos creados por el ser humano para satisfacer necesidades cotidianas en el hogar y la escuela.\n• Identifica la evolución histórica de herramientas cotidianas y su relación con el bienestar humano.\n• Utiliza funciones básicas del procesador de texto, explorador de archivos y periféricos del computador de forma segura y autónoma.",
+          "achievement": "Diseña ilustraciones digitales creativas y aprende los pasos guiados para guardar su trabajo en el computador.",
+          "suggestedSequence": "Inicio: Diálogo sobre cómo se sienten hoy y qué dibujo representa su emoción. Desarrollo: Creación del dibujo en Paint y práctica del comando Archivo -> Guardar con ayuda del docente. Cierre: Portafolio digital de dibujos proyectados para la retroalimentación grupal."
         }
       ],
       "3°": [
@@ -797,24 +825,31 @@ const CURRICULUM_SISTEMAS = {
       "2°": [
         {
           "id": "sis-2-4-1",
-          "topic": "Motores de búsqueda para niños y navegadores web seguros",
+          "topic": "¿Qué es internet y para qué sirve? La red que conecta al mundo",
           "dba": "• Reconoce artefactos creados por el ser humano para satisfacer necesidades cotidianas en el hogar y la escuela.\n• Identifica la evolución histórica de herramientas cotidianas y su relación con el bienestar humano.\n• Utiliza funciones básicas del procesador de texto, explorador de archivos y periféricos del computador de forma segura y autónoma.",
-          "achievement": "Utiliza buscadores infantiles seguros para encontrar información confiable sobre temas de clase.",
-          "suggestedSequence": "Inicio: ¿Cómo sabe Google la respuesta a nuestras preguntas? Introducción a las palabras clave. Desarrollo: Búsqueda guiada en buscadores seguros (Kiddle / Google SafeSearch) sobre animales en peligro. Cierre: Selección de la información más clara y pertinente para compartir en clase."
+          "achievement": "Comprende de manera intuitiva que internet es una red mundial que permite consultar información y comunicarse.",
+          "suggestedSequence": "Inicio: Metáfora de una gran telaraña invisible o biblioteca gigante que conecta a las personas. Desarrollo: Visualización de un mapa mundial interactivo mostrando conexiones y fotos de diferentes países. Cierre: Preguntas reflexivas: ¿A quién te gustaría escribirle o qué te gustaría aprender en internet?"
         },
         {
           "id": "sis-2-4-2",
-          "topic": "Netiqueta básica: Cortesía, respeto y buen trato en entornos digitales",
+          "topic": "Navegación básica en entornos educativos guiados y portales infantiles",
           "dba": "• Reconoce artefactos creados por el ser humano para satisfacer necesidades cotidianas en el hogar y la escuela.\n• Identifica la evolución histórica de herramientas cotidianas y su relación con el bienestar humano.\n• Utiliza funciones básicas del procesador de texto, explorador de archivos y periféricos del computador de forma segura y autónoma.",
-          "achievement": "Reconoce y aplica normas de cortesía, amabilidad y respeto al comunicarse mediante medios digitales.",
-          "suggestedSequence": "Inicio: Debate sobre cómo nos sentimos cuando alguien nos envía un mensaje grosero o en mayúsculas sostenidas. Desarrollo: Construcción del decálogo de la Netiqueta escolar: saludar, pedir por favor y agradecer en línea. Cierre: Simulación de redacción de mensajes respetuosos a profesores y compañeros."
+          "achievement": "Navega por sitios web infantiles educativos utilizando enlaces, botones y flechas de avance y retroceso.",
+          "suggestedSequence": "Inicio: Reconocimiento del ícono del navegador web (Google Chrome / Edge) y su función. Desarrollo: Navegación supervisada por plataformas educativas (Árbol ABC / Mundo Primaria). Cierre: Práctica haciendo clic en botones interactivos de actividades didácticas."
         },
         {
           "id": "sis-2-4-3",
-          "topic": "Ciberseguridad infantil: Prevención ante extraños y cuidado de contraseñas",
+          "topic": "Reglas de oro para el uso seguro de internet y protección de datos",
           "dba": "• Reconoce artefactos creados por el ser humano para satisfacer necesidades cotidianas en el hogar y la escuela.\n• Identifica la evolución histórica de herramientas cotidianas y su relación con el bienestar humano.\n• Utiliza funciones básicas del procesador de texto, explorador de archivos y periféricos del computador de forma segura y autónoma.",
-          "achievement": "Identifica medidas de autoprotección en internet evitando compartir datos privados y contraseñas.",
-          "suggestedSequence": "Inicio: Juego de roles sobre qué hacer si alguien desconocido intenta chatear en un juego en línea. Desarrollo: Definición de datos personales secretos (nombre completo, dirección, colegio, contraseñas). Cierre: Elaboración de una contraseña segura y fácil de recordar con símbolos y números."
+          "achievement": "Aplica pautas de seguridad digital como no compartir contraseñas, no hablar con extraños y pedir ayuda a un adulto.",
+          "suggestedSequence": "Inicio: Cuento infantil sobre la privacidad y los secretos seguros en internet. Desarrollo: Análisis de situaciones de riesgo: qué hacer si aparece una ventana extraña o alguien pide fotos. Cierre: Creación del escudo protector de internet con las 3 reglas de oro."
+        },
+        {
+          "id": "sis-2-4-4",
+          "topic": "Juegos de aprendizaje digital y cierre del año tecnológico",
+          "dba": "• Reconoce artefactos creados por el ser humano para satisfacer necesidades cotidianas en el hogar y la escuela.\n• Identifica la evolución histórica de herramientas cotidianas y su relación con el bienestar humano.\n• Utiliza funciones básicas del procesador de texto, explorador de archivos y periféricos del computador de forma segura y autónoma.",
+          "achievement": "Desarrolla habilidades cognitivas y de razonamiento lógico a través de videojuegos educativos supervisados.",
+          "suggestedSequence": "Inicio: Ronda de retos de memoria y emparejamiento de figuras en la plataforma educativa. Desarrollo: Competencia sana individual resolviendo puzzles matemáticos y de lenguaje. Cierre: Balance de los aprendizajes del año y entrega simbólica del diploma de explorador digital."
         }
       ],
       "3°": [

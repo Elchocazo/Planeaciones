@@ -363,6 +363,24 @@ assert.strictEqual(appliedDefault.curriculum.topic, 'Nuevo Tema'); // Incorporó
 
 console.log('  ✅ [PASS] TEST 11: Regla de identidad protegió el número y grado de la clase actual.\n');
 
+// -------------------------------------------------------------------
+// TEST 12: Cuaderno docente con viñetas colapsadas y encabezados en mayúsculas
+// -------------------------------------------------------------------
+console.log('--- TEST 12: Cuaderno con viñetas colapsadas y encabezados en mayúsculas ---');
+const sampleCollapsed = '• LA IMPORTANCIA DE LA TRANSCRIPCIÓN PRECISA Transcribir en el computador no significa únicamente teclear letras una tras otra. Consiste en interpretar un texto físico y recrearlo digitalmente cuidando la ortografía, respetando los signos de puntuación originales y aplicando un diseño visual estructurado para que el lector disfrute la lectura. • PARÁMETROS DE FORMATO PARA EL ARTÍCULO Para que el artículo transcrito tenga calidad profesional, se deben aplicar las siguientes especificaciones técnicas: • Fuente base: Arial o Calibri para todo el documento (no mezclar diferentes familias de letras). • Título principal del artículo: Tamaño 16 o 18 puntos, estilo Negrita y alineación Centrada. • Subtítulo o sección de la noticia: Tamaño 13 o 14 puntos, estilo Negrita y alineación a la Izquierda. • Cuerpo de la noticia (Párrafos): Tamaño 11 o 12 puntos, estilo normal (sin negrita) y alineación Justificada (ambos bordes rectos de margen a margen). • Interlineado: Espacio de 1.15 o 1.5 líneas entre renglones para permitir una lectura descansada. • REGLAS BÁSICAS DE DIGITACIÓN Y ESTILO • Se deja un solo espacio después de cada coma, punto seguido o punto aparte (nunca presionar la barra espaciadora dos veces seguidas). • El punto y la coma van pegados a la palabra anterior, sin espacio intermedio. • La tecla Enter se presiona una sola vez al terminar cada párrafo para saltar de renglón; no se debe presionar Enter al final de cada línea dentro del mismo párrafo, ya que el procesador ajusta el texto automáticamente. • Para colocar una mayúscula inicial se utiliza la combinación de la tecla Shift (Mayús) + la letra requerida, evitando activar y desactivar continuamente la tecla Bloq Mayús. • RESUMEN CLAVE DEL PROCEDIMIENTO TÉCNICO • Escribir el bloque de texto en la hoja en blanco. • Sombrear o seleccionar con el mouse la frase o párrafo que se desea modificar. • Hacer clic en los botones correspondientes de la Cinta de Opciones (Fuente, Tamaño, Negrita, Alineación). • Guardar periódicamente los cambios presionando la combinación de teclas Ctrl + G. • CONEXIÓN INTRODUCTORIA CON LA SIGUIENTE CLASE En la próxima sesión complementaremos este documento digital aprendiendo a insertar tablas estructuradas, encabezados institucionales y estilos personalizados para organizar datos complementarios relacionados con la noticia.';
+
+const formattedPlain = ImportParser.formatMarkdownToHtml(sampleCollapsed);
+const formattedFromHtml = ImportParser.formatMarkdownToHtml('<p>' + sampleCollapsed + '</p>');
+
+assert.ok(formattedPlain.includes('<h2'), 'Debe generar encabezados h2');
+assert.ok(formattedPlain.includes('LA IMPORTANCIA DE LA TRANSCRIPCIÓN PRECISA'), 'Debe contener el título principal');
+assert.ok(formattedPlain.includes('<strong>Fuente base:</strong>'), 'Debe resaltar en negrita las claves de parámetros');
+assert.ok(formattedPlain.includes('<ul'), 'Debe generar listas ul con viñetas');
+assert.ok(formattedFromHtml.includes('<h2'), 'Debe reestructurar aunque venga envuelto en <p>');
+assert.ok(formattedFromHtml.includes('<strong>Título principal del artículo:</strong>'), 'Debe resaltar claves desde wrapper HTML');
+
+console.log('  ✅ [PASS] TEST 12: Cuaderno estructurado correctamente con h2, listas y negritas.\n');
+
 console.log('================================================================');
-console.log('TODAS LAS 11 PRUEBAS DEL IMPORTADOR SUPERADAS AL 100% (PASS)');
+console.log('TODAS LAS 12 PRUEBAS DEL IMPORTADOR SUPERADAS AL 100% (PASS)');
 console.log('================================================================');

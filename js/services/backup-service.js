@@ -10,8 +10,9 @@ class BackupServiceClass {
     const tid = teacherId || ClassRepository._getCurrentTeacherId();
     const profile = typeof StorageService !== 'undefined' ? StorageService.getProfile() : null;
     const classes = ClassRepository.getClasses({}, tid);
-    const sequences = SequenceRepository.getAllSequences(tid);
-    const slots = ScheduleRepository.getAllSlots(tid);
+    const sequences = typeof SequenceRepository !== 'undefined' ? SequenceRepository.getAllSequences(tid) : [];
+    const slots = typeof ScheduleRepository !== 'undefined' ? ScheduleRepository.getAllSlots(tid) : [];
+    const plans = typeof StorageService !== 'undefined' ? StorageService.getAllPlans() : {};
 
     return {
       version: '4.0',
@@ -20,6 +21,7 @@ class BackupServiceClass {
       teacherId: tid,
       profile: profile,
       classes: classes,
+      plans: plans,
       sequences: sequences,
       scheduleSlots: slots
     };
@@ -50,7 +52,7 @@ class BackupServiceClass {
       const data = typeof jsonString === 'string' ? JSON.parse(jsonString) : jsonString;
       if (!data || typeof data !== 'object') throw new Error('Formato de archivo inválido.');
 
-      const tid = teacherId || data.teacherId || ClassRepository._getCurrentTeacherId();
+      const tid = teacherId || data.teacherId || (typeof ClassRepository !== 'undefined' ? ClassRepository._getCurrentTeacherId() : 'usr_manuel');
 
       // Guardar snapshot de seguridad antes de restaurar
       if (typeof IDBStorage !== 'undefined' && IDBStorage.saveSnapshot) {
@@ -61,20 +63,52 @@ class BackupServiceClass {
       if (Array.isArray(data.classes)) {
         const classesMap = {};
         data.classes.forEach(c => {
-          if (c && c.id) classesMap[c.id] = c;
+          if (c && c.id) {
+            classesMap[c.id] = c;
+            if (typeof ClassRepository !== 'undefined' && typeof ClassRepository.unmarkClassDeleted === 'function') {
+              ClassRepository.unmarkClassDeleted(c.id, tid);
+            }
+          }
         });
-        if (ClassRepository._persist) {
-          ClassRepository._persist(classesMap, tid);
-        } else {
-          const classKey = ClassRepository.getStorageKey(tid);
-          if (typeof localStorage !== 'undefined') localStorage.setItem(classKey, JSON.stringify(classesMap));
-          if (typeof IDBStorage !== 'undefined') await IDBStorage.set(classKey, classesMap);
-          ClassRepository._cache[tid] = classesMap;
+        if (typeof ClassRepository !== 'undefined') {
+          if (ClassRepository._persist) {
+            ClassRepository._persist(classesMap, tid);
+          } else {
+            const classKey = ClassRepository.getStorageKey(tid);
+            if (typeof localStorage !== 'undefined') localStorage.setItem(classKey, JSON.stringify(classesMap));
+            if (typeof IDBStorage !== 'undefined') await IDBStorage.set(classKey, classesMap);
+            ClassRepository._cache[tid] = classesMap;
+          }
+        }
+      }
+
+      // Restaurar planes diarios
+      if (data.plans && typeof data.plans === 'object') {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem('teacher_planner_plans_v1', JSON.stringify(data.plans));
+        }
+        if (typeof PlanRepository !== 'undefined') {
+          Object.keys(data.plans).forEach(d => {
+            const p = data.plans[d];
+            if (p) PlanRepository.savePlan(tid, d, p, { skipBroadcast: true });
+          });
+        }
+      }
+
+      // Asegurar que el espejo legacy v3 contenga todas las clases restauradas
+      if (Array.isArray(data.classes) && typeof ClassRepository !== 'undefined') {
+        ClassRepository._sequenceIndex = {};
+        if (typeof ClassRepository._syncLegacyPlanMirror === 'function') {
+          const currentMap = ClassRepository._getAllMap(tid);
+          ClassRepository._syncLegacyPlanMirror(currentMap, tid);
+        }
+        if (typeof PlanRepository !== 'undefined' && PlanRepository._memoryCache) {
+          delete PlanRepository._memoryCache[tid];
         }
       }
 
       // Restaurar secuencias
-      if (Array.isArray(data.sequences)) {
+      if (Array.isArray(data.sequences) && typeof SequenceRepository !== 'undefined') {
         const seqKey = SequenceRepository.getStorageKey(tid);
         if (typeof localStorage !== 'undefined') localStorage.setItem(seqKey, JSON.stringify(data.sequences));
         if (typeof IDBStorage !== 'undefined') await IDBStorage.set(seqKey, data.sequences);
@@ -82,7 +116,7 @@ class BackupServiceClass {
       }
 
       // Restaurar horario
-      if (Array.isArray(data.scheduleSlots)) {
+      if (Array.isArray(data.scheduleSlots) && typeof ScheduleRepository !== 'undefined') {
         ScheduleRepository.saveSlots(data.scheduleSlots, tid);
       }
 
@@ -90,6 +124,14 @@ class BackupServiceClass {
       if (data.profile && typeof StorageService !== 'undefined' && StorageService.saveProfile) {
         StorageService.saveProfile(data.profile);
       }
+
+      // Refrescar UI inmediatamente
+      if (typeof window !== 'undefined' && window.dispatchEvent) {
+        window.dispatchEvent(new CustomEvent('class_session_cache_hydrated', { detail: { teacherId: tid } }));
+        window.dispatchEvent(new CustomEvent('plan_remote_update', { detail: { teacherId: tid } }));
+      }
+      if (typeof Calendar !== 'undefined' && Calendar.render) Calendar.render();
+      if (typeof DashboardView !== 'undefined' && DashboardView.render) DashboardView.render();
 
       console.log('[BackupService] Copia de seguridad restaurada con éxito.');
       return { success: true };

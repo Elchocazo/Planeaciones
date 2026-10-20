@@ -46,7 +46,7 @@ const DEFAULT_SYSTEM_USERS = [
     id: 'usr_manuel',
     name: 'Manuel Muñoz',
     role: 'admin_teacher',
-    email: 'manuel.munoz@hogarmadrededios.edu.co',
+    email: 'moz658@gmail.com',
     institution: 'COLEGIO HOGAR MADRE DE DIOS',
     homeroom: '7°',
     code: 'F- GA',
@@ -99,11 +99,12 @@ const DEFAULT_SYSTEM_USERS = [
   },
   {
     id: 'usr_coordinacion',
-    name: 'Coordinación Académica',
+    name: 'Marisol Ruiz',
     role: 'coordinator',
-    email: 'coordinacion@hogarmadrededios.edu.co',
+    password: 'CHMD2026',
+    email: 'marisol.ruiz@hogarmadrededios.edu.co',
     institution: 'COLEGIO HOGAR MADRE DE DIOS',
-    homeroom: 'Supervisión General',
+    homeroom: 'Coordinación Académica',
     code: 'F- GA',
     version: '02',
     formatDate: '31.JUL.26',
@@ -211,15 +212,71 @@ const UserService = {
   getAllUsers() {
     try {
       const data = localStorage.getItem(STORAGE_USERS_KEY);
+      let users = null;
       if (!data) {
-        this.saveAllUsers(DEFAULT_SYSTEM_USERS);
-        return JSON.parse(JSON.stringify(DEFAULT_SYSTEM_USERS));
+        users = JSON.parse(JSON.stringify(DEFAULT_SYSTEM_USERS));
+        this.saveAllUsers(users);
+        return users;
       }
-      return JSON.parse(data);
+      users = JSON.parse(data);
+
+      // Auto-migración y verificación: Asegurar que Marisol Ruiz esté configurada correctamente
+      let modified = false;
+      const coordIndex = users.findIndex(u => u.role === 'coordinator' || u.id === 'usr_coordinacion');
+      if (coordIndex >= 0) {
+        if (users[coordIndex].name !== 'Marisol Ruiz' || users[coordIndex].password !== 'CHMD2026') {
+          users[coordIndex].name = 'Marisol Ruiz';
+          users[coordIndex].password = 'CHMD2026';
+          users[coordIndex].email = 'marisol.ruiz@hogarmadrededios.edu.co';
+          users[coordIndex].homeroom = 'Coordinación Académica';
+          modified = true;
+        }
+      } else {
+        const defaultCoord = DEFAULT_SYSTEM_USERS.find(u => u.role === 'coordinator');
+        if (defaultCoord) {
+          users.push(JSON.parse(JSON.stringify(defaultCoord)));
+          modified = true;
+        }
+      }
+
+      if (modified) {
+        this.saveAllUsers(users);
+      }
+
+      return users;
     } catch (e) {
       console.error('Error al obtener usuarios:', e);
       return JSON.parse(JSON.stringify(DEFAULT_SYSTEM_USERS));
     }
+  },
+
+  /**
+   * Verifica la contraseña de un usuario (para Marisol Ruiz: CHMD2026)
+   */
+  verifyPassword(userId, password) {
+    if (!password) return false;
+    const user = this.getUserById(userId);
+    if (!user) return false;
+
+    // Si es Marisol Ruiz / Coordinación
+    if (user.role === 'coordinator' || user.id === 'usr_coordinacion') {
+      return String(password).trim() === (user.password || 'CHMD2026');
+    }
+
+    // Para otros usuarios o admin
+    if (user.password) {
+      return String(password).trim() === String(user.password).trim();
+    }
+
+    return true;
+  },
+
+  /**
+   * Indica si el usuario actual es la Coordinadora Marisol Ruiz
+   */
+  isCoordinatorActive() {
+    const user = this.getCurrentUser();
+    return !!(user && user.role === 'coordinator');
   },
 
   /**
@@ -449,6 +506,13 @@ const UserService = {
       this.saveTeacherPlanForDate(uid, dateStr, plan);
     }
 
+    // Sincronizar en la nube si Firestore está activo
+    if (typeof FirestoreService !== 'undefined' && typeof FirestoreService.saveCoordinatorReview === 'function') {
+      FirestoreService.saveCoordinatorReview(uid, dateStr, plan.coordinatorReview).catch(err => {
+        console.warn('[UsersService] Error al subir visto bueno a Firestore:', err);
+      });
+    }
+
     return plan.coordinatorReview;
   },
 
@@ -469,11 +533,20 @@ const UserService = {
       planDates.forEach(date => {
         const plan = plans[date];
         if (plan && plan.classes && plan.classes.length > 0) {
-          totalClassesPlanned += plan.classes.length;
-          if (plan.coordinatorReview && plan.coordinatorReview.status) {
-            totalReviewed++;
-          } else {
-            pendingRevision++;
+          const isBackupFn = (typeof ClassRepository !== 'undefined' && ClassRepository.isBackupClass)
+            ? (c) => ClassRepository.isBackupClass(c)
+            : (c) => (c && (c.isBackup || c.backup || c.isSnapshot || c.snapshot || c.isRespaldo || c.respaldo));
+          let validClasses = plan.classes.filter(c => !isBackupFn(c));
+          if (typeof ClassRepository !== 'undefined' && ClassRepository.deduplicateClasses) {
+            validClasses = ClassRepository.deduplicateClasses(validClasses);
+          }
+          if (validClasses.length > 0) {
+            totalClassesPlanned += validClasses.length;
+            if (plan.coordinatorReview && plan.coordinatorReview.status) {
+              totalReviewed++;
+            } else {
+              pendingRevision++;
+            }
           }
         }
       });
@@ -495,7 +568,7 @@ if (typeof window !== 'undefined') {
   window.UserService = UserService;
 }
 
-if (typeof window !== 'undefined') {
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => UserService.initIDBSync());
   } else {

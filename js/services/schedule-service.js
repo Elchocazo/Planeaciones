@@ -17,6 +17,11 @@ class ScheduleServiceClass {
     if (!dateStr) return null;
     const tid = teacherId || ClassRepository._getCurrentTeacherId();
 
+    // 0. Determinar si esta fecha corresponde a receso escolar o festivo
+    const dayRecessInfo = (typeof ClassRepository !== 'undefined' && typeof ClassRepository._isRecessOrNonSchoolDay === 'function')
+      ? { isRecess: ClassRepository._isRecessOrNonSchoolDay(dateStr) }
+      : ((typeof HolidayService !== 'undefined') ? HolidayService.isRecessOrNonSchoolDay(dateStr) : { isRecess: false });
+
     // 1. Obtener slots del horario para esta fecha (Lunes..Viernes)
     const scheduleSlots = ScheduleRepository.getSlotsForDate(dateStr, tid);
 
@@ -25,15 +30,18 @@ class ScheduleServiceClass {
 
     // 3. Mapear qué clases corresponden hoy
     const usedClassIds = new Set();
+    let misalignedCandidates = null;
+    const targetDayOfWeek = new Date(dateStr + 'T12:00:00Z').getUTCDay();
+
     const slotsWithClassInfo = scheduleSlots.map(slot => {
       // 1. Buscar si ya existe una clase asociada directamente a este slotId
-      let matchedClass = savedClasses.find(c => !usedClassIds.has(c.id) && c.scheduleSlotId === slot.id);
+      let matchedClass = savedClasses.find(c => !usedClassIds.has(c.id) && c.scheduleSlotId && c.scheduleSlotId === slot.id);
 
       // 2. Buscar por horario exacto + materia + grado
       if (!matchedClass) {
         matchedClass = savedClasses.find(c =>
           !usedClassIds.has(c.id) &&
-          c.time && slot.time && c.time === slot.time &&
+          c.time && slot.time && this._cleanTime(c.time) === this._cleanTime(slot.time) &&
           this._matchesSlot(c, slot)
         );
       }
@@ -46,28 +54,111 @@ class ScheduleServiceClass {
         );
       }
 
+      // 4. Auto-rescate SOLO para clases genuinamente desalineadas y NUNCA en días de receso escolar o festivos
+      if (!matchedClass && !dayRecessInfo.isRecess) {
+        if (!misalignedCandidates) {
+          const allClasses = ClassRepository.getAllClasses(tid);
+          misalignedCandidates = allClasses.filter(c => {
+            if (!c || ClassRepository.isDeletedClass(c.id, tid)) return false;
+            if (c.date === dateStr) return false;
+            // Salvaguarda 1: Si el ID de la clase codifica su fecha original (ej. cls_20261014_...), JAMÁS robarla
+            if (c.id && c.date && c.id.includes(c.date.replace(/-/g, ''))) return false;
+            const hasContent = Boolean(
+              (c.curriculum?.topic && String(c.curriculum.topic).trim().length > 0 && String(c.curriculum.topic).trim() !== 'Sin tema planeado todavía') ||
+              (c.topic && String(c.topic).trim().length > 0 && String(c.topic).trim() !== 'Sin tema planeado todavía') ||
+              (c.didacticSequence?.inicio && String(c.didacticSequence.inicio).trim().length > 0)
+            );
+            if (!hasContent) return false;
+            // Salvaguarda 2: Si la clase ya está en uno de sus días programados oficiales, JAMÁS robarla
+            if (typeof ClassRepository._getScheduledWeekdays === 'function') {
+              const schedDays = ClassRepository._getScheduledWeekdays(c.subjectName || c.subject, c.gradeName || c.grade, tid);
+              if (schedDays && c.date) {
+                const currentDayOfWeek = new Date(c.date + 'T12:00:00Z').getUTCDay();
+                const isScheduledOnCurrentDate = (schedDays instanceof Set)
+                  ? schedDays.has(currentDayOfWeek)
+                  : (Array.isArray(schedDays) && schedDays.includes(currentDayOfWeek));
+                if (isScheduledOnCurrentDate) {
+                  return false;
+                }
+              }
+            }
+            return true;
+          });
+        }
+
+        matchedClass = misalignedCandidates.find(c => {
+          if (usedClassIds.has(c.id)) return false;
+          const slotMatches = (c.scheduleSlotId && c.scheduleSlotId === slot.id) || this._matchesSlot(c, slot);
+          if (!slotMatches) return false;
+
+          // Solo rescatar si el día destino SÍ es un día programado oficial para esta asignatura
+          if (typeof ClassRepository._getScheduledWeekdays === 'function') {
+            const targetSchedDays = ClassRepository._getScheduledWeekdays(c.subjectName || c.subject, c.gradeName || c.grade, tid);
+            if (targetSchedDays) {
+              const isScheduledOnTarget = (targetSchedDays instanceof Set)
+                ? targetSchedDays.has(targetDayOfWeek)
+                : (Array.isArray(targetSchedDays) && targetSchedDays.includes(targetDayOfWeek));
+              if (!isScheduledOnTarget) return false;
+            }
+          }
+          return true;
+        });
+
+        if (matchedClass) {
+          matchedClass.date = dateStr;
+          matchedClass.dayOfWeek = typeof ExportService !== 'undefined' ? ExportService.getDayOfWeekName(dateStr) : 'Jueves';
+          matchedClass.scheduleSlotId = slot.id;
+          matchedClass.time = slot.time;
+          ClassRepository.saveClass(matchedClass, tid);
+          savedClasses.push(matchedClass);
+        }
+      }
+
       if (matchedClass) {
         usedClassIds.add(matchedClass.id);
+        // Auto-anclar slot y horario oficial si faltaban
+        if (!matchedClass.scheduleSlotId && slot.id) {
+          matchedClass.scheduleSlotId = slot.id;
+        }
+        if (!matchedClass.time && slot.time) {
+          matchedClass.time = slot.time;
+        }
       }
 
       const hasRealContent = Boolean(
         matchedClass && (
           (matchedClass.curriculum?.topic && String(matchedClass.curriculum.topic).trim().length > 0 && String(matchedClass.curriculum.topic).trim() !== 'Sin tema planeado todavía') ||
+          (matchedClass.topic && String(matchedClass.topic).trim().length > 0 && String(matchedClass.topic).trim() !== 'Sin tema planeado todavía') ||
           (matchedClass.didacticSequence?.inicio && String(matchedClass.didacticSequence.inicio).trim().length > 0) ||
           (matchedClass.didacticSequence?.desarrollo && String(matchedClass.didacticSequence.desarrollo).trim().length > 0) ||
           (matchedClass.pedagogy?.inicio && String(matchedClass.pedagogy.inicio).trim().length > 0) ||
           (matchedClass.pedagogy?.desarrollo && String(matchedClass.pedagogy.desarrollo).trim().length > 0) ||
-          (matchedClass.teacherNotebook?.studentNotebookContent && String(matchedClass.teacherNotebook.studentNotebookContent).trim().length > 0)
+          (matchedClass.teacherNotebook?.studentNotebookContent && String(matchedClass.teacherNotebook.studentNotebookContent).trim().length > 0) ||
+          (matchedClass.notebookContent && String(matchedClass.notebookContent).trim().length > 0)
         )
       );
-      const isPlanned = Boolean(matchedClass && (matchedClass.status === 'planned' || matchedClass.status === 'completed') && hasRealContent);
-      const isPending = !isPlanned;
+
+      // Si tiene contenido real o status planned/completed, la sesión se considera Planeada
+      const isPlanned = Boolean(matchedClass && (matchedClass.status === 'planned' || matchedClass.status === 'completed' || hasRealContent));
+      if (matchedClass && isPlanned && matchedClass.status !== 'planned' && matchedClass.status !== 'completed') {
+        matchedClass.status = 'planned';
+      }
+
+      // Si es semana de receso o día no lectivo, un slot sin clase NO es un pendiente que requiera planeación
+      const isPending = !isPlanned && !dayRecessInfo.isRecess;
+
+      const expectedSeq = (typeof ClassRepository !== 'undefined' && typeof ClassRepository.getScheduleSequenceNumber === 'function')
+        ? ClassRepository.getScheduleSequenceNumber(dateStr, slot.subjectName || slot.subject, slot.gradeName || slot.grade, tid, { requireScheduledWeekday: true })
+        : null;
 
       return {
         slot: slot,
         classSession: matchedClass || null,
+        expectedSequenceNumber: expectedSeq,
         isPlanned: isPlanned,
-        isPending: isPending
+        isPending: isPending,
+        isRecess: dayRecessInfo.isRecess,
+        recessInfo: dayRecessInfo.isRecess ? dayRecessInfo : null
       };
     });
 
@@ -80,24 +171,58 @@ class ScheduleServiceClass {
       totalSlots: scheduleSlots.length,
       scheduledItems: slotsWithClassInfo,
       additionalClasses: orphanClasses,
-      allSavedClasses: savedClasses
+      allSavedClasses: savedClasses,
+      isRecess: dayRecessInfo.isRecess,
+      recessInfo: dayRecessInfo.isRecess ? dayRecessInfo : null
     };
+  }
+
+  getScheduleSequenceNumber(dateStr, subject, grade, teacherId, options = {}) {
+    if (typeof ClassRepository !== 'undefined' && typeof ClassRepository.getScheduleSequenceNumber === 'function') {
+      return ClassRepository.getScheduleSequenceNumber(dateStr, subject, grade, teacherId, options);
+    }
+    return null;
+  }
+
+  _cleanTime(timeStr) {
+    return String(timeStr || '').replace(/\s+/g, '').toLowerCase().trim();
+  }
+
+  _normSubject(name) {
+    const s = String(name || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+    if (s.includes('sistema') || s.includes('tecnolog') || s.includes('informat') || s.includes('computac')) return 'sistemas';
+    if (s.includes('matemat') || s.includes('aritmet') || s.includes('geometr') || s.includes('algebr')) return 'matematicas';
+    if (s.includes('robot')) return 'robotica';
+    if (s.includes('logic')) return 'logica';
+    if (s.includes('direccion') || s.includes('grupo') || s.includes('orientac')) return 'direccion de grupo';
+    return s;
+  }
+
+  _normGrade(grd) {
+    if (typeof ClassRepository !== 'undefined' && typeof ClassRepository._normGrade === 'function') {
+      return ClassRepository._normGrade(grd);
+    }
+    return String(grd || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^0-9a-z]/g, "").trim();
   }
 
   _matchesSlot(classSession, slot) {
     if (!classSession || !slot) return false;
-    const s1 = String(classSession.subjectName || classSession.subject || '').toLowerCase().trim();
-    const s2 = String(slot.subjectName || slot.subject || '').toLowerCase().trim();
-    const g1 = String(classSession.gradeName || classSession.grade || '').toLowerCase().trim();
-    const g2 = String(slot.gradeName || slot.grade || '').toLowerCase().trim();
-
-    const subjectMatches = s1 === s2;
-    const gradeMatches = g1 === g2 || (slot.group && String(classSession.group || '').toLowerCase().trim() === String(slot.group).toLowerCase().trim());
-
-    // Si coincide el horario exacto además de materia y grado
-    if (classSession.time && slot.time && classSession.time === slot.time) {
-      return subjectMatches && gradeMatches;
+    if (classSession.scheduleSlotId && slot.id && classSession.scheduleSlotId === slot.id) {
+      return true;
     }
+
+    const s1 = this._normSubject(classSession.subjectName || classSession.subject);
+    const s2 = this._normSubject(slot.subjectName || slot.subject);
+    const g1 = this._normGrade(classSession.gradeName || classSession.grade);
+    const g2 = this._normGrade(slot.gradeName || slot.grade);
+    const grp1 = this._normGrade(classSession.group);
+    const grp2 = this._normGrade(slot.group);
+
+    const subjectMatches = (s1 === s2) || (s1.length > 3 && s2.length > 3 && (s1.includes(s2) || s2.includes(s1)));
+    const gradeMatches = (g1 && g2 && g1 === g2) ||
+                         (grp1 && grp2 && grp1 === grp2) ||
+                         (g1 && grp2 && g1 === grp2) ||
+                         (grp1 && g2 && grp1 === g2);
 
     return subjectMatches && gradeMatches;
   }

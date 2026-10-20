@@ -12,10 +12,14 @@ class ScheduleRepositoryClass {
 
   _getCurrentTeacherId() {
     if (typeof UserService !== 'undefined' && UserService.getCurrentUserId) {
-      return UserService.getCurrentUserId() || 'usr_manuel';
+      const uid = UserService.getCurrentUserId();
+      if (uid === 'usr_coordinacion') return 'usr_manuel';
+      return uid || 'usr_manuel';
     }
     if (typeof localStorage !== 'undefined') {
-      return localStorage.getItem('school_current_active_user_v2') || 'usr_manuel';
+      const uid = localStorage.getItem('school_current_active_user_v2');
+      if (uid === 'usr_coordinacion') return 'usr_manuel';
+      return uid || 'usr_manuel';
     }
     return 'usr_manuel';
   }
@@ -104,8 +108,10 @@ class ScheduleRepositoryClass {
           if (gradeStr.includes('4°A') || gradeStr === '4A') group = '4A';
           else if (gradeStr.includes('4°B') || gradeStr === '4B') group = '4B';
 
+          const stableSlotId = item.id || `slot_${tid}_w${weekday}_i${index}_${this._slugify(item.subject)}_${this._slugify(gradeStr)}`;
+
           slots.push({
-            id: item.id || this.generateSlotId('slot'),
+            id: stableSlotId,
             teacherId: tid,
             weekday: weekday, // 1=Lunes .. 5=Viernes
             index: index,
@@ -139,8 +145,8 @@ class ScheduleRepositoryClass {
 
   getAllSlots(teacherId) {
     const tid = teacherId || this._getCurrentTeacherId();
-    if (this._cache[tid]) {
-      return JSON.parse(JSON.stringify(this._cache[tid]));
+    if (this._cache[tid] && Array.isArray(this._cache[tid]) && this._cache[tid].length > 0) {
+      return this._cache[tid];
     }
     // Si no está en caché síncrona, intentar leer de localStorage
     if (typeof localStorage !== 'undefined') {
@@ -148,14 +154,20 @@ class ScheduleRepositoryClass {
         const raw = localStorage.getItem(this.getStorageKey(tid));
         if (raw) {
           const parsed = JSON.parse(raw);
-          this._cache[tid] = parsed;
-          return JSON.parse(JSON.stringify(parsed));
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            this._cache[tid] = parsed;
+            return this._cache[tid];
+          }
         }
       } catch (e) {}
     }
     const created = this._createSlotsFromProfile(tid);
     this._cache[tid] = created;
-    return JSON.parse(JSON.stringify(created));
+    return this._cache[tid];
+  }
+
+  getSlotsByTeacher(teacherId) {
+    return this.getAllSlots(teacherId);
   }
 
   getSlotsByWeekday(weekday, teacherId) {
@@ -176,8 +188,17 @@ class ScheduleRepositoryClass {
   }
 
   getSlotById(slotId, teacherId) {
+    if (!slotId) return null;
     const all = this.getAllSlots(teacherId);
-    return all.find(s => s.id === slotId) || null;
+    // 1. Coincidencia exacta de ID
+    let found = all.find(s => s.id === slotId);
+    if (found) return found;
+
+    // 2. Coincidencia parcial o inversa de ID
+    found = all.find(s => s.id && (s.id.includes(slotId) || slotId.includes(s.id)));
+    if (found) return found;
+
+    return null;
   }
 
   saveSlots(slots, teacherId) {

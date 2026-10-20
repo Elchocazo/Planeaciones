@@ -16,6 +16,145 @@ const NotebookEditor = {
   _documentVersion: 1,
   _lastSavedContent: '',
   _isRemoteConflict: false,
+  _savedSelectionRange: null,
+  _boundSelectionChange: false,
+
+  /**
+   * Guarda de manera segura el rango de selección activo dentro del editor
+   */
+  _saveSelection() {
+    try {
+      const editor = document.getElementById('notebook-single-editor');
+      if (!editor || editor.offsetParent === null) return;
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0) {
+        const range = sel.getRangeAt(0);
+        if (editor.contains(range.commonAncestorContainer)) {
+          this._savedSelectionRange = range.cloneRange();
+        }
+      }
+    } catch (e) {
+      // Ignorar errores en estados de selección no estándar
+    }
+  },
+
+  /**
+   * Restaura el rango de selección previamente guardado y devuelve el foco al editor.
+   * Si no había rango guardado, sitúa el cursor al final del contenido del editor.
+   */
+  _restoreSelection() {
+    try {
+      const editor = document.getElementById('notebook-single-editor');
+      if (!editor) return;
+      editor.focus();
+      const sel = window.getSelection();
+      if (this._savedSelectionRange) {
+        if (sel) {
+          sel.removeAllRanges();
+          sel.addRange(this._savedSelectionRange);
+        }
+      } else {
+        const newRange = document.createRange();
+        newRange.selectNodeContents(editor);
+        newRange.collapse(false);
+        if (sel) {
+          sel.removeAllRanges();
+          sel.addRange(newRange);
+        }
+        this._savedSelectionRange = newRange.cloneRange();
+      }
+    } catch (e) {
+      // Ignorar fallos al restaurar
+    }
+  },
+
+  /**
+   * Obtiene el bloque contenedor semántico (p, h1-h6, li, blockquote, div) que encierra el cursor
+   */
+  _getEnclosingBlock() {
+    const editor = document.getElementById('notebook-single-editor');
+    if (!editor) return null;
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return null;
+    let node = sel.getRangeAt(0).commonAncestorContainer;
+    while (node && node !== editor) {
+      if (node.nodeType === 1 && /^(p|h1|h2|h3|h4|h5|h6|li|blockquote|div)$/i.test(node.tagName)) {
+        if (!node.classList.contains('notebook-callout') && !node.classList.contains('notebook-paper-container')) {
+          return node;
+        }
+      }
+      node = node.parentNode;
+    }
+    return null;
+  },
+
+  /**
+   * Envuelve la selección activa con un span con estilos directos
+   */
+  _wrapSelectionWithStyle(stylesObj) {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
+    const range = sel.getRangeAt(0);
+    const span = document.createElement('span');
+    Object.assign(span.style, stylesObj);
+    const fragment = range.extractContents();
+    span.appendChild(fragment);
+    range.insertNode(span);
+    sel.removeAllRanges();
+    const newRange = document.createRange();
+    newRange.selectNodeContents(span);
+    sel.addRange(newRange);
+  },
+
+  /**
+   * Inserta fragmento HTML de forma segura en la posición del cursor, con fallback al DOM
+   */
+  _insertHtmlAtCursor(html) {
+    this._restoreSelection();
+    let success = false;
+    try {
+      success = document.execCommand('insertHTML', false, html);
+    } catch (e) {}
+
+    if (!success) {
+      const editor = document.getElementById('notebook-single-editor');
+      if (!editor) return;
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0) {
+        const range = sel.getRangeAt(0);
+        if (editor.contains(range.commonAncestorContainer)) {
+          const temp = document.createElement('div');
+          temp.innerHTML = html;
+          const frag = document.createDocumentFragment();
+          let lastNode = null;
+          while (temp.firstChild) {
+            lastNode = temp.firstChild;
+            frag.appendChild(temp.firstChild);
+          }
+          range.deleteContents();
+          range.insertNode(frag);
+          if (lastNode) {
+            const nextRange = document.createRange();
+            nextRange.setStartAfter(lastNode);
+            nextRange.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(nextRange);
+          }
+          success = true;
+        }
+      }
+      if (!success) {
+        const temp = document.createElement('div');
+        temp.innerHTML = html;
+        while (temp.firstChild) {
+          editor.appendChild(temp.firstChild);
+        }
+      }
+    }
+    this._saveSelection();
+    this.triggerAutoSave(false);
+    this._updateWordCount();
+  },
 
   /**
    * Abre el cuaderno para una clase desde su ID permanente
@@ -53,9 +192,13 @@ const NotebookEditor = {
     this.currentDateStr = cls.date;
     this.currentClassData = cls;
     this.isStandalone = isStandalone;
+    this._savedSelectionRange = null;
 
     const mount = document.getElementById('notebook-mount-point');
     if (!mount) return;
+
+    const isCoord = (typeof UserService !== 'undefined' && UserService.isCoordinatorActive && UserService.isCoordinatorActive()) ||
+                    (typeof AuthModal !== 'undefined' && AuthModal.getSession && AuthModal.getSession()?.role === 'coordinator');
 
     const profile = (typeof StorageService !== 'undefined') ? StorageService.getProfile() : {};
     const formattedDate = (typeof ExportService !== 'undefined' && ExportService.formatDate) ? ExportService.formatDate(cls.date) : cls.date;
@@ -105,50 +248,66 @@ const NotebookEditor = {
             </div>
 
             <div class="notebook-header-actions">
-              <span id="notebook-autosave-badge" class="badge-autosave" style="background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0; font-size:0.8rem; font-weight:600; padding:4px 10px; border-radius:12px; display:inline-flex; align-items:center; gap:5px;">
-                ✓ Guardado
-              </span>
-
-              <button type="button" class="btn btn-secondary btn-sm" onclick="NotebookEditor.openHistoryModal()" title="Ver historial de versiones de este documento">
-                🕒 Historial
-              </button>
-
-              <div class="dropdown" style="position:relative; display:inline-block;">
-                <button type="button" class="btn btn-secondary btn-sm" onclick="NotebookEditor.toggleTemplatesMenu(event)">
-                  ⚡ Plantillas ▾
+              ${isCoord ? `
+                <span class="badge-autosave" style="background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; font-size:0.8rem; font-weight:700; padding:4px 10px; border-radius:12px; display:inline-flex; align-items:center; gap:5px;">
+                  🎓 Solo Lectura • Coordinación
+                </span>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="NotebookEditor.exportWordDocx()" title="Descargar como documento de Word (.doc)" style="background:#eff6ff; color:#1d4ed8; border-color:#bfdbfe; font-weight:700;">
+                  📄 Word (.doc)
                 </button>
-                <div class="dropdown-menu" id="notebook-templates-menu" style="min-width:260px; right:0; left:auto; z-index:200;">
-                  <button type="button" class="dropdown-item" onclick="NotebookEditor.applyTemplate('standard')">📝 Estructura Didáctica Estándar</button>
-                  <button type="button" class="dropdown-item" onclick="NotebookEditor.applyTemplate('math')">📐 Taller de Matemáticas</button>
-                  <button type="button" class="dropdown-item" onclick="NotebookEditor.applyTemplate('lab')">🤖 Guía de Práctica / Robótica</button>
-                  <button type="button" class="dropdown-item" onclick="NotebookEditor.applyTemplate('sistemas7')">💻 Sistemas 7° - Creación Digital</button>
-                  <button type="button" class="dropdown-item" onclick="NotebookEditor.applyTemplate('robotics10')">🦾 Robótica 10° - Pinza Robótica</button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="NotebookEditor.printNotebook()" title="Imprimir o exportar a PDF">
+                  🖨️ PDF
+                </button>
+              ` : `
+                <span id="notebook-autosave-badge" class="badge-autosave" style="background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0; font-size:0.8rem; font-weight:600; padding:4px 10px; border-radius:12px; display:inline-flex; align-items:center; gap:5px;">
+                  ✓ Guardado
+                </span>
+
+                <button type="button" class="btn btn-secondary btn-sm" onclick="NotebookEditor.openHistoryModal()" title="Ver historial de versiones de este documento">
+                  🕒 Historial
+                </button>
+
+                <div class="dropdown" style="position:relative; display:inline-block;">
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="NotebookEditor.toggleTemplatesMenu(event)">
+                    ⚡ Plantillas ▾
+                  </button>
+                  <div class="dropdown-menu" id="notebook-templates-menu" style="min-width:260px; right:0; left:auto; z-index:200;">
+                    <button type="button" class="dropdown-item" onclick="NotebookEditor.applyTemplate('standard')">📝 Estructura Didáctica Estándar</button>
+                    <button type="button" class="dropdown-item" onclick="NotebookEditor.applyTemplate('math')">📐 Taller de Matemáticas</button>
+                    <button type="button" class="dropdown-item" onclick="NotebookEditor.applyTemplate('lab')">🤖 Guía de Práctica / Robótica</button>
+                    <button type="button" class="dropdown-item" onclick="NotebookEditor.applyTemplate('sistemas7')">💻 Sistemas 7° - Creación Digital</button>
+                    <button type="button" class="dropdown-item" onclick="NotebookEditor.applyTemplate('robotics10')">🦾 Robótica 10° - Pinza Robótica</button>
+                  </div>
                 </div>
-              </div>
 
-              ${!isStandalone ? `
-                <button type="button" class="btn btn-secondary btn-sm" onclick="NotebookEditor.openInNewTab()" title="Abrir en una pestaña separada">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-                  Nueva Pestaña
+                <button type="button" class="btn btn-secondary btn-sm" onclick="NotebookEditor.openImportModal()" title="Importar planeación o guía sobre este cuaderno" style="font-weight:700; color:#1d4ed8; background:#eff6ff; border-color:#bfdbfe; display:inline-flex; align-items:center; gap:5px;">
+                  📥 Importar
                 </button>
-              ` : ''}
 
-              <button type="button" class="btn btn-secondary btn-sm" onclick="NotebookEditor.exportWordDocx()" title="Descargar como documento de Word (.doc)" style="background:#eff6ff; color:#1d4ed8; border-color:#bfdbfe; font-weight:700;">
-                📄 Word (.doc)
-              </button>
+                ${!isStandalone ? `
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="NotebookEditor.openInNewTab()" title="Abrir en una pestaña separada">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                    Nueva Pestaña
+                  </button>
+                ` : ''}
 
-              <button type="button" class="btn btn-primary btn-sm" onclick="NotebookEditor.printNotebook()" title="Imprimir o exportar a PDF">
-                🖨️ PDF
-              </button>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="NotebookEditor.exportWordDocx()" title="Descargar como documento de Word (.doc)" style="background:#eff6ff; color:#1d4ed8; border-color:#bfdbfe; font-weight:700;">
+                  📄 Word (.doc)
+                </button>
 
-              <button type="button" class="btn btn-success btn-sm" onclick="NotebookEditor.saveCurrentNotebookContent(true)" title="Guardar manualmente" style="background:#059669; border-color:#059669; color:#fff; font-weight:700;">
-                💾 Guardar
-              </button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="NotebookEditor.printNotebook()" title="Imprimir o exportar a PDF">
+                  🖨️ PDF
+                </button>
+
+                <button type="button" class="btn btn-success btn-sm" onclick="NotebookEditor.saveCurrentNotebookContent(true)" title="Guardar manualmente" style="background:#059669; border-color:#059669; color:#fff; font-weight:700;">
+                  💾 Guardar
+                </button>
+              `}
             </div>
           </div>
 
           <!-- Barra de Herramientas Estilo Word / Google Docs -->
-          <div class="notebook-word-toolbar" id="notebook-word-toolbar">
+          <div class="notebook-word-toolbar" id="notebook-word-toolbar" style="${isCoord ? 'display:none;' : ''}">
             <div class="toolbar-group">
               <button type="button" class="toolbar-btn" onclick="NotebookEditor.exec('undo')" title="Deshacer (Ctrl+Z)">↩️</button>
               <button type="button" class="toolbar-btn" onclick="NotebookEditor.exec('redo')" title="Rehacer (Ctrl+Y)">↪️</button>
@@ -207,13 +366,13 @@ const NotebookEditor = {
             <div class="toolbar-divider"></div>
 
             <div class="toolbar-group">
-              <label class="toolbar-btn" title="Color de Texto" style="cursor:pointer; margin:0;">
+              <label class="toolbar-btn color-label" title="Color de Texto" style="cursor:pointer; margin:0; position:relative;" onclick="this.querySelector('input').click()">
                 <span style="font-weight:bold; color:#ef4444; border-bottom:2px solid #ef4444;">A</span>
-                <input type="color" value="#1e293b" onchange="NotebookEditor.exec('foreColor', this.value)" style="display:none;" />
+                <input type="color" value="#1e293b" oninput="NotebookEditor.setTextColor(this.value)" onchange="NotebookEditor.setTextColor(this.value)" style="position:absolute; opacity:0; width:1px; height:1px; pointer-events:none;" />
               </label>
-              <label class="toolbar-btn" title="Resaltador" style="cursor:pointer; margin:0;">
+              <label class="toolbar-btn color-label" title="Resaltador" style="cursor:pointer; margin:0; position:relative;" onclick="this.querySelector('input').click()">
                 <span style="background:#fef08a; padding:1px 4px; border-radius:2px; font-size:0.75rem;">🖍️</span>
-                <input type="color" value="#fef08a" onchange="NotebookEditor.exec('hiliteColor', this.value)" style="display:none;" />
+                <input type="color" value="#fef08a" oninput="NotebookEditor.setHighlightColor(this.value)" onchange="NotebookEditor.setHighlightColor(this.value)" style="position:absolute; opacity:0; width:1px; height:1px; pointer-events:none;" />
               </label>
             </div>
 
@@ -236,9 +395,9 @@ const NotebookEditor = {
             <div class="toolbar-divider"></div>
 
             <div class="toolbar-group">
-              <label class="toolbar-btn" title="Insertar Imagen" style="cursor:pointer; margin:0; display:inline-flex; align-items:center; gap:3px;">
+              <label class="toolbar-btn" title="Insertar Imagen" style="cursor:pointer; margin:0; display:inline-flex; align-items:center; gap:3px; position:relative;" onclick="this.querySelector('input').click()">
                 🖼️ Imagen
-                <input type="file" accept="image/*" style="display:none;" onchange="NotebookEditor.handleImageUpload(event)" />
+                <input type="file" accept="image/*" style="position:absolute; opacity:0; width:1px; height:1px; pointer-events:none;" onchange="NotebookEditor.handleImageUpload(event)" />
               </label>
 
               <button type="button" class="toolbar-btn" onclick="NotebookEditor.insertTable()" title="Insertar Tabla 3x3">
@@ -247,6 +406,10 @@ const NotebookEditor = {
 
               <button type="button" class="toolbar-btn" onclick="NotebookEditor.insertLink()" title="Insertar Enlace (Ctrl+K)">
                 🔗 Enlace
+              </button>
+
+              <button type="button" class="toolbar-btn" onclick="NotebookEditor.insertCodeBlock()" title="Insertar Bloque de Código (C++, Arduino, Python, etc.)">
+                💻 Código
               </button>
 
               <button type="button" class="toolbar-btn" onclick="NotebookEditor.insertPageBreakAtCursor()" title="Insertar Salto de Página (Ctrl+Enter)" style="font-weight:700; color:var(--primary-700);">
@@ -260,6 +423,18 @@ const NotebookEditor = {
               <button type="button" class="toolbar-btn" onclick="NotebookEditor.insertCallout('concept')" title="Concepto Clave">📌 Concepto</button>
               <button type="button" class="toolbar-btn" onclick="NotebookEditor.insertCallout('activity')" title="Actividad en Clase">✍️ Actividad</button>
               <button type="button" class="toolbar-btn" onclick="NotebookEditor.insertCallout('homework')" title="Tarea para la Casa">🏠 Tarea</button>
+            </div>
+
+            <div class="toolbar-divider"></div>
+
+            <div class="toolbar-group" style="align-items:center; gap:4px;">
+              <span style="font-size:0.75rem; font-weight:700; color:var(--slate-600); margin-left:2px;">📐 Margen:</span>
+              <select id="nb-margin-select" class="form-input form-input-sm" onchange="NotebookEditor.setMargin(this.value)" style="font-size:0.78rem; padding:2px 6px; height:28px; width:auto; font-weight:600; cursor:pointer;" title="Márgenes de página">
+                <option value="1.27" selected>Estrecho (1.27 cm)</option>
+                <option value="2.0">Moderado (2.0 cm)</option>
+                <option value="2.54">Normal (2.54 cm)</option>
+                <option value="1.0">Compacto (1.0 cm)</option>
+              </select>
             </div>
           </div>
         </div>
@@ -318,7 +493,10 @@ const NotebookEditor = {
             <!-- Pie de Página Institucional -->
             <div class="notebook-document-footer">
               <span>${this.escapeHtml(profile.institution || 'Colegio Hogar Madre de Dios')}</span>
-              <span id="doc-word-count-badge" style="color:var(--slate-500); font-size:0.78rem;">0 palabras</span>
+              <div style="display:flex; gap:10px; align-items:center;">
+                <span id="notebook-total-pages-badge" style="background:#e0f2fe; color:#0369a1; font-weight:700; font-size:0.75rem; padding:2px 8px; border-radius:10px; border:1px solid #bae6fd;">1 Hoja</span>
+                <span id="doc-word-count-badge" style="color:var(--slate-500); font-size:0.78rem;">0 palabras</span>
+              </div>
             </div>
           </div>
         </div>
@@ -376,10 +554,32 @@ const NotebookEditor = {
   },
 
   /**
+   * Abre el modal de importación inteligente directamente sobre la clase activa del cuaderno
+   */
+  openImportModal() {
+    if (typeof ImportModal !== 'undefined' && ImportModal.open) {
+      let cls = this.currentClassData;
+      if (!cls && this.currentClassId && typeof ClassRepository !== 'undefined') {
+        cls = ClassRepository.getClassById(this.currentClassId);
+      }
+      ImportModal.open(cls, (updatedClass) => {
+        if (this.currentClassId) {
+          this.openForClassById(this.currentClassId, this.isStandalone);
+        } else if (this.currentClassIndex !== null) {
+          this.openForClass(this.currentClassIndex);
+        }
+      });
+    } else {
+      alert('El asistente de importación no está disponible.');
+    }
+  },
+
+  /**
    * Cierra el editor y vuelve a la vista de planeación
    */
   closeModal() {
     this.saveCurrentNotebookContent(false);
+    this._savedSelectionRange = null;
     if (typeof App !== 'undefined' && typeof App.showPlannerView === 'function') {
       App.showPlannerView();
     }
@@ -479,6 +679,10 @@ const NotebookEditor = {
                 </div>
               </div>
 
+              <button type="button" class="btn btn-secondary btn-sm" onclick="NotebookEditor.openImportModal()" title="Importar planeación o guía sobre este cuaderno" style="font-weight:700; color:#1d4ed8; background:#eff6ff; border-color:#bfdbfe; display:inline-flex; align-items:center; gap:5px;">
+                📥 Importar
+              </button>
+
               ${!isStandalone ? `
                 <button type="button" class="btn btn-secondary btn-sm" onclick="NotebookEditor.openInNewTab()" title="Abrir en una pestaña separada">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
@@ -563,13 +767,13 @@ const NotebookEditor = {
 
             <!-- Color y Resaltador -->
             <div class="toolbar-group">
-              <label class="toolbar-btn" title="Color de Texto" style="cursor:pointer; margin:0;">
+              <label class="toolbar-btn color-label" title="Color de Texto" style="cursor:pointer; margin:0; position:relative;" onclick="this.querySelector('input').click()">
                 <span style="font-weight:bold; color:#ef4444; border-bottom:2px solid #ef4444;">A</span>
-                <input type="color" value="#1e293b" onchange="NotebookEditor.exec('foreColor', this.value)" style="display:none;" />
+                <input type="color" value="#1e293b" oninput="NotebookEditor.setTextColor(this.value)" onchange="NotebookEditor.setTextColor(this.value)" style="position:absolute; opacity:0; width:1px; height:1px; pointer-events:none;" />
               </label>
-              <label class="toolbar-btn" title="Resaltador" style="cursor:pointer; margin:0;">
+              <label class="toolbar-btn color-label" title="Resaltador" style="cursor:pointer; margin:0; position:relative;" onclick="this.querySelector('input').click()">
                 <span style="background:#fef08a; padding:1px 4px; border-radius:2px; font-size:0.75rem;">🖍️</span>
-                <input type="color" value="#fef08a" onchange="NotebookEditor.exec('hiliteColor', this.value)" style="display:none;" />
+                <input type="color" value="#fef08a" oninput="NotebookEditor.setHighlightColor(this.value)" onchange="NotebookEditor.setHighlightColor(this.value)" style="position:absolute; opacity:0; width:1px; height:1px; pointer-events:none;" />
               </label>
             </div>
 
@@ -595,9 +799,9 @@ const NotebookEditor = {
 
             <!-- Tablas, Imágenes, Enlaces, Salto de Página -->
             <div class="toolbar-group">
-              <label class="toolbar-btn" title="Insertar Imagen" style="cursor:pointer; margin:0; display:inline-flex; align-items:center; gap:3px;">
+              <label class="toolbar-btn" title="Insertar Imagen" style="cursor:pointer; margin:0; display:inline-flex; align-items:center; gap:3px; position:relative;" onclick="this.querySelector('input').click()">
                 🖼️ Imagen
-                <input type="file" accept="image/*" style="display:none;" onchange="NotebookEditor.handleImageUpload(event)" />
+                <input type="file" accept="image/*" style="position:absolute; opacity:0; width:1px; height:1px; pointer-events:none;" onchange="NotebookEditor.handleImageUpload(event)" />
               </label>
 
               <button type="button" class="toolbar-btn" onclick="NotebookEditor.insertTable()" title="Insertar Tabla 3x3">
@@ -606,6 +810,10 @@ const NotebookEditor = {
 
               <button type="button" class="toolbar-btn" onclick="NotebookEditor.insertLink()" title="Insertar Enlace (Ctrl+K)">
                 🔗 Enlace
+              </button>
+
+              <button type="button" class="toolbar-btn" onclick="NotebookEditor.insertCodeBlock()" title="Insertar Bloque de Código (C++, Arduino, Python, etc.)">
+                💻 Código
               </button>
 
               <button type="button" class="toolbar-btn" onclick="NotebookEditor.insertPageBreakAtCursor()" title="Insertar Salto de Página tipo Word (Ctrl+Enter)" style="font-weight:700; color:var(--primary-700);">
@@ -620,6 +828,18 @@ const NotebookEditor = {
               <button type="button" class="toolbar-btn" onclick="NotebookEditor.insertCallout('concept')" title="Concepto Clave">📌 Concepto</button>
               <button type="button" class="toolbar-btn" onclick="NotebookEditor.insertCallout('activity')" title="Actividad en Clase">✍️ Actividad</button>
               <button type="button" class="toolbar-btn" onclick="NotebookEditor.insertCallout('homework')" title="Tarea para la Casa">🏠 Tarea</button>
+            </div>
+
+            <div class="toolbar-divider"></div>
+
+            <div class="toolbar-group" style="align-items:center; gap:4px;">
+              <span style="font-size:0.75rem; font-weight:700; color:var(--slate-600); margin-left:2px;">📐 Margen:</span>
+              <select id="nb-margin-select-full" class="form-input form-input-sm" onchange="NotebookEditor.setMargin(this.value)" style="font-size:0.78rem; padding:2px 6px; height:28px; width:auto; font-weight:600; cursor:pointer;" title="Márgenes de página">
+                <option value="1.27" selected>Estrecho (1.27 cm)</option>
+                <option value="2.0">Moderado (2.0 cm)</option>
+                <option value="2.54">Normal (2.54 cm)</option>
+                <option value="1.0">Compacto (1.0 cm)</option>
+              </select>
             </div>
           </div>
         </div>
@@ -661,7 +881,7 @@ const NotebookEditor = {
             <!-- ========================================================================= -->
             <div id="notebook-single-editor"
                  class="notebook-single-editor-body"
-                 contenteditable="true"
+                 contenteditable="${isCoord ? 'false' : 'true'}"
                  spellcheck="true"
                  placeholder="Escribe aquí el desarrollo de la clase, explicaciones, preguntas orientadoras, actividades o guías...">
               ${this._prepareInitialHtml(cls)}
@@ -675,13 +895,16 @@ const NotebookEditor = {
                 </label>
                 <span style="font-size:0.75rem; color:#64748b; font-weight:500;">(Cierre pedagógico / Última hoja)</span>
               </div>
-              <textarea id="hdr-edit-observations" class="table-textarea" rows="4" style="width:100%; box-sizing:border-box; font-size:0.85rem; line-height:1.5; background:#fffbeb; border:1px solid #fde68a; border-radius:6px; padding:8px 10px; font-family:inherit; color:#1e293b; resize:none; overflow:hidden;" placeholder="Redacta aquí observaciones específicas para esta sesión...">${this.escapeHtml(cls.observations || '')}</textarea>
+              <textarea id="hdr-edit-observations" class="table-textarea" rows="4" ${isCoord ? 'readonly' : ''} style="width:100%; box-sizing:border-box; font-size:0.85rem; line-height:1.5; background:#fffbeb; border:1px solid #fde68a; border-radius:6px; padding:8px 10px; font-family:inherit; color:#1e293b; resize:none; overflow:hidden;" placeholder="${isCoord ? 'Sin observaciones del docente' : 'Redacta aquí observaciones específicas para esta sesión...'}">${this.escapeHtml(cls.observations || '')}</textarea>
             </div>
 
             <!-- Pie de Página Institucional -->
             <div class="notebook-document-footer">
               <span>${this.escapeHtml(profile.institution || 'Colegio Hogar Madre de Dios')}</span>
-              <span id="doc-word-count-badge" style="color:var(--slate-500); font-size:0.78rem;">0 palabras</span>
+              <div style="display:flex; gap:10px; align-items:center;">
+                <span id="notebook-total-pages-badge" style="background:#e0f2fe; color:#0369a1; font-weight:700; font-size:0.75rem; padding:2px 8px; border-radius:10px; border:1px solid #bae6fd;">1 Hoja</span>
+                <span id="doc-word-count-badge" style="color:var(--slate-500); font-size:0.78rem;">0 palabras</span>
+              </div>
             </div>
           </div>
         </div>
@@ -710,27 +933,110 @@ const NotebookEditor = {
 
   /**
    * Prepara el HTML inicial garantizando que nunca quede en blanco, roto o en texto plano/Markdown colapsado.
-   * Integra armónicamente la guía de contenido y el taller/actividad práctica sin truncamientos.
+   * Si se detecta taller o actividad práctica, lo organiza en una hoja independiente con ficha institucional para el estudiante.
    */
   _prepareInitialHtml(cls) {
     let raw = '';
     if (cls) {
-      if (this.hasContent(cls.notebookContent)) {
-        raw = cls.notebookContent;
-      } else if (this.hasContent(cls.teacherNotebook?.studentNotebookContent)) {
-        raw = cls.teacherNotebook.studentNotebookContent;
-      } else if (this.hasContent(cls.teacherNotebook?.detailedContent)) {
-        raw = cls.teacherNotebook.detailedContent;
+      // 1. Auto-recuperación de texto original: si notebookContent o studentNotebookContent están
+      // truncados (< 100 caracteres) pero existe sourceText completo (> 200 caracteres),
+      // re-analizamos con ImportParser para restaurar el contenido íntegro sin intervención manual.
+      const parser = (typeof ImportParser !== 'undefined') ? ImportParser : (typeof window !== 'undefined' ? window.ImportParser : null);
+      if (parser && cls.teacherNotebook?.sourceText && cls.teacherNotebook.sourceText.length > 200) {
+        const studentNbLen = (cls.teacherNotebook?.studentNotebookContent || '').trim().length;
+        const nbCleanLen = (cls.notebookContent || '').replace(/<[^>]+>/g, '').trim().length;
+        if (studentNbLen < 100 || nbCleanLen < 100) {
+          try {
+            const reParsed = parser.parse(cls.teacherNotebook.sourceText);
+            if (reParsed.teacherNotebook?.studentNotebookContent && reParsed.teacherNotebook.studentNotebookContent.length > studentNbLen) {
+              cls.teacherNotebook.studentNotebookContent = reParsed.teacherNotebook.studentNotebookContent;
+              if (reParsed.teacherNotebook.practicalActivity) {
+                cls.teacherNotebook.practicalActivity = reParsed.teacherNotebook.practicalActivity;
+              }
+              if (reParsed.teacherNotebook.additionalNotes) {
+                cls.teacherNotebook.additionalNotes = reParsed.teacherNotebook.additionalNotes;
+              }
+              if (reParsed.curriculum?.topic && (!cls.curriculum?.topic || cls.curriculum.topic.length < 20)) {
+                if (!cls.curriculum) cls.curriculum = {};
+                cls.curriculum.topic = reParsed.curriculum.topic;
+                cls.topic = reParsed.curriculum.topic;
+              }
+              // Eliminar notebookContent truncado para que se regenere con el contenido restaurado
+              delete cls.notebookContent;
+
+              // Guardar la clase restaurada de forma persistente
+              try {
+                if (cls.id && typeof ClassRepository !== 'undefined' && ClassRepository.saveClass) {
+                  ClassRepository.saveClass(cls, cls.teacherId);
+                } else if (typeof StorageService !== 'undefined' && cls.date) {
+                  const plan = StorageService.getPlanByDate(cls.date);
+                  if (plan && plan.classes) {
+                    const idx = plan.classes.findIndex(c => c.id === cls.id);
+                    if (idx !== -1) {
+                      plan.classes[idx] = cls;
+                      StorageService.savePlan(cls.date, plan);
+                    }
+                  }
+                }
+              } catch (saveErr) {
+                console.warn('[NotebookEditor] Error persistiendo clase auto-reparada:', saveErr);
+              }
+            }
+          } catch (e) {
+            console.warn('[NotebookEditor] Error en auto-recuperación de sourceText:', e);
+          }
+        }
+      }
+
+      // 2. Comprobar si notebookContent está truncado en comparación con studentNotebookContent
+      const studentNb = cls.teacherNotebook?.studentNotebookContent || '';
+      const detailed = cls.teacherNotebook?.detailedContent || '';
+      const nbContent = cls.notebookContent || '';
+      const isNbTruncated = nbContent.replace(/<[^>]+>/g, '').trim().length < 100 && studentNb.trim().length > 100;
+
+      if (this.hasContent(nbContent) && !isNbTruncated) {
+        raw = nbContent;
+      } else if (this.hasContent(studentNb)) {
+        raw = studentNb;
+      } else if (this.hasContent(detailed)) {
+        raw = detailed;
+      } else if (this.hasContent(cls.didacticSequence?.desarrollo)) {
+        const top = cls.curriculum?.topic || cls.topic || 'Desarrollo de la Clase';
+        raw = `<h2>🎯 ${this.escapeHtml(top)}</h2>\n\n${cls.didacticSequence.desarrollo}`;
       }
     }
+    raw = this.cleanDocumentArtifacts(raw);
 
     // Comprobar si existe actividad práctica / taller registrada en la clase
-    const practical = (cls?.teacherNotebook?.practicalActivity || cls?.practicalActivity || cls?.actividadPractica || cls?.taller || '').trim();
+    const practical = this.cleanDocumentArtifacts((cls?.teacherNotebook?.practicalActivity || cls?.practicalActivity || cls?.actividadPractica || cls?.taller || '').trim());
 
     // Limpiar posibles cabeceras truncadas o huérfanas como "TALLER / " o "TALLER:" al final del contenido
     if (raw) {
       raw = raw.replace(/(?:<p>\s*)?(?:•\s*)?TALLER\s*[\/:\-]?\s*(?:<\/p>)?\s*$/i, '').trim();
     }
+
+    const subDisplay = cls?.subjectName || cls?.subject || 'Clase';
+    const grdDisplay = cls?.gradeName || cls?.grade || '';
+    const rawTopic = cls?.curriculum?.topic || cls?.topic || '';
+    const cleanTopic = String(rawTopic).replace(/^[\s\*#_]+/, '').replace(/[\s\*#_]+$/, '').trim();
+
+    // Salto de página explícito para garantizar que el taller inicie en hoja independiente
+    const pageBreakHtml = '<div class="notebook-page-break" contenteditable="false" data-page-break="true"><div class="page-break-line"></div><span class="page-break-label">📄 Hoja Independiente: Taller / Ejercicio Práctico</span></div>';
+
+    // Ficha de encabezado para el estudiante lista para imprimir y entregar
+    const worksheetHeader = `
+<div class="notebook-student-worksheet-header" style="border:2px solid #1e3a8a; border-radius:6px; padding:10px 14px; margin:0.8rem 0; background:#f8fafc; page-break-inside:avoid; break-inside:avoid;">
+  <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1.5px solid #cbd5e1; padding-bottom:4px; margin-bottom:6px;">
+    <h2 style="margin:0; padding:0; border:none; font-size:1.1rem; font-weight:800; color:#1e3a8a; text-transform:uppercase; letter-spacing:0.5px;">✍️ Taller / Actividad Práctica de la Clase</h2>
+    <span style="font-size:0.85rem; font-weight:700; color:#475569;">${this.escapeHtml(subDisplay)}${grdDisplay ? ' - Grado ' + this.escapeHtml(grdDisplay) : ''}</span>
+  </div>
+  <div style="display:grid; grid-template-columns:2.5fr 1fr 1fr; gap:8px; font-size:0.82rem; color:#1e293b; margin-top:6px; line-height:1.4;">
+    <div><strong>Estudiante:</strong> ________________________________________________</div>
+    <div><strong>Fecha:</strong> ______________</div>
+    <div><strong>Calificación:</strong> _________</div>
+  </div>
+  ${cleanTopic ? `<div style="margin-top:6px; font-size:0.82rem; color:#1e293b; border-top:1px dashed #e2e8f0; padding-top:4px;"><strong>Tema:</strong> ${this.escapeHtml(cleanTopic)}</div>` : ''}
+</div>`.trim();
 
     if (practical) {
       // Verificar si el contenido práctico ya está presente dentro de raw
@@ -740,18 +1046,39 @@ const NotebookEditor = {
 
       if (!alreadyIncluded) {
         const practicalFormatted = this.formatNotebookHtml(practical);
-        const sectionHeading = '<h2>✍️ Taller / Actividad Práctica</h2>';
 
         if (raw && raw.trim()) {
-          raw = raw + '\n\n' + sectionHeading + '\n' + practicalFormatted;
+          const mainFormatted = this.formatNotebookHtml(raw);
+          return `${mainFormatted}\n\n${pageBreakHtml}\n\n${worksheetHeader}\n${practicalFormatted}`;
         } else {
-          raw = sectionHeading + '\n' + practicalFormatted;
+          return `${worksheetHeader}\n${practicalFormatted}`;
+        }
+      } else {
+        // Si el contenido ya estaba dentro de raw pero no tiene el salto de página, independizarlo
+        if (!raw.includes('notebook-page-break') && /<h[1-6][^>]*>(?:✍️\s*)?Taller\b/i.test(raw)) {
+          raw = raw.replace(/(<h[1-6][^>]*>(?:✍️\s*)?Taller\b)/i, `${pageBreakHtml}\n$1`);
         }
       }
     }
 
     if (raw && raw.trim()) {
-      return this.formatNotebookHtml(raw);
+      const formatted = this.formatNotebookHtml(raw);
+      // Si el contenido original era un párrafo monolítico, actualizarlo en la clase para que quede estructurado de forma persistente
+      const pCount = (raw.match(/<p\b/gi) || []).length;
+      const plainTextLen = raw.replace(/<[^>]+>/g, '').trim().length;
+      const isMonolithic = (pCount <= 2 && plainTextLen > 250) && 
+        (/(?:TEMAS\s+DEL|DESEMPEÑOS?\s+DE|CRITERIOS?\s+DE|Fase\s+de|Eje\s+temático|Tiempo:)/i.test(raw) || /(?:[A-ZÁÉÍÓÚÑ][^:\n]{2,40}:\s+){2,}/.test(raw));
+      if (isMonolithic && formatted && cls) {
+        cls.notebookContent = formatted;
+        if (!cls.teacherNotebook) cls.teacherNotebook = {};
+        cls.teacherNotebook.studentNotebookContent = formatted;
+        try {
+          if (cls.id && typeof ClassRepository !== 'undefined' && ClassRepository.saveClass) {
+            ClassRepository.saveClass(cls, cls.teacherId);
+          }
+        } catch (eSave) {}
+      }
+      return formatted;
     }
     return this.generateDefaultContentFromClass(cls);
   },
@@ -765,6 +1092,28 @@ const NotebookEditor = {
     if (!editor) return;
 
     this._lastSavedContent = editor.innerHTML;
+
+    // Configurar párrafos estándar de Word/Google Docs al presionar Enter (<p> en lugar de <div>)
+    try {
+      document.execCommand('defaultParagraphSeparator', false, 'p');
+    } catch (e) {}
+
+    editor.addEventListener('focus', () => {
+      try {
+        document.execCommand('defaultParagraphSeparator', false, 'p');
+      } catch (e) {}
+    });
+
+    // Guardar selección activa continuamente
+    editor.addEventListener('mouseup', () => this._saveSelection());
+    editor.addEventListener('keyup', () => this._saveSelection());
+
+    if (!this._boundSelectionChange) {
+      this._boundSelectionChange = true;
+      document.addEventListener('selectionchange', () => {
+        this._saveSelection();
+      });
+    }
 
     // Autoguardado con debounce optimizado (2000ms al teclear)
     editor.oninput = () => {
@@ -824,11 +1173,11 @@ const NotebookEditor = {
             const blob = clipboardData.items[i].getAsFile();
             if (blob) {
               e.preventDefault();
-              const reader = new FileReader();
-              reader.onload = (evt) => {
-                this.insertImageAtCursor(evt.target.result);
-              };
-              reader.readAsDataURL(blob);
+              this._compressImage(blob, 1280, 0.82).then((compressed) => {
+                if (compressed) {
+                  this.insertImageAtCursor(compressed);
+                }
+              }).catch(() => {});
               return;
             }
           }
@@ -842,7 +1191,11 @@ const NotebookEditor = {
         // Si viene texto plano o Markdown que necesita estructuración pedagógica
         if (text && (/\*\*|•|#{1,3}\s+|\d+[\.\)]\s+[A-ZÁÉÍÓÚÑ¿¡]|\bRegla\b|\bPaso\b/.test(text) || !html)) {
           e.preventDefault();
-          const formatted = this.formatNotebookHtml(text);
+          let formatted = this.formatNotebookHtml(text);
+          // Garantizar que no se inyecten cajas azules automáticas (callouts) al pegar
+          if (typeof this._cleanAutoCallouts === 'function') {
+            formatted = this._cleanAutoCallouts(formatted);
+          }
           if (formatted) {
             document.execCommand('insertHTML', false, formatted);
             this.triggerAutoSave(false);
@@ -852,10 +1205,15 @@ const NotebookEditor = {
             }
             return;
           }
-        } else if (html && /<(?:p|h[1-6]|ul|ol|table|b|strong|i|em)[^>]*>/i.test(html)) {
-          if (/\*\*|•|\d+[\.\)]\s+[A-ZÁÉÍÓÚÑ¿¡]/.test(html)) {
+        } else if (html && /<(?:p|h[1-6]|ul|ol|table|b|strong|i|em|div)[^>]*>/i.test(html)) {
+          // Desarmar cualquier cuadro azul conflictivo que venga en el HTML pegado
+          let cleanHtml = html;
+          if (typeof this._cleanAutoCallouts === 'function') {
+            cleanHtml = this._cleanAutoCallouts(cleanHtml);
+          }
+          if (/\*\*|•|\d+[\.\)]\s+[A-ZÁÉÍÓÚÑ¿¡]/.test(cleanHtml)) {
             e.preventDefault();
-            const formatted = this.formatNotebookHtml(html);
+            const formatted = this.formatNotebookHtml(cleanHtml);
             if (formatted) {
               document.execCommand('insertHTML', false, formatted);
               this.triggerAutoSave(false);
@@ -872,25 +1230,45 @@ const NotebookEditor = {
       }, 50);
     };
 
-    // Salvaguarda al cambiar de pestaña o cerrar
-    window.addEventListener('beforeunload', () => this.saveCurrentNotebookContent(false));
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') {
-        this.saveCurrentNotebookContent(false);
-      }
-    });
-
-    // === FIX CRÍTICO: Evitar pérdida de foco al hacer clic en cualquier botón de la toolbar ===
-    // Sin este fix, el editor pierde la selección y execCommand falla silenciosamente
-    const toolbar = document.getElementById('notebook-word-toolbar');
-    if (toolbar) {
-      toolbar.addEventListener('mousedown', (e) => {
-        e.preventDefault(); // Mantener foco y selección en el editor
+    // Salvaguarda al cambiar de pestaña o cerrar (registrar una sola vez globalmente)
+    if (!this._boundUnloadEvents) {
+      this._boundUnloadEvents = true;
+      window.addEventListener('beforeunload', () => this.saveCurrentNotebookContent(false));
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') {
+          this.saveCurrentNotebookContent(false);
+        }
       });
     }
 
-    // === Interacciones de imágenes (redimensionar, alinear, eliminar) ===
-    this._initImageInteractions();
+    // === FIX CRÍTICO: Evitar pérdida de foco al hacer clic en botones de la toolbar ===
+    // Permitir apertura de menús desplegables nativos en <select>, <option>, <input> y <label>
+    document.querySelectorAll('.notebook-word-toolbar').forEach(toolbar => {
+      toolbar.onmousedown = (e) => {
+        const isInteractiveFormEl = e.target.closest('select, input, textarea, label, option');
+        if (isInteractiveFormEl) {
+          this._saveSelection();
+          return; // No llamar a preventDefault para que el select o picker se despliegue normalmente
+        }
+        e.preventDefault(); // Mantener foco y selección en el editor para botones estándar
+      };
+    });
+
+    // === Cabecera sticky compacta al hacer scroll para optimizar espacio visual ===
+    const stickyHeader = document.getElementById('notebook-sticky-header-wrapper');
+    if (stickyHeader && !this._boundStickyScroll) {
+      this._boundStickyScroll = true;
+      window.addEventListener('scroll', () => {
+        if (window.scrollY > 30) {
+          stickyHeader.classList.add('is-compact');
+        } else {
+          stickyHeader.classList.remove('is-compact');
+        }
+      }, { passive: true });
+    }
+
+    // === Nodos de redimensión e interacciones tipo Word (Tablas e Imágenes) ===
+    this._initElementResizer();
 
     // === Visualización de cambios de página ===
     this._initPageBreakOverlay();
@@ -926,6 +1304,34 @@ const NotebookEditor = {
   },
 
   /**
+   * Obtiene el HTML limpio del editor, removiendo espaciadores y marcadores efímeros de paginación
+   */
+  getCleanEditorHtml(editor) {
+    if (!editor) return '';
+    let html = '';
+    if (typeof PaginationEngine !== 'undefined' && PaginationEngine.getCleanHtml) {
+      html = PaginationEngine.getCleanHtml(editor);
+    } else {
+      const clone = editor.cloneNode(true);
+      clone.querySelectorAll('.nb-page-break-spacer, .nb-auto-page-break').forEach(el => el.remove());
+      clone.querySelectorAll('.nb-page-break-target').forEach(el => {
+        el.classList.remove('nb-page-break-target');
+        if (el.dataset.origMarginTop !== undefined) {
+          el.style.marginTop = el.dataset.origMarginTop;
+          delete el.dataset.origMarginTop;
+        } else {
+          el.style.marginTop = '';
+        }
+        if (!el.getAttribute('style') || el.getAttribute('style').trim() === '') {
+          el.removeAttribute('style');
+        }
+      });
+      html = clone.innerHTML;
+    }
+    return this.cleanDocumentArtifacts(html);
+  },
+
+  /**
    * Guarda de forma atómica el contenido del cuaderno en PlanRepository y ClassRepository
    * Evita re-procesar si el contenido no ha cambiado realmente.
    */
@@ -935,10 +1341,15 @@ const NotebookEditor = {
       this._autoSaveTimer = null;
     }
 
+    // Modo Coordinación: Exclusivamente lectura y descargas (no modifica el contenido de Manuel)
+    if (typeof UserService !== 'undefined' && UserService.isCoordinatorActive && UserService.isCoordinatorActive()) {
+      return false;
+    }
+
     const editor = document.getElementById('notebook-single-editor');
     if (!editor || (!this.currentClassId && this.currentClassIndex === null)) return false;
 
-    const currentHtml = editor.innerHTML;
+    const currentHtml = this.getCleanEditorHtml(editor);
     const hdrObs = document.getElementById('hdr-edit-observations');
     const obsVal = hdrObs ? hdrObs.value.trim() : (this.currentClassData?.observations || '');
 
@@ -998,16 +1409,16 @@ const NotebookEditor = {
       }
     }
 
-    // Persistir atómicamente a través de StorageService.saveClass por clase aislada
+    // Persistir a través de StorageService solo como fallback si ClassRepository no estaba disponible
     let success = savedInClassRepo;
-    if (dateStr && classId && typeof StorageService !== 'undefined' && StorageService.saveClass) {
+    if (!savedInClassRepo && dateStr && classId && typeof StorageService !== 'undefined' && StorageService.saveClass) {
       const updatedClass = {
         notebookContent: this.hasContent(currentHtml) ? currentHtml : (this.currentClassData?.notebookContent || ''),
         observations: obsVal
       };
       const res = StorageService.saveClass(dateStr, classId, updatedClass);
       if (res && res.plan) success = true;
-    } else if (dateStr && typeof StorageService !== 'undefined' && StorageService.savePlan) {
+    } else if (!savedInClassRepo && dateStr && typeof StorageService !== 'undefined' && StorageService.savePlan) {
       const planToSave = window.Planner?.currentPlan || StorageService.getPlanByDate(dateStr);
       if (planToSave) {
         if (StorageService.savePlan(dateStr, planToSave)) success = true;
@@ -1070,7 +1481,7 @@ const NotebookEditor = {
       this.currentClassData = plan.classes[this.currentClassIndex];
       const editor = document.getElementById('notebook-single-editor');
       if (editor) {
-        editor.innerHTML = this.currentClassData.notebookContent || '';
+        editor.innerHTML = this._prepareInitialHtml(this.currentClassData);
         this._lastSavedContent = editor.innerHTML;
       }
       const hdrObs = document.getElementById('hdr-edit-observations');
@@ -1204,82 +1615,237 @@ const NotebookEditor = {
   exec(cmd, val = null) {
     const editor = document.getElementById('notebook-single-editor');
     if (!editor) return;
-    // Garantizar foco activo antes del comando (evita fallo silencioso al hacer clic en toolbar)
-    editor.focus();
+    this._restoreSelection();
     try {
       document.execCommand(cmd, false, val);
     } catch (e) {
       console.warn('[NotebookEditor] execCommand falló:', cmd, e);
     }
+    this._saveSelection();
     this.triggerAutoSave(false);
   },
 
   formatBlock(tag) {
     if (!tag) return;
-    this.exec('formatBlock', '<' + tag + '>');
+    this._restoreSelection();
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+
+    let success = false;
+    try {
+      success = document.execCommand('formatBlock', false, '<' + tag + '>');
+    } catch (e) {}
+    if (!success) {
+      try {
+        success = document.execCommand('formatBlock', false, tag);
+      } catch (e) {}
+    }
+
+    const block = this._getEnclosingBlock();
+    if (block && block.tagName.toLowerCase() !== tag.toLowerCase()) {
+      const newEl = document.createElement(tag);
+      while (block.firstChild) {
+        newEl.appendChild(block.firstChild);
+      }
+      if (block.style.cssText) newEl.style.cssText = block.style.cssText;
+      block.parentNode.replaceChild(newEl, block);
+
+      const newRange = document.createRange();
+      newRange.selectNodeContents(newEl);
+      newRange.collapse(false);
+      sel.removeAllRanges();
+      sel.addRange(newRange);
+    }
+    this._saveSelection();
+    this.triggerAutoSave(false);
   },
 
   setFontFamily(family) {
     if (!family) return;
-    this.exec('fontName', family);
+    this._restoreSelection();
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+
+    if (sel.isCollapsed) {
+      const block = this._getEnclosingBlock();
+      if (block) {
+        block.style.fontFamily = family;
+      }
+    } else {
+      try {
+        document.execCommand('fontName', false, family);
+      } catch (e) {}
+      const editor = document.getElementById('notebook-single-editor');
+      if (editor) {
+        editor.querySelectorAll('font[face]').forEach(fontEl => {
+          const span = document.createElement('span');
+          span.style.fontFamily = fontEl.getAttribute('face');
+          while (fontEl.firstChild) span.appendChild(fontEl.firstChild);
+          fontEl.parentNode.replaceChild(span, fontEl);
+        });
+      }
+    }
+    this._saveSelection();
+    this.triggerAutoSave(false);
   },
 
   setFontSize(size) {
     if (!size) return;
-    this.exec('fontSize', '3');
+    this._restoreSelection();
     const sel = window.getSelection();
-    if (sel && sel.rangeCount > 0 && !sel.isCollapsed) {
+    if (!sel || sel.rangeCount === 0) return;
+    const range = sel.getRangeAt(0);
+
+    if (sel.isCollapsed) {
+      const block = this._getEnclosingBlock();
+      if (block) {
+        block.style.fontSize = size;
+      } else {
+        const span = document.createElement('span');
+        span.style.fontSize = size;
+        span.innerHTML = '&#8203;';
+        range.insertNode(span);
+        sel.removeAllRanges();
+        const newRange = document.createRange();
+        newRange.setStart(span.firstChild, 1);
+        newRange.collapse(true);
+        sel.addRange(newRange);
+      }
+    } else {
       const span = document.createElement('span');
       span.style.fontSize = size;
-      const range = sel.getRangeAt(0);
-      span.appendChild(range.extractContents());
+      const fragment = range.extractContents();
+      fragment.querySelectorAll('*').forEach(el => {
+        if (el.style && el.style.fontSize) el.style.fontSize = '';
+      });
+      span.appendChild(fragment);
       range.insertNode(span);
       sel.removeAllRanges();
       const newRange = document.createRange();
       newRange.selectNodeContents(span);
       sel.addRange(newRange);
     }
+    this._saveSelection();
+    this.triggerAutoSave(false);
+  },
+
+  setTextColor(color) {
+    if (!color) return;
+    this._restoreSelection();
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+
+    if (sel.isCollapsed) {
+      const block = this._getEnclosingBlock();
+      if (block) {
+        block.style.color = color;
+      }
+    } else {
+      let ok = false;
+      try {
+        ok = document.execCommand('foreColor', false, color);
+      } catch (e) {}
+      if (!ok) {
+        this._wrapSelectionWithStyle({ color: color });
+      } else {
+        const editor = document.getElementById('notebook-single-editor');
+        if (editor) {
+          editor.querySelectorAll('font[color]').forEach(fontEl => {
+            const span = document.createElement('span');
+            span.style.color = fontEl.getAttribute('color');
+            while (fontEl.firstChild) span.appendChild(fontEl.firstChild);
+            fontEl.parentNode.replaceChild(span, fontEl);
+          });
+        }
+      }
+    }
+    this._saveSelection();
+    this.triggerAutoSave(false);
+  },
+
+  setHighlightColor(color) {
+    if (!color) return;
+    this._restoreSelection();
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+
+    if (sel.isCollapsed) {
+      const block = this._getEnclosingBlock();
+      if (block) {
+        block.style.backgroundColor = color;
+      }
+    } else {
+      let ok = false;
+      try {
+        ok = document.execCommand('hiliteColor', false, color);
+      } catch (e) {}
+      if (!ok) {
+        try {
+          ok = document.execCommand('backColor', false, color);
+        } catch (e) {}
+      }
+      if (!ok) {
+        this._wrapSelectionWithStyle({ backgroundColor: color });
+      }
+    }
+    this._saveSelection();
     this.triggerAutoSave(false);
   },
 
   insertPageBreakAtCursor() {
     const breakHtml = '<div class="notebook-page-break" contenteditable="false" data-page-break="true"><div class="page-break-line"></div><span class="page-break-label">📄 Salto de Página</span></div><p><br/></p>';
-    this.exec('insertHTML', breakHtml);
+    this._insertHtmlAtCursor(breakHtml);
+    setTimeout(() => this.recalculatePagination(), 50);
   },
 
   insertLink() {
-    const url = prompt('Introduce la URL del enlace (ej: https://...):');
-    if (url) {
-      this.exec('createLink', url);
+    this._restoreSelection();
+    const sel = window.getSelection();
+    const selectedText = sel ? sel.toString().trim() : '';
+    const url = prompt('Introduce la URL del enlace (ej: https://...):', 'https://');
+    if (!url || !url.trim() || url.trim() === 'https://') return;
+    const cleanUrl = url.trim();
+    if (selectedText) {
+      this.exec('createLink', cleanUrl);
+    } else {
+      const linkHtml = `<a href="${this.escapeHtml(cleanUrl)}" target="_blank" rel="noopener noreferrer">${this.escapeHtml(cleanUrl)}</a>`;
+      this._insertHtmlAtCursor(linkHtml);
     }
   },
 
   insertTable() {
     const tableHtml = `
-      <table class="notebook-table" style="width:100%; border-collapse:collapse; margin:1rem 0;">
+      <table class="notebook-table" style="width:100%; border-collapse:collapse; margin:1rem 0; border:1px solid #cbd5e1;">
         <thead>
-          <tr>
-            <th style="border:1px solid #cbd5e1; padding:8px; background:#f1f5f9;">Columna 1</th>
-            <th style="border:1px solid #cbd5e1; padding:8px; background:#f1f5f9;">Columna 2</th>
-            <th style="border:1px solid #cbd5e1; padding:8px; background:#f1f5f9;">Columna 3</th>
+          <tr style="background:#f1f5f9;">
+            <th style="border:1px solid #cbd5e1; padding:8px 12px; font-weight:700; text-align:left;">Columna 1</th>
+            <th style="border:1px solid #cbd5e1; padding:8px 12px; font-weight:700; text-align:left;">Columna 2</th>
+            <th style="border:1px solid #cbd5e1; padding:8px 12px; font-weight:700; text-align:left;">Columna 3</th>
           </tr>
         </thead>
         <tbody>
           <tr>
-            <td style="border:1px solid #cbd5e1; padding:8px;">Dato 1</td>
-            <td style="border:1px solid #cbd5e1; padding:8px;">Dato 2</td>
-            <td style="border:1px solid #cbd5e1; padding:8px;">Dato 3</td>
+            <td style="border:1px solid #cbd5e1; padding:8px 12px;">Dato 1</td>
+            <td style="border:1px solid #cbd5e1; padding:8px 12px;">Dato 2</td>
+            <td style="border:1px solid #cbd5e1; padding:8px 12px;">Dato 3</td>
           </tr>
           <tr>
-            <td style="border:1px solid #cbd5e1; padding:8px;">Dato 4</td>
-            <td style="border:1px solid #cbd5e1; padding:8px;">Dato 5</td>
-            <td style="border:1px solid #cbd5e1; padding:8px;">Dato 6</td>
+            <td style="border:1px solid #cbd5e1; padding:8px 12px;">Dato 4</td>
+            <td style="border:1px solid #cbd5e1; padding:8px 12px;">Dato 5</td>
+            <td style="border:1px solid #cbd5e1; padding:8px 12px;">Dato 6</td>
           </tr>
         </tbody>
       </table>
       <p><br/></p>
     `;
-    this.exec('insertHTML', tableHtml);
+    this._insertHtmlAtCursor(tableHtml);
+    setTimeout(() => {
+      const editor = document.getElementById('notebook-single-editor');
+      const tables = editor?.querySelectorAll('table');
+      if (tables && tables.length > 0) {
+        this._selectResizerElement(tables[tables.length - 1]);
+      }
+    }, 80);
   },
 
   insertCallout(type) {
@@ -1291,23 +1857,122 @@ const NotebookEditor = {
     } else if (type === 'homework') {
       calloutHtml = '<div class="notebook-callout homework"><strong>🏠 Tarea / Compromiso:</strong><p>Actividades o ejercicios para desarrollar en casa.</p></div><p><br/></p>';
     }
-    this.exec('insertHTML', calloutHtml);
+    this._insertHtmlAtCursor(calloutHtml);
   },
 
-  handleImageUpload(e) {
+  insertCodeBlock(lang = 'C++ / Arduino') {
+    const editor = document.getElementById('notebook-single-editor');
+    if (!editor) return;
+
+    let selectedText = '';
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0 && !sel.isCollapsed) {
+      selectedText = sel.toString();
+    }
+
+    let codeContent = selectedText.trim();
+    if (!codeContent) {
+      codeContent = '// Escribe o pega aquí tu código (C++, Arduino, Python, etc.)\nvoid setup() {\n  Serial.begin(115200);\n}\n\nvoid loop() {\n  \n}';
+    }
+
+    if (typeof ImportParser !== 'undefined' && typeof ImportParser.repairCodeFormatting === 'function') {
+      codeContent = ImportParser.repairCodeFormatting(codeContent);
+    }
+
+    const escaped = this.escapeHtml(codeContent);
+    const codeHtml = `
+<div class="notebook-code-block" style="background:#f8fafc; border:1.5px solid #cbd5e1; border-left:4px solid #2563eb; border-radius:6px; margin:0.8rem 0; padding:10px 14px; font-family:'Consolas', 'Courier New', monospace; font-size:0.82rem; line-height:1.45; overflow-x:auto; white-space:pre-wrap; word-break:break-word; color:#0f172a; page-break-inside:avoid; break-inside:avoid;">
+  <div style="font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size:0.75rem; font-weight:700; color:#2563eb; text-transform:uppercase; margin-bottom:6px; border-bottom:1px solid #e2e8f0; padding-bottom:4px; letter-spacing:0.5px; user-select:none; display:flex; justify-content:space-between; align-items:center;">
+    <span>💻 Código / Sketch (${lang})</span>
+  </div>
+  <pre style="margin:0; font-family:inherit; font-size:inherit; white-space:pre-wrap; word-break:break-word; color:inherit; background:transparent; border:none; padding:0;"><code>${escaped}</code></pre>
+</div><p><br/></p>`.trim();
+
+    this._insertHtmlAtCursor(codeHtml);
+  },
+
+  /**
+   * Comprime y optimiza imágenes a tamaño web/documento (máx 1280px, 82% calidad)
+   * Evita bloqueos del navegador por saturación de memoria base64 y cuotas de almacenamiento
+   */
+  _compressImage(fileOrDataUrl, maxWidth = 1280, quality = 0.82) {
+    return new Promise((resolve) => {
+      if (!fileOrDataUrl) return resolve(null);
+      if (typeof window === 'undefined' || typeof document === 'undefined') {
+        return resolve(typeof fileOrDataUrl === 'string' ? fileOrDataUrl : null);
+      }
+
+      const img = new Image();
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return resolve(typeof fileOrDataUrl === 'string' ? fileOrDataUrl : null);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+
+        try {
+          const compressed = canvas.toDataURL('image/jpeg', quality);
+          resolve(compressed);
+        } catch (e) {
+          resolve(typeof fileOrDataUrl === 'string' ? fileOrDataUrl : null);
+        }
+      };
+      img.onerror = () => {
+        resolve(typeof fileOrDataUrl === 'string' ? fileOrDataUrl : null);
+      };
+
+      if (typeof fileOrDataUrl === 'string') {
+        img.src = fileOrDataUrl;
+      } else if (fileOrDataUrl instanceof Blob) {
+        const reader = new FileReader();
+        reader.onload = (e) => { img.src = e.target.result; };
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(fileOrDataUrl);
+      } else {
+        resolve(null);
+      }
+    });
+  },
+
+  async handleImageUpload(e) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      this.insertImageAtCursor(evt.target.result);
-    };
-    reader.readAsDataURL(file);
+    try {
+      const compressed = await this._compressImage(file, 1280, 0.82);
+      if (compressed) {
+        this.insertImageAtCursor(compressed);
+      }
+    } catch (err) {
+      console.warn('[NotebookEditor] Error al procesar imagen:', err);
+    }
     e.target.value = '';
   },
 
   insertImageAtCursor(dataUrl) {
+    if (!dataUrl) return;
     const imgHtml = '<div style="text-align:center; margin:1rem 0;"><img src="' + dataUrl + '" alt="Imagen pedagógica" style="max-width:100%; height:auto; border-radius:6px; box-shadow:0 2px 6px rgba(0,0,0,0.1);" /></div><p><br/></p>';
-    this.exec('insertHTML', imgHtml);
+    this._insertHtmlAtCursor(imgHtml);
+    this.triggerAutoSave(false);
+    setTimeout(() => {
+      this.recalculatePagination();
+      const editor = document.getElementById('notebook-single-editor');
+      const imgs = editor?.querySelectorAll('img');
+      if (imgs && imgs.length > 0) {
+        this._selectResizerElement(imgs[imgs.length - 1]);
+      }
+    }, 100);
   },
 
   toggleTemplatesMenu(e) {
@@ -1399,9 +2064,31 @@ const NotebookEditor = {
     const topic = cls.curriculum?.topic || cls.topic || 'Guía de Clase';
 
     const editor = document.getElementById('notebook-single-editor');
-    const bodyHtml = editor ? editor.innerHTML : (cls.notebookContent || '');
+    let bodyHtml = '';
+    if (editor) {
+      const clone = editor.cloneNode(true);
+      // Reemplazar espaciadores de página de PaginationEngine por saltos de página nativos de Word
+      clone.querySelectorAll('.nb-page-break-spacer').forEach(sp => {
+        const br = document.createElement('br');
+        br.setAttribute('clear', 'all');
+        br.style.cssText = 'page-break-before:always; mso-break-type:page-break;';
+        sp.parentNode.replaceChild(br, sp);
+      });
+      clone.querySelectorAll('.nb-auto-page-break').forEach(el => el.remove());
+      bodyHtml = this.cleanDocumentArtifacts(clone.innerHTML);
+    } else {
+      bodyHtml = this.cleanDocumentArtifacts(cls.notebookContent || '');
+    }
+
     const hdrObs = document.getElementById('hdr-edit-observations');
     const obsVal = hdrObs ? hdrObs.value.trim() : (cls.observations || '');
+
+    const paperSize = (typeof PageConfig !== 'undefined' && PageConfig.paperSize === 'a4') ? 'a4' : 'letter';
+    const marginVal = (typeof PageConfig !== 'undefined') ? PageConfig.margins.topCm : 1.27;
+
+    // Comprobar si las observaciones tienen salto de página previo
+    const obsCard = document.querySelector('.notebook-observations-card');
+    const obsHasBreak = obsCard && obsCard.previousElementSibling && obsCard.previousElementSibling.classList.contains('nb-page-break-spacer');
 
     const wordContent = `
       <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
@@ -1419,13 +2106,21 @@ const NotebookEditor = {
         <![endif]-->
         <style>
           @page Section1 {
-            size: letter portrait;
-            margin: 1.27cm 1.27cm 1.27cm 1.27cm;
+            size: ${paperSize} portrait;
+            margin: ${marginVal}cm ${marginVal}cm ${marginVal}cm ${marginVal}cm;
             mso-header-margin: 36pt;
             mso-footer-margin: 36pt;
             mso-paper-source: 0;
           }
           div.Section1 { page: Section1; }
+          .nb-page-break-target, .notebook-page-break {
+            page-break-before: always;
+            mso-break-type: page-break;
+          }
+          .nb-auto-page-break, .nb-page-break-spacer {
+            display: none;
+            mso-hide: all;
+          }
           body {
             font-family: Calibri, Arial, sans-serif;
             font-size: 11pt;
@@ -1547,6 +2242,7 @@ const NotebookEditor = {
 
           <!-- Observaciones Pedagógicas -->
           ${obsVal ? `
+            ${obsHasBreak ? `<br clear="all" style="page-break-before:always; mso-break-type:page-break;" />` : ''}
             <div class="observations-box">
               <strong style="color: #92400e; font-size: 10pt;">📝 Observaciones Pedagógicas de la Sesión:</strong>
               <p style="margin: 4pt 0 0 0; font-size: 9.5pt; white-space: pre-wrap;">${this.escapeHtml(obsVal)}</p>
@@ -1599,11 +2295,26 @@ const NotebookEditor = {
     const pageBreakMarkers = document.querySelectorAll('.nb-auto-page-break');
     pageBreakMarkers.forEach(el => { el.dataset.printHidden = '1'; el.style.display = 'none'; });
 
-    // 1c. Ocultar el contador de palabras
-    const wordCountBadge = document.getElementById('doc-word-count-badge');
-    if (wordCountBadge) wordCountBadge.dataset.printHidden = '1', wordCountBadge.style.display = 'none';
+    // 1c. Despejar márgenes dinámicos aplicados por el separador de pantalla
+    // Evita que Chromium sume el margen de pantalla (150-200px) encima de la hoja impresa
+    const editor = document.getElementById('notebook-single-editor');
+    const breakTargets = editor ? editor.querySelectorAll('.nb-page-break-target, [data-orig-margin-top]') : [];
+    const savedMargins = [];
+    breakTargets.forEach(el => {
+      savedMargins.push({ el, marginTop: el.style.marginTop });
+      el.style.marginTop = '';
+    });
 
-    // 1d. Inyectar @page con tamaño carta y márgenes correctos
+    // 1d. Ocultar el contador de palabras
+    const wordCountBadge = document.getElementById('doc-word-count-badge');
+    if (wordCountBadge) {
+      wordCountBadge.dataset.printHidden = '1';
+      wordCountBadge.style.display = 'none';
+    }
+
+    // 1e. Inyectar @page con tamaño y márgenes sincronizados desde PageConfig
+    const paperSize = (typeof PageConfig !== 'undefined' && PageConfig.paperSize === 'a4') ? 'a4' : 'letter';
+    const marginVal = (typeof PageConfig !== 'undefined') ? PageConfig.margins.topCm : 1.27;
     let printStyle = document.getElementById('notebook-print-orientation-style');
     if (!printStyle) {
       printStyle = document.createElement('style');
@@ -1612,8 +2323,8 @@ const NotebookEditor = {
     }
     printStyle.textContent = `
       @page {
-        size: letter portrait;
-        margin: 0;
+        size: ${paperSize} portrait;
+        margin: ${marginVal}cm !important;
       }
     `;
 
@@ -1623,14 +2334,13 @@ const NotebookEditor = {
     document.body.classList.add('printing-notebook');
 
     // =========================================================================
-    // PASO 3: IMPRIMIR
+    // PASO 3: RESTAURACIÓN SEGURA DEL DOM TRAS IMPRIMIR
     // =========================================================================
-    window.print();
+    let restored = false;
+    const restoreDOM = () => {
+      if (restored) return;
+      restored = true;
 
-    // =========================================================================
-    // PASO 4: RESTAURAR EL DOM AL ESTADO ORIGINAL
-    // =========================================================================
-    setTimeout(() => {
       document.body.classList.remove('printing-notebook');
 
       // Restaurar textarea de observaciones
@@ -1638,6 +2348,11 @@ const NotebookEditor = {
         hdrObs.style.display = '';
         if (obsDiv) obsDiv.remove();
       }
+
+      // Restaurar márgenes dinámicos del editor de pantalla
+      savedMargins.forEach(({ el, marginTop }) => {
+        if (marginTop) el.style.marginTop = marginTop;
+      });
 
       // Restaurar marcadores de página
       pageBreakMarkers.forEach(el => {
@@ -1654,7 +2369,23 @@ const NotebookEditor = {
       // Remover estilo de impresión inyectado
       if (printStyle) printStyle.remove();
 
-    }, 2000);
+      // Recalcular indicadores de pantalla
+      if (typeof this._updatePageBreakIndicators === 'function') {
+        this._updatePageBreakIndicators();
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('afterprint', restoreDOM, { once: true });
+    }
+
+    // =========================================================================
+    // PASO 4: IMPRIMIR
+    // =========================================================================
+    window.print();
+
+    // Fallback por si afterprint no se dispara
+    setTimeout(restoreDOM, 2500);
   },
 
   generateDefaultContentFromClass(cls) {
@@ -1715,37 +2446,173 @@ const NotebookEditor = {
   },
 
   /**
+   * Desenvuelve cuadros azules generados automáticamente al pegar que causan conflictos de edición
+   * Preserva intactos los cuadros legítimos insertados desde la barra de herramientas (📌, ✍️, 🏠)
+   */
+  cleanDocumentArtifacts(text) {
+    if (!text || typeof text !== 'string') return '';
+    if (typeof ImportParser !== 'undefined' && typeof ImportParser.cleanDocumentArtifacts === 'function') {
+      return ImportParser.cleanDocumentArtifacts(text);
+    }
+    const hasImages = text.includes('<img') || text.includes('data:image/');
+    let imagePlaceholders = null;
+    let clean = text;
+
+    if (hasImages) {
+      imagePlaceholders = [];
+      clean = clean.replace(/<img\b[^>]*>/gi, (m) => {
+        const ph = `___IMG_SHIELD_${imagePlaceholders.length}___`;
+        imagePlaceholders.push(m);
+        return ph;
+      });
+    }
+
+    clean = clean
+      .replace(/(?:\\[tT]ext|\/[tT]ext|\x09ext|\\textbf|\\textit|\\mathrm|\\mathbf|\\textnormal|\\mbox)\s*\{([^}]*)\}/gi, '$1')
+      .replace(/\\[a-zA-Z]+\{([^}]*)\}/g, '$1')
+      .replace(/\\times\b/g, '×').replace(/\\div\b/g, '÷').replace(/\\cdot\b/g, '·').replace(/\\pm\b/g, '±')
+      .replace(/\\(?:le|leq)\b/g, '≤').replace(/\\(?:ge|geq)\b/g, '≥').replace(/\\neq\b/g, '≠').replace(/\\approx\b/g, '≈')
+      .replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '$1/$2')
+      .replace(/\$\$([\s\S]*?)\$\$/g, '$1')
+      .replace(/\$([^\$\n\r]+?)\$/g, '$1')
+      .replace(/\$/g, '')
+      .replace(/\{([^{}\n\r]*)\}/g, (m, inside) => {
+        if (/[0-9a-zA-Z_]\s*,\s*[0-9a-zA-Z_]/.test(inside) || /^(?:\s*|;|return|if|for|void|int|const|Servo)\b/.test(inside)) {
+          return m;
+        }
+        return inside;
+      })
+      .replace(/\{\s*\}/g, '')
+      .replace(/""\*{1,3}/g, '"').replace(/''\*{1,3}/g, "'")
+      .replace(/->\s*\*{0,2}/g, '-> ')
+      .replace(/(?:^|\n)\s*(?:•\s*)?[\*•\-\–—_]{1,3}\s*(?=\n|$)/g, '\n')
+      .replace(/(?<=[^\*\s])\*{1,3}(?=[^\*]|$)/g, '')
+      .replace(/\*{1,3}/g, '')
+      .replace(/(?<!\([^\n\)]*)\s*\*{1,2}\)\s*(?=\n|•|$)/g, '');
+
+    if (imagePlaceholders && imagePlaceholders.length > 0) {
+      imagePlaceholders.forEach((imgTag, idx) => {
+        clean = clean.replace(`___IMG_SHIELD_${idx}___`, imgTag);
+      });
+    }
+
+    return clean;
+  },
+
+  _cleanAutoCallouts(html) {
+    if (!html || typeof html !== 'string') return '';
+    let cleaned = this.cleanDocumentArtifacts(html);
+    cleaned = cleaned.replace(/<div class="notebook-callout concept"[^>]*>([\s\S]*?)<\/div>/gi, (match, inner) => {
+      if (/(?:📌|✍️|🏠|Concepto Clave:|Actividad en Clase:|Tarea \/ Compromiso:)/i.test(inner)) {
+        return match;
+      }
+      return `<p style="margin-top:0.35rem; margin-bottom:0.25rem; line-height:1.4;">${inner.trim()}</p>`;
+    });
+
+    // 1. Limpiar cajas de fórmulas matemáticas vacías o que solo contengan comas/signos
+    cleaned = cleaned.replace(/<div class="notebook-math-block"[^>]*>([\s\S]*?)<\/div>/gi, (match, inner) => {
+      const text = inner.replace(/<[^>]+>/g, '').trim();
+      if (!text || !/[a-zA-Z0-9\+\-\*\/=]/.test(text) || /^[,;.:\-_*•]+$/.test(text)) {
+        return '';
+      }
+      return match;
+    });
+
+    // 2. Limpiar párrafos vacíos o que solo contengan asteriscos, viñetas, comas o espacios
+    cleaned = cleaned.replace(/<p[^>]*>\s*(?:[•\*\-–—,;.:_]|\&nbsp;|<br\s*[\/]?>)*\s*<\/p>/gi, '');
+
+    // 3. Limpiar ítems de lista vacíos o residuales
+    cleaned = cleaned.replace(/<li[^>]*>\s*(?:[•\*\-–—,;.:_]|\&nbsp;|<br\s*[\/]?>)*\s*<\/li>/gi, '');
+
+    // 4. Limpiar listas vacías
+    cleaned = cleaned.replace(/<(ul|ol)[^>]*>\s*<\/\1>/gi, '');
+
+    // 5. Limpiar asteriscos huérfanos o trailing ** antes del cierre de etiquetas
+    cleaned = cleaned.replace(/\s*\*{1,3}(?=<\/h[1-6]>|<\/p>|<\/li>)/gi, '');
+    cleaned = cleaned.replace(/\s*(?:-\s*&gt;|-&gt;|\-\>)\s*\*{0,2}\)?(?=<\/p>|<\/li>)/gi, '');
+
+    return cleaned.trim();
+  },
+
+  /**
    * Convierte texto plano o Markdown a HTML estructurado y pedagógico para el Cuaderno
    */
-  formatNotebookHtml(content) {
+  formatNotebookHtml(content, force = false) {
     if (!content || typeof content !== 'string') return '';
-    const trimmed = content.trim();
+    const trimmed = this.cleanDocumentArtifacts(content.trim());
     if (!trimmed || trimmed === '<p><br/></p>' || trimmed === '<p><br></p>' || trimmed === '<br>') return '';
 
-    // Si ya es HTML estructurado y NO tiene encabezados o viñetas en Markdown crudo
+    // Si ya es HTML estructurado y NO tiene encabezados o viñetas en Markdown crudo ni viñetas colapsadas
     const hasRichTags = /<(?:p|h[1-6]|ul|ol|table|div|blockquote)[^>]*>/i.test(trimmed);
-    const hasRawMarkdown = /\*\*\d+[\.\)]\s+[A-ZÁÉÍÓÚÑ¿¡]|\*\*(?:Regla|Paso|Norma|Lectura|Definici[oó]n|Importante)[\s\w#º°\d]*:|\n•\s*\*\*|•\s+\*\*|\*\*[^*]+\*\*/.test(trimmed);
+    const hasRawMarkdown = /\*\*\d+[\.\)]\s+[A-ZÁÉÍÓÚÑ¿¡]|\*\*(?:Regla|Paso|Norma|Lectura|Definici[oó]n|Importante)[\s\w#º°\d]*:|\n•\s*\*\*|•\s+\*\*|\*\*[^*]+\*\*|##\s+[A-ZÁÉÍÓÚÑ]/.test(trimmed);
+    const bulletCount = (trimmed.match(/•/g) || []).length;
+    const liCount = (trimmed.match(/<li\b/gi) || []).length;
+    const hasUnstructuredBullets = (bulletCount > 0 && liCount === 0) || (bulletCount > 1 && liCount < bulletCount / 2) ||
+      (/•/.test(trimmed) && (!/<li[^>]*>/i.test(trimmed) || /<(?:p|div)[^>]*>[^<]*•/i.test(trimmed)));
 
-    if (hasRichTags && !hasRawMarkdown) {
-      return trimmed;
+    // Detectar si el contenido es un párrafo monolítico sin estructurar (ej. todo el cuaderno pegado en una sola etiqueta <p>)
+    const pCount = (trimmed.match(/<p\b/gi) || []).length;
+    const plainTextLen = trimmed.replace(/<[^>]+>/g, '').trim().length;
+    const isMonolithicParagraph = (pCount <= 2 && plainTextLen > 250) && 
+      (/(?:TEMAS\s+DEL|DESEMPEÑOS?\s+DE|CRITERIOS?\s+DE|Fase\s+de|Eje\s+temático|Tiempo:)/i.test(trimmed) || /(?:[A-ZÁÉÍÓÚÑ][^:\n]{2,40}:\s+){2,}/.test(trimmed));
+
+    if (!force && hasRichTags && !hasRawMarkdown && !hasUnstructuredBullets && !isMonolithicParagraph) {
+      return this._cleanAutoCallouts(trimmed);
     }
 
     // Usar el convertidor centralizado de ImportParser si está disponible
+    let res = '';
     if (typeof ImportParser !== 'undefined' && typeof ImportParser.formatMarkdownToHtml === 'function') {
-      return ImportParser.formatMarkdownToHtml(trimmed);
+      res = ImportParser.formatMarkdownToHtml(trimmed);
+    } else {
+      res = this._fallbackFormatMarkdown(trimmed);
     }
 
-    // Fallback integrado si ImportParser no está en el scope
-    return this._fallbackFormatMarkdown(trimmed);
+    return this._cleanAutoCallouts(res);
   },
 
   _fallbackFormatMarkdown(content) {
-    let text = this.cleanBrokenLinebreaks(content)
-      .replace(/([^\n])\s+([•]|[-*](?=\s+[A-ZÁÉÍÓÚÑa-záéíóúñ0-9¿¡"«\*\d]))\s+/g, '$1\n$2 ')
+    let cleanInput = content;
+    const bulletCount = (cleanInput.match(/•/g) || []).length;
+    const liCount = (cleanInput.match(/<li\b/gi) || []).length;
+    const hasUnstructuredBullets = (bulletCount > 1 && liCount < bulletCount / 2) ||
+      (/•/.test(cleanInput) && (!/<li[^>]*>/i.test(cleanInput) || /<(?:p|div)[^>]*>[^<]*•[^<]*•/i.test(cleanInput)));
+
+    const pCount = (cleanInput.match(/<p\b/gi) || []).length;
+    const plainTextLen = cleanInput.replace(/<[^>]+>/g, '').trim().length;
+    const isMonolithicParagraph = (pCount <= 2 && plainTextLen > 250) && 
+      (/(?:TEMAS\s+DEL|DESEMPEÑOS?\s+DE|CRITERIOS?\s+DE|Fase\s+de|Eje\s+temático|Tiempo:)/i.test(cleanInput) || /(?:[A-ZÁÉÍÓÚÑ][^:\n]{2,40}:\s+){2,}/.test(cleanInput));
+
+    if ((hasUnstructuredBullets || isMonolithicParagraph) && /<[^>]+>/.test(cleanInput)) {
+      cleanInput = cleanInput
+        .replace(/<br\s*[\/]?>/gi, '\n')
+        .replace(/<\/p>/gi, '\n\n')
+        .replace(/<\/div>/gi, '\n')
+        .replace(/<li[^>]*>/gi, '\n• ')
+        .replace(/<[^>]+>/g, '');
+    }
+
+    let text = this.cleanBrokenLinebreaks(cleanInput)
+      .replace(/([a-záéíóúñA-ZÁÉÍÓÚÑ])-(Regla|Paso|Norma|Ejemplo|Definici[oó]n|Importante|Nota)\b/gi, '$1 -\n\n$2')
+      .replace(/(?:^|\n|[.!?]\s*|\s+)•\s*([\p{Lu}0-9\s\/\-:\(\)]{5,}[\p{Lu}0-9\)])(?=\s+[\p{Lu}][\p{Ll}]|\s*•|\s*$)/gu, '\n\n## $1\n\n')
+      .replace(/(?:^|\n)(##\s+)?([\p{Lu}]{2,}(?:\s+[\p{Lu}0-9\/\-]+){1,8})\s+([\p{Lu}][\p{Ll}])/gu, (match, hash, title, nextWord) => `\n\n## ${title}\n\n${nextWord}`)
+      .replace(/([^\n])\s*(•)\s*/g, '$1\n$2 ')
+      .replace(/(?:^|\n)•\s*([A-ZÁÉÍÓÚÑ][^\n•\(\)]+\([^\)]+\))\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñ])/gu, '\n\n## $1\n\n$2')
+      .replace(new RegExp('(?:^|\\n)•\\s*([A-ZÁÉÍÓÚÑ][^\\n•]{3,75}?)\\s+((?:Restar|Sumar|Multiplicar|Dividir|Para agilizar|Para resolver|En la siguiente|Resolver|Consiste en|Es la|Son los|Se define|Permite)\\b)', 'gu'), '\n\n## $1\n\n$2')
+      .replace(/(?:^|\n)•\s*(Resumen(?:\s+Clave)?(?:\s+para\s+Consignar)?|Conexi[oó]n\s+con\s+la\s+siguiente\s+clase)\s*(?=\n|$)/gi, '\n\n## $1\n\n')
+      .replace(/([^\n])\s*((?:Regla\s+fundamental|Regla\s+de\s+memoria\s+f[aá]cil|Ejemplo\s+paso\s+a\s+paso)\s*:)/gi, '$1\n\n$2')
+      .replace(/([^\n])\s*(Ejemplos?\s*:)\s*(?=[•\-\*\d]|\n)/gi, '$1\n\n**$2**\n')
+      .replace(/\$\$([^\$]+)\$\$/g, (match, eq) => `\n\n$$${eq.trim()}$$\n\n`)
+      .replace(/(##[^\n]+)\n+(?=[•\-\*\d])/g, '$1\n\n')
+      .replace(/([.:;\n]|\*{2})\s+([-*])\s+(?=[A-ZÁÉÍÓÚÑa-záéíóúñ¿¡"«\*\d])/g, '$1\n$2 ')
       .replace(/([^\n])\s*(\*{2}\d+[\.\)]\s+[^\n*]+\*{2})/g, '$1\n\n$2')
       .replace(/(\*{2}\d+[\.\)]\s+[^\n*]+\*{2})\s*([A-ZÁÉÍÓÚÑ¿¡•])/g, '$1\n\n$2')
-      .replace(/([.!?:;)\]\*])\s*(\*{1,2}(?:Regla(?:\s+n[úu]mero)?\s*\d+|Paso\s*\d+|Norma\s*\d+|Lectura\s+completa|Definici[oó]n|Ejemplo|Importante|Nota|Pregunta)\b[^:\n\r]{0,50}:\*{0,2})/gi, '$1\n\n$2')
+      .replace(/([.!?:;)\]\*])\s*(\*{1,2}(?:Regla(?:\s+(?:fundamental|de\s+memoria\s+f[aá]cil|n[úu]mero))?|Paso\s*[A-Z\d]|Norma\s*\d+|Lectura\s+completa|Definici[oó]n|Ejemplo(?:\s+paso\s+a\s+paso)?|Importante|Nota|Pregunta)\b[^:\n\r]{0,50}:\*{0,2})/gi, '$1\n\n$2')
+      .replace(/(?:^|\n)\s*(\*{0,2}Paso\s*[A-Z\d][^\n:•]*:?[^\n•]*?\*{0,2})\s*(?=\n|•|$)/gi, '\n\n$1\n\n')
       .replace(/\n{3,}/g, '\n\n');
+
+    // Asegurar que encabezados mayores como TALLER / EJERCICIO PRÁCTICO queden separados en su propio bloque
+    text = text.replace(/((?:^|\n)\s*(?:\*{0,2})(?:TALLER\b[^\n:]*|ACTIVIDAD(?:ES)?\s+PR[AÁ]CTIC[OA]S?[^\n:]*|EJERCICIO(?:S)?\s+PR[AÁ]CTIC[OA]S?[^\n:]*)(?:\*{0,2}))\s*\n(?!\n)/gi, '$1\n\n');
 
     const blocks = text.split(/\n{2,}/);
     const htmlBlocks = [];
@@ -1754,62 +2621,133 @@ const NotebookEditor = {
       const block = b.trim();
       if (!block) continue;
 
-      const headingMatch = block.match(/^(?:#{1,3}\s+|\*{0,2})(\d+[\.\)]\s+[A-ZÁÉÍÓÚÑ¿¡][^\n*]+?)\*{0,2}$/);
-      if (headingMatch) {
-        const title = headingMatch[1].replace(/[\*#]/g, '').trim();
-        htmlBlocks.push(`<h2 style="color:#1e3a8a; margin-top:1.4rem; margin-bottom:0.6rem; font-size:1.18rem; font-weight:700; border-bottom:1.5px solid #bfdbfe; padding-bottom:4px;">${this.escapeHtml(title)}</h2>`);
+      // 0. Fórmula matemática LaTeX ($$formula$$)
+      const mathMatch = block.match(/^\$\$([^\$]+)\$\$$/);
+      if (mathMatch) {
+        const formula = mathMatch[1].trim();
+        if (formula && formula.length >= 2 && /[a-zA-Z0-9\+\-\*\/=]/.test(formula) && !/^[,;.:\-_*•]+$/.test(formula)) {
+          htmlBlocks.push(`<div class="notebook-math-block" style="text-align:center; margin:0.6rem 0; padding:8px 12px; background:#f8fafc; border:1.5px solid #cbd5e1; border-radius:6px; font-family:'Cambria Math', 'Times New Roman', serif; font-size:1.15rem; font-weight:700; color:#1e3a8a; letter-spacing:0.5px;">${this.escapeHtml(formula)}</div>`);
+        }
         continue;
       }
 
-      const ruleMatch = block.match(/^\*{0,2}((?:Regla(?:\s+n[úu]mero)?\s*\d+|Norma\s*\d+|Paso\s*\d+|Importante|Nota|Definici[oó]n)[\s\w#º°\d]*:)\*{0,2}\s*([\s\S]+)$/i);
+      // Paso 1: Paso 2: etc.
+      const stepMatch = block.match(/^(?:#{1,3}\s+|\*{0,2})(Paso\s*\d+[\s\w#º°\d\(\)]*:)\*{0,2}\s*(.*)$/i);
+      if (stepMatch) {
+        const stepTitle = stepMatch[1].replace(/[\*#]/g, '').trim();
+        const stepRest = (stepMatch[2] || '').trim();
+        htmlBlocks.push(`<h3 style="color:#1e293b; margin-top:0.85rem; margin-bottom:0.3rem; font-size:1.02rem; font-weight:700;">🛠️ ${this.escapeHtml(stepTitle)}</h3>`);
+        if (stepRest) {
+          const formattedRest = this._formatInlineMarkdown(stepRest);
+          if (formattedRest && !/^[\s\*•\-\–—_.]+$/.test(formattedRest)) {
+            htmlBlocks.push(`<p style="margin-top:0.25rem; margin-bottom:0.35rem; line-height:1.45; text-align:justify;">${formattedRest}</p>`);
+          }
+        }
+        continue;
+      }
+
+      const headingMatch = block.match(/^(?:#{1,3}\s+)(.+)$/) ||
+                           block.match(/^(?:#{1,3}\s+|\*{0,2})(\d+[\.\)]\s+[A-ZÁÉÍÓÚÑ¿¡][^\n*]+?)\*{0,2}$/) ||
+                           block.match(/^([\p{Lu}0-9\s\/\-:\(\)]{6,}[\p{Lu}0-9\)])$/u);
+      if (headingMatch) {
+        let title = (headingMatch[1] || headingMatch[0]).replace(/[\*#]/g, '').trim();
+
+        // Detección especial de TALLER / EJERCICIO PRÁCTICO: independizar en una hoja con ficha estudiantil
+        const isTallerHeading = /^(?:TALLER(?:\s*[\/:\-]\s*(?:ACTIVIDAD(?:ES)?|EJERCICIO(?:S)?|GU[IÍ]A)?\s*PR[AÁ]CTIC[OA]S?(?:\s+DE\s+LA\s+CLASE)?|\s*PR[AÁ]CTIC[OA]S?(?:\s+DE\s+LA\s+CLASE)?|\s+DE\s+APLICACI[OÓ]N|\s+EN\s+CLASE)?|ACTIVIDAD(?:ES)?\s+PR[AÁ]CTIC[OA]S?(?:\s+DE\s+LA\s+CLASE)?|EJERCICIO(?:S)?\s+PR[AÁ]CTIC[OA]S?(?:\s+DE\s+LA\s+CLASE)?)\b/i.test(title);
+        if (isTallerHeading) {
+          const lastHtml = htmlBlocks[htmlBlocks.length - 1] || '';
+          if (htmlBlocks.length > 0 && !lastHtml.includes('notebook-page-break')) {
+            htmlBlocks.push('<div class="notebook-page-break" contenteditable="false" data-page-break="true"><div class="page-break-line"></div><span class="page-break-label">📄 Hoja Independiente: Taller / Ejercicio Práctico</span></div>');
+          }
+          if (!lastHtml.includes('notebook-student-worksheet-header')) {
+            htmlBlocks.push(`
+<div class="notebook-student-worksheet-header" style="border:2px solid #1e3a8a; border-radius:6px; padding:10px 14px; margin:0.8rem 0; background:#f8fafc; page-break-inside:avoid; break-inside:avoid;">
+  <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1.5px solid #cbd5e1; padding-bottom:4px; margin-bottom:6px;">
+    <h2 style="margin:0; padding:0; border:none; font-size:1.1rem; font-weight:800; color:#1e3a8a; text-transform:uppercase; letter-spacing:0.5px;">✍️ Taller / Actividad Práctica de la Clase</h2>
+  </div>
+  <div style="display:grid; grid-template-columns:2.5fr 1fr 1fr; gap:8px; font-size:0.82rem; color:#1e293b; margin-top:6px; line-height:1.4;">
+    <div><strong>Estudiante:</strong> ________________________________________________</div>
+    <div><strong>Fecha:</strong> ______________</div>
+    <div><strong>Calificación:</strong> _________</div>
+  </div>
+</div>`.trim());
+            continue;
+          }
+        }
+
+        let icon = '';
+        if (/TRANSCRIPCI[OÓ]N|PROP[OÓ]SITO|OBJETIVO|INTRODUCCI[OÓ]N/i.test(title)) icon = '🎯 ';
+        else if (/PAR[AÁ]METROS|FORMATO|ESPECIFICACI/i.test(title)) icon = '📐 ';
+        else if (/REGLAS|NORMAS|ESTILO|DIGITACI[OÓ]N/i.test(title)) icon = '⌨️ ';
+        else if (/PROCEDIMIENTO|T[EÉ]CNICO|RESUMEN|PASO/i.test(title)) icon = '🛠️ ';
+        else if (/SUSTRACCI[OÓ]N|ADICI[OÓ]N|N[UÚ]MEROS|OPERACION|MATEM[AÁ]TICA/i.test(title)) icon = '🔢 ';
+        else if (/SIGNO|PAR[EÉ]NTESIS|LEY/i.test(title)) icon = '⚡ ';
+        else if (/M[EÉ]TODO|POLINOMIO|CADENA/i.test(title)) icon = '📋 ';
+        else if (/CONEXI[OÓ]N|SIGUIENTE/i.test(title)) icon = '🚀 ';
+        else if (!/^[\d\.\s\p{Emoji}]/u.test(title)) icon = '📌 ';
+
+        htmlBlocks.push(`<h2 style="color:#1e3a8a; margin-top:1.2rem; margin-bottom:0.5rem; font-size:1.15rem; font-weight:700; border-bottom:1.5px solid #bfdbfe; padding-bottom:4px; letter-spacing:-0.01em;">${icon}${this.escapeHtml(title)}</h2>`);
+        continue;
+      }
+
+      // 3. Reglas pedagógicas, pasos, ejemplos o definiciones formateados limpiamente como párrafo con título en negrita
+      const ruleMatch = block.match(/^\*{0,2}((?:Regla(?:\s+(?:fundamental|de\s+memoria\s+f[aá]cil|n[úu]mero))?|Norma\s*\d+|Lectura\s+completa|Definici[oó]n|Ejemplo(?:\s+paso\s+a\s+paso)?|Importante|Nota|Pregunta)[\s\w#º°\d\(\)]*:)\*{0,2}\s*([\s\S]+)$/i);
       if (ruleMatch) {
         const ruleLabel = ruleMatch[1].replace(/[\*#]/g, '').trim();
         const ruleBody = this._formatInlineMarkdown(ruleMatch[2]);
-        htmlBlocks.push(`<div class="notebook-callout concept" style="margin:0.8rem 0; padding:10px 14px; background:#eff6ff; border-left:4px solid #3b82f6; border-radius:4px; font-size:0.95rem; line-height:1.6;"><strong style="color:#1d4ed8;">${this.escapeHtml(ruleLabel)}</strong> ${ruleBody}</div>`);
+        htmlBlocks.push(`<p style="margin-top:0.35rem; margin-bottom:0.25rem; line-height:1.4;"><strong style="color:#1d4ed8;">${this.escapeHtml(ruleLabel)}</strong> ${ruleBody}</p>`);
         continue;
       }
 
       const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
-      if (lines.length > 0 && lines.every(l => /^[•\-\*]\s+/.test(l))) {
-        const listItemsHtml = lines.map(l => {
+      const validLines = lines.filter(l => !/^[\s\*•\-\–—_]{1,3}$/.test(l));
+      if (validLines.length > 0 && validLines.every(l => /^[•\-\*]\s+/.test(l))) {
+        const listItemsHtml = validLines.map(l => {
           const c = l.replace(/^[•\-\*]\s+/, '').trim();
-          return `<li style="margin-bottom:0.35rem;">${this._formatInlineMarkdown(c)}</li>`;
-        }).join('');
-        htmlBlocks.push(`<ul style="margin:0.5rem 0 0.8rem 1.25rem; padding-left:1rem; line-height:1.6; color:#1e293b;">${listItemsHtml}</ul>`);
+          if (!c || /^[\s\*•\-\–—_.]+$/.test(c)) return '';
+          return `<li style="margin-bottom:0.2rem;">${this._formatInlineMarkdown(c)}</li>`;
+        }).filter(Boolean).join('');
+        if (listItemsHtml) {
+          htmlBlocks.push(`<ul style="margin:0.35rem 0 0.55rem 1.25rem; padding-left:0.8rem; line-height:1.45; color:#1e293b;">${listItemsHtml}</ul>`);
+        }
         continue;
       }
 
       // Si contiene viñetas intercaladas en el bloque
-      if (lines.some(l => /^[•\-\*]\s+/.test(l))) {
+      if (validLines.some(l => /^[•\-\*]\s+/.test(l))) {
         let currentP = [];
         let currentList = [];
-        for (const line of lines) {
+        for (const line of validLines) {
           if (/^[•\-\*]\s+/.test(line)) {
             if (currentP.length > 0) {
-              htmlBlocks.push(`<p style="margin-bottom:0.6rem; line-height:1.6; text-align:justify;">${this._formatInlineMarkdown(currentP.join(' '))}</p>`);
+              htmlBlocks.push(`<p style="margin-bottom:0.35rem; line-height:1.45; text-align:justify;">${this._formatInlineMarkdown(currentP.join(' '))}</p>`);
               currentP = [];
             }
             const c = line.replace(/^[•\-\*]\s+/, '').trim();
-            currentList.push(`<li style="margin-bottom:0.35rem;">${this._formatInlineMarkdown(c)}</li>`);
+            if (c && !/^[\s\*•\-\–—_.]+$/.test(c)) {
+              currentList.push(`<li style="margin-bottom:0.2rem;">${this._formatInlineMarkdown(c)}</li>`);
+            }
           } else {
             if (currentList.length > 0) {
-              htmlBlocks.push(`<ul style="margin:0.5rem 0 0.8rem 1.25rem; padding-left:1rem; line-height:1.6; color:#1e293b;">${currentList.join('')}</ul>`);
+              htmlBlocks.push(`<ul style="margin:0.35rem 0 0.55rem 1.25rem; padding-left:0.8rem; line-height:1.45; color:#1e293b;">${currentList.join('')}</ul>`);
               currentList = [];
             }
             currentP.push(line);
           }
         }
         if (currentList.length > 0) {
-          htmlBlocks.push(`<ul style="margin:0.5rem 0 0.8rem 1.25rem; padding-left:1rem; line-height:1.6; color:#1e293b;">${currentList.join('')}</ul>`);
+          htmlBlocks.push(`<ul style="margin:0.35rem 0 0.55rem 1.25rem; padding-left:0.8rem; line-height:1.45; color:#1e293b;">${currentList.join('')}</ul>`);
         }
         if (currentP.length > 0) {
-          htmlBlocks.push(`<p style="margin-bottom:0.8rem; line-height:1.6; text-align:justify;">${this._formatInlineMarkdown(currentP.join(' '))}</p>`);
+          htmlBlocks.push(`<p style="margin-bottom:0.35rem; line-height:1.45; text-align:justify;">${this._formatInlineMarkdown(currentP.join(' '))}</p>`);
         }
         continue;
       }
 
       const formattedPara = this._formatInlineMarkdown(block.replace(/\n/g, ' '));
-      htmlBlocks.push(`<p style="margin-bottom:0.8rem; line-height:1.6; text-align:justify;">${formattedPara}</p>`);
+      if (formattedPara && !/^[\s\*•\-\–—_.]+$/.test(formattedPara)) {
+        htmlBlocks.push(`<p style="margin-top:0.3rem; margin-bottom:0.35rem; line-height:1.45; text-align:justify;">${formattedPara}</p>`);
+      }
     }
 
     return htmlBlocks.join('\n\n');
@@ -1817,10 +2755,22 @@ const NotebookEditor = {
 
   _formatInlineMarkdown(str) {
     if (!str) return '';
-    let res = this.escapeHtml(str);
+    let cleaned = this.cleanDocumentArtifacts(str);
+    let res = this.escapeHtml(cleaned);
+    // Pares de negrita **texto**
     res = res.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    // Pares de cursiva *texto*
     res = res.replace(/(^|[^\*])\*([^\*]+?)\*([^\*]|$)/g, '$1<em>$2</em>$3');
-    return res;
+    // Limpiar asteriscos huérfanos residuales
+    res = res.replace(/\*{1,3}/g, '');
+    // Limpiar paréntesis o corchetes de cierre huérfanos con asteriscos como **) solo si NO hay apertura '('
+    if (!res.includes('(')) {
+      res = res.replace(/\s*\*{1,3}\)\s*$/g, '');
+    }
+    if (!res.startsWith('<strong>')) {
+      res = res.replace(/^([A-ZÁÉÍÓÚÑa-záéíóúñ0-9\s\(\)\/]{2,45}:)\s*/, '<strong>$1</strong> ');
+    }
+    return res.trim();
   },
 
   /**
@@ -1832,11 +2782,16 @@ const NotebookEditor = {
     const current = editor.innerHTML;
     if (!this.hasContent(current)) return;
 
-    const formatted = this.formatNotebookHtml(current);
+    let textToProcess = current;
+    if (typeof ImportParser !== 'undefined' && typeof ImportParser.convertHtmlToFormattedText === 'function') {
+      textToProcess = ImportParser.convertHtmlToFormattedText(current);
+    }
+    const formatted = this.formatNotebookHtml(textToProcess, true);
     if (formatted) {
       editor.innerHTML = formatted;
       this.triggerAutoSave(true);
       this._updateWordCount();
+      setTimeout(() => this._updatePageBreakIndicators(), 100);
       if (typeof App !== 'undefined' && App.showToast) {
         App.showToast('✨ Formato del cuaderno organizado correctamente', 'success');
       }
@@ -1851,8 +2806,8 @@ const NotebookEditor = {
     let clean = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
     // 1. Reparar "Criterios de" e "Instrumentos de" huérfanos sin la palabra "evaluación"
-    clean = clean.replace(/(?:^|\n)\s*Criterios\s+de(?!\s+evaluaci[oó]n)\s*(?:\n+|:\s*\n*|\s*:\s*|\s+)*(?=[•\-\*]|\n|$)/gi, '\nCriterios de evaluación:\n');
-    clean = clean.replace(/(?:^|\n)\s*Instrumentos\s+de(?!\s+evaluaci[oó]n)\s*(?:\n+|:\s*\n*|\s*:\s*|\s+)*(?=[•\-\*]|\n|$)/gi, '\nInstrumentos de evaluación:\n');
+    clean = clean.replace(/(?:^|\n)\s*Criterios\s+de(?!\s+evaluaci[oó]n)[\s:]*(?=[•\-\*]|\n|$)/gi, '\nCriterios de evaluación:\n');
+    clean = clean.replace(/(?:^|\n)\s*Instrumentos\s+de(?!\s+evaluaci[oó]n)[\s:]*(?=[•\-\*]|\n|$)/gi, '\nInstrumentos de evaluación:\n');
 
     // 2. Unir palabras clave partidas por salto de línea específicamente
     clean = clean.replace(/(?:^|\n)\s*(Criterios\s+de)\s*\n+\s*evaluaci[oó]n\b/gi, '\nCriterios de evaluación:');
@@ -1883,14 +2838,16 @@ const NotebookEditor = {
     // 7. Unir líneas que terminan en texto y continúan con paréntesis explicativo en la línea siguiente
     clean = clean.replace(/([a-záéíóúñA-ZÁÉÍÓÚÑ0-9,])\s*\n\s*(\([a-záéíóúñA-ZÁÉÍÓÚÑ0-9])/g, '$1 $2');
 
-    // 8. Unir palabras con guión partidas por salto
-    clean = clean.replace(/([a-záéíóúñA-ZÁÉÍÓÚÑ])\s*-\s*\n\s*([a-záéíóúñA-ZÁÉÍÓÚÑ])/g, '$1-$2');
+    // 8. Unir palabras con guión partidas por salto (ej. "teórico -\npráctico")
+    // Se protege para que solo una si la segunda palabra inicia en minúscula y la primera no es una preposición
+    clean = clean.replace(/(?<!\b(?:en|de|con|el|la|un|una))\b([a-záéíóúñA-ZÁÉÍÓÚÑ]+)\s*-\s*\n\s*([a-záéíóúñ]+)\b/g, '$1-$2');
+
 
     // 9. Espaciado armónico antes de subsecciones
     clean = clean.replace(/([^\n])\n*((?:Criterios|Instrumentos)\s+de\s+evaluaci[oó]n:)/gi, '$1\n\n$2');
 
     // 10. Eliminar saltos dobles innecesarios entre un encabezado con dos puntos (:) y su primera viñeta
-    clean = clean.replace(/([^\n:]+:)\s*\n{2,}([•]|[-*](?!\*))/g, '$1\n$2');
+    clean = clean.replace(/([^\n:]{1,120}:)\s*\n{2,}([•]|[-*](?!\*))/g, '$1\n$2');
 
     // 11. Normalizar saltos triples o excesivos
     clean = clean.replace(/\n{3,}/g, '\n\n');
@@ -1899,196 +2856,448 @@ const NotebookEditor = {
   },
 
   // =========================================================================
-  // REDIMENSIONAMIENTO E INTERACCIONES DE IMÁGENES
+  // SISTEMA DE NODOS DE REDIMENSIÓN TIPO WORD PARA TABLAS E IMÁGENES
   // =========================================================================
 
-  _initImageInteractions() {
+  _selectedElement: null,
+  _selectedTableCell: null,
+  _hoverColCell: null,
+  _isResizing: false,
+  _isResizingCol: false,
+
+  _initElementResizer() {
     const editor = document.getElementById('notebook-single-editor');
-    if (!editor || editor._imgInteractBound) return;
-    editor._imgInteractBound = true;
+    if (!editor || editor._resizerBound) return;
+    editor._resizerBound = true;
 
-    // Inyectar CSS para el toolbar de imagen y los separadores de página
-    if (!document.getElementById('nb-img-toolbar-css')) {
-      const style = document.createElement('style');
-      style.id = 'nb-img-toolbar-css';
-      style.textContent = `
-        #nb-img-toolbar {
-          display: none;
-          position: fixed;
-          z-index: 9999;
-          background: #1e293b;
-          border-radius: 8px;
-          padding: 5px 8px;
-          box-shadow: 0 4px 20px rgba(0,0,0,0.35);
-          align-items: center;
-          gap: 4px;
-          flex-wrap: nowrap;
-          transform: translateY(-6px);
-          transition: opacity 0.15s;
-        }
-        #nb-img-toolbar.active { display: flex; }
-        #nb-img-toolbar button {
-          background: #334155;
-          color: #e2e8f0;
-          border: 1px solid #475569;
-          border-radius: 4px;
-          padding: 3px 8px;
-          font-size: 0.78rem;
-          cursor: pointer;
-          white-space: nowrap;
-          line-height: 1.4;
-        }
-        #nb-img-toolbar button:hover { background: #3b82f6; border-color: #3b82f6; color: #fff; }
-        #nb-img-toolbar .nb-sep { width: 1px; height: 18px; background: #475569; flex-shrink: 0; }
-        #nb-img-toolbar .nb-lbl { color: #94a3b8; font-size: 0.72rem; }
-        #nb-img-toolbar button.nb-danger:hover { background: #ef4444; border-color: #ef4444; }
-        .nb-img-selected { outline: 2.5px solid #3b82f6 !important; outline-offset: 2px; border-radius: 3px; cursor: pointer; }
-        .nb-auto-page-break {
-          position: absolute;
-          left: 0;
-          right: 0;
-          height: 18px;
-          background: #e2e8f0;
-          border-top: 1px solid #cbd5e1;
-          border-bottom: 1px solid #cbd5e1;
-          box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.06);
-          pointer-events: none;
-          user-select: none;
-          -webkit-user-select: none;
-          z-index: 5;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-        .nb-auto-page-break-inner {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 6px;
-        }
-        .nb-auto-page-break-label {
-          background: #ffffff;
-          color: #64748b;
-          font-size: 0.65rem;
-          font-weight: 600;
-          padding: 1px 8px;
-          border-radius: 4px;
-          border: 1px solid #cbd5e1;
-          box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-          letter-spacing: 0.3px;
-        }
-      `;
-      document.head.appendChild(style);
-    }
+    // Asegurar que el overlay exista en .notebook-paper-container
+    this._ensureResizerOverlay();
 
-    // Crear el toolbar flotante de imagen (una sola instancia global)
-    if (!document.getElementById('nb-img-toolbar')) {
-      const tb = document.createElement('div');
-      tb.id = 'nb-img-toolbar';
-      tb.innerHTML = `
-        <span class="nb-lbl">Ancho:</span>
-        <button onmousedown="event.preventDefault()" onclick="NotebookEditor._setImageWidth('25%')">25%</button>
-        <button onmousedown="event.preventDefault()" onclick="NotebookEditor._setImageWidth('50%')">50%</button>
-        <button onmousedown="event.preventDefault()" onclick="NotebookEditor._setImageWidth('75%')">75%</button>
-        <button onmousedown="event.preventDefault()" onclick="NotebookEditor._setImageWidth('100%')">100%</button>
-        <div class="nb-sep"></div>
-        <button onmousedown="event.preventDefault()" onclick="NotebookEditor._alignImage('left')" title="Alinear izquierda">⇤</button>
-        <button onmousedown="event.preventDefault()" onclick="NotebookEditor._alignImage('center')" title="Centrar">≡</button>
-        <button onmousedown="event.preventDefault()" onclick="NotebookEditor._alignImage('right')" title="Alinear derecha">⇥</button>
-        <div class="nb-sep"></div>
-        <button class="nb-danger" onmousedown="event.preventDefault()" onclick="NotebookEditor._deleteSelectedImage()" title="Eliminar imagen">✕ Eliminar</button>
-      `;
-      document.body.appendChild(tb);
-    }
-
-    // Clic en imagen dentro del editor → seleccionar y mostrar toolbar
+    // 1. Clic en imagen o tabla dentro del editor contenteditable
     editor.addEventListener('click', (e) => {
       const img = e.target.closest('img');
-      if (img) {
+      if (img && editor.contains(img)) {
         e.stopPropagation();
-        this._selectImage(img);
+        this._selectResizerElement(img);
+        return;
+      }
+
+      const table = e.target.closest('table');
+      if (table && editor.contains(table)) {
+        const cell = e.target.closest('th, td');
+        this._selectResizerElement(table, cell);
+        return;
       }
     });
 
-    // Clic fuera → deseleccionar
-    document.addEventListener('mousedown', (e) => {
-      const toolbar = document.getElementById('nb-img-toolbar');
-      if (!e.target.closest('#nb-img-toolbar') && !e.target.closest('#notebook-single-editor img')) {
-        this._deselectImage();
+    // 2. Hover sobre bordes verticales entre columnas (tipo Word col-resize)
+    editor.addEventListener('mousemove', (e) => {
+      if (this._isResizing || this._isResizingCol) return;
+      const table = e.target.closest('table');
+      if (table && editor.contains(table)) {
+        const cell = e.target.closest('th, td');
+        if (cell) {
+          const rect = cell.getBoundingClientRect();
+          const isNearRight = (e.clientX >= rect.right - 6 && e.clientX <= rect.right + 2);
+          if (isNearRight) {
+            document.body.style.cursor = 'col-resize';
+            cell.style.cursor = 'col-resize';
+            this._hoverColCell = cell;
+            return;
+          }
+        }
+      }
+      if (this._hoverColCell) {
+        document.body.style.cursor = '';
+        if (this._hoverColCell) this._hoverColCell.style.cursor = '';
+        this._hoverColCell = null;
       }
     });
-  },
 
-  _selectedImage: null,
+    // 3. Inicio de redimensión interactiva de ancho de columna
+    editor.addEventListener('mousedown', (e) => {
+      if (this._hoverColCell) {
+        e.preventDefault();
+        e.stopPropagation();
+        this._startColResize(e, this._hoverColCell);
+      }
+    });
 
-  _selectImage(img) {
-    this._deselectImage();
-    this._selectedImage = img;
-    img.classList.add('nb-img-selected');
-    const toolbar = document.getElementById('nb-img-toolbar');
-    if (!toolbar) return;
-    const rect = img.getBoundingClientRect();
-    const tbWidth = 400;
-    let left = rect.left + window.scrollX + rect.width / 2 - tbWidth / 2;
-    let top = rect.top + window.scrollY - 46;
-    // Evitar que salga de la pantalla
-    left = Math.max(8, Math.min(left, window.innerWidth - tbWidth - 8));
-    if (top < 8) top = rect.bottom + window.scrollY + 8;
-    toolbar.style.top = top + 'px';
-    toolbar.style.left = left + 'px';
-    toolbar.classList.add('active');
-  },
+    // 4-7. Eventos globales en document/window vinculados una única vez para evitar fugas de memoria
+    if (!this._boundGlobalResizerEvents) {
+      this._boundGlobalResizerEvents = true;
 
-  _deselectImage() {
-    if (this._selectedImage) {
-      this._selectedImage.classList.remove('nb-img-selected');
-      this._selectedImage = null;
+      // 4. Clic fuera del editor y overlay -> deseleccionar elemento
+      document.addEventListener('mousedown', (e) => {
+        if (this._isResizing || this._isResizingCol) return;
+        const overlay = document.getElementById('notebook-element-resizer-overlay');
+        if (overlay && overlay.contains(e.target)) return;
+
+        const clickedImg = e.target.closest('#notebook-single-editor img');
+        const clickedTable = e.target.closest('#notebook-single-editor table');
+        if (!clickedImg && !clickedTable) {
+          this._hideResizerOverlay();
+        }
+      });
+
+      // 6. Reposicionamiento ante redimensionamiento de ventana
+      window.addEventListener('resize', () => {
+        if (this._selectedElement) this._updateOverlayPosition();
+      });
+
+      // 7. Teclas: Escape para deseleccionar, Supr/Backspace para borrar imagen
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          this._hideResizerOverlay();
+        } else if ((e.key === 'Delete' || e.key === 'Backspace') && this._selectedElement && this._selectedElement.tagName === 'IMG') {
+          const sel = window.getSelection();
+          if (!sel || sel.isCollapsed) {
+            this._deleteSelectedImage();
+          }
+        }
+      });
     }
-    const toolbar = document.getElementById('nb-img-toolbar');
-    if (toolbar) toolbar.classList.remove('active');
+
+    // 5. Reposicionamiento ante scroll del documento
+    const scrollWrapper = document.querySelector('.notebook-document-scroll-wrapper');
+    if (scrollWrapper && !scrollWrapper._resizerScrollBound) {
+      scrollWrapper._resizerScrollBound = true;
+      scrollWrapper.addEventListener('scroll', () => {
+        if (this._selectedElement) this._updateOverlayPosition();
+      }, { passive: true });
+    }
+  },
+
+  _ensureResizerOverlay() {
+    let overlay = document.getElementById('notebook-element-resizer-overlay');
+    const paperContainer = document.querySelector('.notebook-paper-container');
+    if (!paperContainer) return null;
+
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'notebook-element-resizer-overlay';
+      overlay.className = 'notebook-resizer-overlay';
+      overlay.setAttribute('contenteditable', 'false');
+      overlay.setAttribute('data-no-export', 'true');
+      overlay.innerHTML = `
+        <div class="resizer-outline"></div>
+        <div class="resizer-handle handle-nw" data-handle="nw" title="Cambiar tamaño proporcional"></div>
+        <div class="resizer-handle handle-n"  data-handle="n"  title="Cambiar altura"></div>
+        <div class="resizer-handle handle-ne" data-handle="ne" title="Cambiar tamaño proporcional"></div>
+        <div class="resizer-handle handle-e"  data-handle="e"  title="Cambiar ancho"></div>
+        <div class="resizer-handle handle-se" data-handle="se" title="Cambiar tamaño (Nodo esquina Word)"></div>
+        <div class="resizer-handle handle-s"  data-handle="s"  title="Cambiar altura"></div>
+        <div class="resizer-handle handle-sw" data-handle="sw" title="Cambiar tamaño proporcional"></div>
+        <div class="resizer-handle handle-w"  data-handle="w"  title="Cambiar ancho"></div>
+        <div class="resizer-dimension-badge"></div>
+        <div class="resizer-toolbar"></div>
+      `;
+
+      // Vincular eventos de arrastre a cada nodo de redimensión
+      overlay.querySelectorAll('.resizer-handle').forEach(handle => {
+        handle.addEventListener('mousedown', (e) => {
+          const handleType = handle.dataset.handle;
+          this._startHandleResize(e, handleType);
+        });
+      });
+
+      paperContainer.appendChild(overlay);
+    }
+    return overlay;
+  },
+
+  _selectResizerElement(el, cell = null) {
+    if (!el || !el.isConnected) return;
+    this._selectedElement = el;
+    this._selectedTableCell = cell;
+
+    const overlay = this._ensureResizerOverlay();
+    if (!overlay) return;
+
+    const isImg = el.tagName === 'IMG';
+    const isTable = el.tagName === 'TABLE';
+
+    overlay.className = 'notebook-resizer-overlay active ' + (isTable ? 'is-table' : 'is-image');
+
+    const toolbar = overlay.querySelector('.resizer-toolbar');
+    if (toolbar) {
+      toolbar.innerHTML = isTable ? this._renderTableToolbar(el) : this._renderImageToolbar(el);
+    }
+
+    this._updateOverlayPosition();
+  },
+
+  _updateOverlayPosition() {
+    if (!this._selectedElement || !this._selectedElement.isConnected) {
+      this._hideResizerOverlay();
+      return;
+    }
+
+    const overlay = document.getElementById('notebook-element-resizer-overlay');
+    const paperContainer = document.querySelector('.notebook-paper-container');
+    if (!overlay || !paperContainer) return;
+
+    const sheetRect = paperContainer.getBoundingClientRect();
+    const targetRect = this._selectedElement.getBoundingClientRect();
+
+    const top = targetRect.top - sheetRect.top;
+    const left = targetRect.left - sheetRect.left;
+    const width = targetRect.width;
+    const height = targetRect.height;
+
+    overlay.style.top = top + 'px';
+    overlay.style.left = left + 'px';
+    overlay.style.width = width + 'px';
+    overlay.style.height = height + 'px';
+
+    // Posición dinámica de la toolbar para evitar salirse de la hoja
+    const toolbar = overlay.querySelector('.resizer-toolbar');
+    if (toolbar) {
+      if (top < 45) {
+        toolbar.style.top = (height + 8) + 'px';
+      } else {
+        toolbar.style.top = '-42px';
+      }
+    }
+  },
+
+  _hideResizerOverlay() {
+    this._selectedElement = null;
+    this._selectedTableCell = null;
+    const overlay = document.getElementById('notebook-element-resizer-overlay');
+    if (overlay) {
+      overlay.className = 'notebook-resizer-overlay';
+      overlay.style.display = 'none';
+    }
+  },
+
+  _startHandleResize(e, handleType) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!this._selectedElement) return;
+
+    const target = this._selectedElement;
+    const isImg = target.tagName === 'IMG';
+    const isTable = target.tagName === 'TABLE';
+
+    this._isResizing = true;
+    const overlay = document.getElementById('notebook-element-resizer-overlay');
+    if (overlay) overlay.classList.add('is-resizing');
+
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startWidth = target.offsetWidth;
+    const startHeight = target.offsetHeight;
+    const aspectRatio = startWidth / (startHeight || 1);
+
+    const paperContainer = document.querySelector('.notebook-paper-container');
+    const maxWidth = paperContainer ? (paperContainer.clientWidth - 80) : 750;
+
+    const onMouseMove = (ev) => {
+      const deltaX = ev.clientX - startX;
+      const deltaY = ev.clientY - startY;
+
+      let newWidth = startWidth;
+      let newHeight = startHeight;
+
+      if (handleType === 'se') {
+        newWidth = Math.max(40, startWidth + deltaX);
+        if (isImg) {
+          newHeight = Math.max(30, newWidth / aspectRatio);
+        } else {
+          newHeight = Math.max(40, startHeight + deltaY);
+        }
+      } else if (handleType === 'sw') {
+        newWidth = Math.max(40, startWidth - deltaX);
+        if (isImg) {
+          newHeight = Math.max(30, newWidth / aspectRatio);
+        } else {
+          newHeight = Math.max(40, startHeight + deltaY);
+        }
+      } else if (handleType === 'ne') {
+        newWidth = Math.max(40, startWidth + deltaX);
+        if (isImg) {
+          newHeight = Math.max(30, newWidth / aspectRatio);
+        } else {
+          newHeight = Math.max(40, startHeight - deltaY);
+        }
+      } else if (handleType === 'nw') {
+        newWidth = Math.max(40, startWidth - deltaX);
+        if (isImg) {
+          newHeight = Math.max(30, newWidth / aspectRatio);
+        } else {
+          newHeight = Math.max(40, startHeight - deltaY);
+        }
+      } else if (handleType === 'e') {
+        newWidth = Math.max(40, startWidth + deltaX);
+      } else if (handleType === 'w') {
+        newWidth = Math.max(40, startWidth - deltaX);
+      } else if (handleType === 's') {
+        newHeight = Math.max(30, startHeight + deltaY);
+      } else if (handleType === 'n') {
+        newHeight = Math.max(30, startHeight - deltaY);
+      }
+
+      if (newWidth > maxWidth) newWidth = maxWidth;
+
+      if (isImg) {
+        target.style.width = Math.round(newWidth) + 'px';
+        if (handleType === 'e' || handleType === 'w') {
+          target.style.height = 'auto';
+        } else {
+          target.style.height = Math.round(newHeight) + 'px';
+        }
+        target.style.maxWidth = '100%';
+      } else if (isTable) {
+        target.style.width = Math.round(newWidth) + 'px';
+        if (handleType === 's' || handleType === 'se') {
+          target.style.height = Math.round(newHeight) + 'px';
+        }
+      }
+
+      this._updateOverlayPosition();
+
+      // Tooltip informativo con dimensiones exactas
+      const badge = overlay?.querySelector('.resizer-dimension-badge');
+      if (badge) {
+        badge.textContent = `${Math.round(target.offsetWidth)} × ${Math.round(target.offsetHeight)} px`;
+      }
+    };
+
+    const onMouseUp = () => {
+      this._isResizing = false;
+      if (overlay) overlay.classList.remove('is-resizing');
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+
+      this.triggerAutoSave(false);
+      setTimeout(() => this.recalculatePagination(), 100);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  },
+
+  _startColResize(e, cell) {
+    this._isResizingCol = true;
+    document.body.style.cursor = 'col-resize';
+    const table = cell.closest('table');
+    const startX = e.clientX;
+    const startWidth = cell.offsetWidth;
+    const colIndex = Array.from(cell.parentElement.children).indexOf(cell);
+
+    const onMouseMove = (ev) => {
+      const deltaX = ev.clientX - startX;
+      const newWidth = Math.max(30, startWidth + deltaX);
+      table.querySelectorAll('tr').forEach(row => {
+        if (row.children[colIndex]) {
+          row.children[colIndex].style.width = newWidth + 'px';
+        }
+      });
+      this._updateOverlayPosition();
+    };
+
+    const onMouseUp = () => {
+      this._isResizingCol = false;
+      document.body.style.cursor = '';
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      this.triggerAutoSave(false);
+      setTimeout(() => this.recalculatePagination(), 100);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  },
+
+  _renderTableToolbar(table) {
+    return `
+      <button type="button" onmousedown="event.preventDefault()" onclick="NotebookEditor._addTableRow()" title="Insertar fila abajo">
+        ➕ Fila
+      </button>
+      <button type="button" onmousedown="event.preventDefault()" onclick="NotebookEditor._addTableColumn()" title="Insertar columna a la derecha">
+        ➕ Col
+      </button>
+      <div class="tb-sep"></div>
+      <button type="button" onmousedown="event.preventDefault()" onclick="NotebookEditor._deleteTableRow()" title="Eliminar fila actual">
+        ➖ Fila
+      </button>
+      <button type="button" onmousedown="event.preventDefault()" onclick="NotebookEditor._deleteTableColumn()" title="Eliminar columna actual">
+        ➖ Col
+      </button>
+      <div class="tb-sep"></div>
+      <button type="button" onmousedown="event.preventDefault()" onclick="NotebookEditor._setTableWidth('100%')" title="Ajustar tabla al 100% del ancho">
+        ↔️ 100%
+      </button>
+      <button type="button" onmousedown="event.preventDefault()" onclick="NotebookEditor._setTableWidth('auto')" title="Ajustar tabla al contenido">
+        Ajustar
+      </button>
+      <div class="tb-sep"></div>
+      <button type="button" class="btn-delete" onmousedown="event.preventDefault()" onclick="NotebookEditor._deleteSelectedTable()" title="Eliminar tabla">
+        🗑️
+      </button>
+    `;
+  },
+
+  _renderImageToolbar(img) {
+    return `
+      <button type="button" onmousedown="event.preventDefault()" onclick="NotebookEditor._setImageWidth('25%')">25%</button>
+      <button type="button" onmousedown="event.preventDefault()" onclick="NotebookEditor._setImageWidth('50%')">50%</button>
+      <button type="button" onmousedown="event.preventDefault()" onclick="NotebookEditor._setImageWidth('75%')">75%</button>
+      <button type="button" onmousedown="event.preventDefault()" onclick="NotebookEditor._setImageWidth('100%')">100%</button>
+      <div class="tb-sep"></div>
+      <button type="button" onmousedown="event.preventDefault()" onclick="NotebookEditor._alignImage('left')" title="Alinear izquierda">⇤ Izq</button>
+      <button type="button" onmousedown="event.preventDefault()" onclick="NotebookEditor._alignImage('center')" title="Centrar">≡ Centro</button>
+      <button type="button" onmousedown="event.preventDefault()" onclick="NotebookEditor._alignImage('right')" title="Alinear derecha">⇥ Der</button>
+      <div class="tb-sep"></div>
+      <button type="button" class="btn-delete" onmousedown="event.preventDefault()" onclick="NotebookEditor._deleteSelectedImage()" title="Eliminar imagen">
+        🗑️ Eliminar
+      </button>
+    `;
   },
 
   _setImageWidth(width) {
-    if (!this._selectedImage) return;
-    this._selectedImage.style.width = width;
-    this._selectedImage.style.height = 'auto';
-    this._selectedImage.style.maxWidth = '100%';
-    // Reposicionar toolbar
-    this._selectImage(this._selectedImage);
+    if (!this._selectedElement || this._selectedElement.tagName !== 'IMG') return;
+    this._selectedElement.style.width = width;
+    this._selectedElement.style.height = 'auto';
+    this._selectedElement.style.maxWidth = '100%';
+    this._updateOverlayPosition();
     this.triggerAutoSave(false);
-    setTimeout(() => this._updatePageBreakIndicators(), 300);
+    setTimeout(() => this.recalculatePagination(), 100);
   },
 
   _alignImage(align) {
-    if (!this._selectedImage) return;
-    const wrapper = this._selectedImage.closest('div[style*="text-align"]') || this._selectedImage.parentElement;
+    if (!this._selectedElement || this._selectedElement.tagName !== 'IMG') return;
+    const img = this._selectedElement;
+    const wrapper = img.closest('div[style*="text-align"]') || img.parentElement;
     if (wrapper && wrapper.tagName === 'DIV' && wrapper !== document.getElementById('notebook-single-editor')) {
       wrapper.style.textAlign = align;
     } else {
       if (align === 'left') {
-        this._selectedImage.style.float = 'left';
-        this._selectedImage.style.marginRight = '1rem';
-        this._selectedImage.style.marginLeft = '0';
-        this._selectedImage.style.display = '';
+        img.style.float = 'left';
+        img.style.marginRight = '1rem';
+        img.style.marginLeft = '0';
+        img.style.display = '';
       } else if (align === 'right') {
-        this._selectedImage.style.float = 'right';
-        this._selectedImage.style.marginLeft = '1rem';
-        this._selectedImage.style.marginRight = '0';
-        this._selectedImage.style.display = '';
+        img.style.float = 'right';
+        img.style.marginLeft = '1rem';
+        img.style.marginRight = '0';
+        img.style.display = '';
       } else {
-        this._selectedImage.style.float = '';
-        this._selectedImage.style.display = 'block';
-        this._selectedImage.style.margin = '0 auto';
+        img.style.float = '';
+        img.style.display = 'block';
+        img.style.margin = '0 auto';
       }
     }
+    this._updateOverlayPosition();
     this.triggerAutoSave(false);
   },
 
   _deleteSelectedImage() {
-    if (!this._selectedImage) return;
-    const img = this._selectedImage;
-    this._deselectImage();
-    // Si el wrapper div sólo contiene la imagen, eliminar todo el wrapper
+    if (!this._selectedElement || this._selectedElement.tagName !== 'IMG') return;
+    const img = this._selectedElement;
+    this._hideResizerOverlay();
+
     const wrapper = img.parentElement;
     if (wrapper && wrapper.tagName === 'DIV' && wrapper !== document.getElementById('notebook-single-editor')) {
       const otherContent = Array.from(wrapper.childNodes).filter(n => n !== img && (n.nodeType !== 3 || n.textContent.trim()));
@@ -2101,7 +3310,144 @@ const NotebookEditor = {
       img.remove();
     }
     this.triggerAutoSave(false);
-    setTimeout(() => this._updatePageBreakIndicators(), 300);
+    setTimeout(() => this.recalculatePagination(), 100);
+  },
+
+  _addTableRow() {
+    if (!this._selectedElement || this._selectedElement.tagName !== 'TABLE') return;
+    const table = this._selectedElement;
+    const activeCell = this._selectedTableCell;
+    let targetRow = activeCell ? activeCell.closest('tr') : null;
+    if (!targetRow) {
+      const rows = table.querySelectorAll('tr');
+      targetRow = rows[rows.length - 1];
+    }
+    if (!targetRow) return;
+
+    const colCount = targetRow.children.length;
+    const newRow = document.createElement('tr');
+    for (let i = 0; i < colCount; i++) {
+      const td = document.createElement('td');
+      td.style.border = '1px solid #cbd5e1';
+      td.style.padding = '8px 12px';
+      td.innerHTML = '&nbsp;';
+      newRow.appendChild(td);
+    }
+
+    if (targetRow.nextSibling) {
+      targetRow.parentNode.insertBefore(newRow, targetRow.nextSibling);
+    } else {
+      targetRow.parentNode.appendChild(newRow);
+    }
+
+    this._updateOverlayPosition();
+    this.triggerAutoSave(false);
+    setTimeout(() => this.recalculatePagination(), 100);
+  },
+
+  _addTableColumn() {
+    if (!this._selectedElement || this._selectedElement.tagName !== 'TABLE') return;
+    const table = this._selectedElement;
+    const activeCell = this._selectedTableCell;
+    const rows = Array.from(table.querySelectorAll('tr'));
+    if (rows.length === 0) return;
+
+    let colIndex = activeCell ? Array.from(activeCell.parentElement.children).indexOf(activeCell) : (rows[0].children.length - 1);
+    if (colIndex < 0) colIndex = rows[0].children.length - 1;
+
+    rows.forEach((row, rIdx) => {
+      const isHeader = row.querySelector('th') || (rIdx === 0 && row.parentElement.tagName === 'THEAD');
+      const newCell = document.createElement(isHeader ? 'th' : 'td');
+      newCell.style.border = '1px solid #cbd5e1';
+      newCell.style.padding = '8px 12px';
+      if (isHeader) {
+        newCell.style.fontWeight = '700';
+        newCell.style.background = '#f8fafc';
+        newCell.style.color = '#1e293b';
+        newCell.textContent = `Col ${row.children.length + 1}`;
+      } else {
+        newCell.innerHTML = '&nbsp;';
+      }
+
+      if (row.children[colIndex] && row.children[colIndex].nextSibling) {
+        row.insertBefore(newCell, row.children[colIndex].nextSibling);
+      } else {
+        row.appendChild(newCell);
+      }
+    });
+
+    this._updateOverlayPosition();
+    this.triggerAutoSave(false);
+    setTimeout(() => this.recalculatePagination(), 100);
+  },
+
+  _deleteTableRow() {
+    if (!this._selectedElement || this._selectedElement.tagName !== 'TABLE') return;
+    const table = this._selectedElement;
+    const activeCell = this._selectedTableCell;
+    const row = activeCell ? activeCell.closest('tr') : table.querySelector('tbody tr:last-child');
+    if (!row) return;
+
+    const totalRows = table.querySelectorAll('tr').length;
+    if (totalRows <= 1) {
+      this._deleteSelectedTable();
+      return;
+    }
+
+    row.remove();
+    this._selectedTableCell = null;
+    this._updateOverlayPosition();
+    this.triggerAutoSave(false);
+    setTimeout(() => this.recalculatePagination(), 100);
+  },
+
+  _deleteTableColumn() {
+    if (!this._selectedElement || this._selectedElement.tagName !== 'TABLE') return;
+    const table = this._selectedElement;
+    const activeCell = this._selectedTableCell;
+    const rows = Array.from(table.querySelectorAll('tr'));
+    if (rows.length === 0) return;
+
+    const colIndex = activeCell ? Array.from(activeCell.parentElement.children).indexOf(activeCell) : (rows[0].children.length - 1);
+    if (colIndex < 0) return;
+
+    if (rows[0].children.length <= 1) {
+      this._deleteSelectedTable();
+      return;
+    }
+
+    rows.forEach(row => {
+      if (row.children[colIndex]) {
+        row.children[colIndex].remove();
+      }
+    });
+
+    this._selectedTableCell = null;
+    this._updateOverlayPosition();
+    this.triggerAutoSave(false);
+    setTimeout(() => this.recalculatePagination(), 100);
+  },
+
+  _setTableWidth(width) {
+    if (!this._selectedElement || this._selectedElement.tagName !== 'TABLE') return;
+    const table = this._selectedElement;
+    table.style.width = width;
+    if (width === 'auto') {
+      table.querySelectorAll('th, td').forEach(c => c.style.width = '');
+    }
+    this._updateOverlayPosition();
+    this.triggerAutoSave(false);
+    setTimeout(() => this.recalculatePagination(), 100);
+  },
+
+  _deleteSelectedTable() {
+    if (!this._selectedElement || this._selectedElement.tagName !== 'TABLE') return;
+    const table = this._selectedElement;
+    if (!confirm('¿Deseas eliminar esta tabla?')) return;
+    this._hideResizerOverlay();
+    table.remove();
+    this.triggerAutoSave(false);
+    setTimeout(() => this.recalculatePagination(), 100);
   },
 
   // =========================================================================
@@ -2113,22 +3459,24 @@ const NotebookEditor = {
     const paperContainer = document.querySelector('.notebook-paper-container');
     if (!editor || !paperContainer) return;
 
-    // El paper-container debe tener position:relative para posicionar marcadores
-    const pos = getComputedStyle(paperContainer).position;
-    if (pos === 'static') paperContainer.style.position = 'relative';
+    // Actualización inicial de paginación mediante el motor matemático
+    setTimeout(() => this.recalculatePagination(), 100);
 
-    // Actualización inicial — esperar a que el DOM esté completamente renderizado
-    setTimeout(() => this._updatePageBreakIndicators(), 500);
-
-    // Re-calcular al editar (con debounce para no sobrecargar)
+    // Re-calcular al editar con debounce seguro (750ms) usando PaginationEngine
     if (!editor._pageBreakBound) {
       editor._pageBreakBound = true;
-      const debouncedUpdate = this._debounce(() => this._updatePageBreakIndicators(), 1000);
-      editor.addEventListener('input', debouncedUpdate);
+      editor.addEventListener('input', () => {
+        if (typeof PaginationEngine !== 'undefined') {
+          PaginationEngine.schedulePagination(paperContainer, editor, 750);
+        }
+      });
     }
 
     // Re-calcular al cambiar tamaño de ventana
-    window.addEventListener('resize', this._debounce(() => this._updatePageBreakIndicators(), 600));
+    if (typeof window !== 'undefined' && !window._notebookResizeBound) {
+      window._notebookResizeBound = true;
+      window.addEventListener('resize', this._debounce(() => this.recalculatePagination(), 300));
+    }
   },
 
   _debounce(fn, delay) {
@@ -2139,49 +3487,49 @@ const NotebookEditor = {
     };
   },
 
-  _updatePageBreakIndicators() {
+  recalculatePagination() {
     const editor = document.getElementById('notebook-single-editor');
     const paperContainer = document.querySelector('.notebook-paper-container');
-    if (!editor || !paperContainer) return;
+    if (!editor || !paperContainer || !editor.isConnected) return { totalPages: 1, breaks: [] };
+    if (typeof PaginationEngine !== 'undefined') {
+      return PaginationEngine.paginate(paperContainer, editor);
+    }
+    return { totalPages: 1, breaks: [] };
+  },
 
-    // Eliminar marcadores anteriores
-    paperContainer.querySelectorAll('.nb-auto-page-break').forEach(el => el.remove());
+  _updatePageBreakIndicators() {
+    return this.recalculatePagination();
+  },
 
-    const containerWidth = paperContainer.clientWidth;
-    if (!containerWidth) return;
+  setMargin(marginCm) {
+    const margin = parseFloat(marginCm) || 1.27;
+    if (typeof PageConfig !== 'undefined') {
+      PageConfig.setMargins(margin, margin, margin, margin);
+    }
+    // Sincronizar selectores si existen en el DOM
+    const s1 = document.getElementById('nb-margin-select');
+    if (s1) s1.value = String(margin);
+    const s2 = document.getElementById('nb-margin-select-full');
+    if (s2) s2.value = String(margin);
 
-    // Calcular altura de página con margen estrecho (Carta: 215.9mm × 279.4mm)
-    // Relación de aspecto Carta = 279.4 / 215.9 ≈ 1.2941 (o A4: 297/210 ≈ 1.414)
-    // En pantalla, la hoja tiene padding de 1.27cm (aprox 48px por lado = 96px total)
-    const pageHeightPx = Math.round(containerWidth * 1.35);
+    // Actualizar inmediatamente el padding visual de la hoja
+    document.querySelectorAll('.notebook-paper-container').forEach(p => {
+      p.style.padding = margin + 'cm';
+    });
 
-    // Descontar el alto del encabezado institucional (solo afecta la primera página)
-    const headerCard = paperContainer.querySelector('.notebook-page-header-card');
-    const headerHeight = headerCard ? (headerCard.offsetHeight + 18) : 0;
+    this.recalculatePagination();
+    if (typeof App !== 'undefined' && App.showToast) {
+      App.showToast(`Margen configurado en ${margin} cm en los 4 lados`, 'info');
+    }
+  },
 
-    // offsetTop del editor dentro del paperContainer
-    const editorOffsetTop = editor.offsetTop;
-    const editorHeight = editor.scrollHeight;
-
-    // Primera ruptura de página
-    let yInEditor = pageHeightPx - headerHeight - editorOffsetTop;
-    if (yInEditor <= 30) yInEditor += pageHeightPx;
-
-    let pageNum = 2;
-    while (yInEditor < editorHeight - 40) {
-      const marker = document.createElement('div');
-      marker.className = 'nb-auto-page-break';
-      marker.contentEditable = 'false';
-      marker.setAttribute('data-page-num', pageNum);
-      marker.style.top = (editorOffsetTop + yInEditor) + 'px';
-      marker.innerHTML = `
-        <div class="nb-auto-page-break-inner">
-          <span class="nb-auto-page-break-label">Hoja ${pageNum}</span>
-        </div>
-      `;
-      paperContainer.appendChild(marker);
-      yInEditor += pageHeightPx;
-      pageNum++;
+  setPaperSize(sizeName) {
+    if (typeof PageConfig !== 'undefined') {
+      PageConfig.setPaperSize(sizeName);
+    }
+    this.recalculatePagination();
+    if (typeof App !== 'undefined' && App.showToast) {
+      App.showToast(`Tamaño de papel: ${sizeName === 'a4' ? 'A4' : 'Carta'}`, 'info');
     }
   },
 

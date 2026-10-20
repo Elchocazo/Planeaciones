@@ -74,7 +74,10 @@ class MigrationManagerClass {
         const period = plan.period || '1°';
 
         plan.classes.forEach((legacyClass, idx) => {
-          const classId = legacyClass.id || legacyClass.classId || ClassRepository.generateClassId('cls');
+          let classId = legacyClass.id || legacyClass.classId || ClassRepository.generateClassId('cls');
+          if (migratedSessions[classId]) {
+            classId = ClassRepository.generateClassId('cls');
+          }
           const subName = legacyClass.subject || legacyClass.subjectName || 'General';
           const grdName = legacyClass.grade || legacyClass.gradeName || 'General';
           const group = legacyClass.group || grdName;

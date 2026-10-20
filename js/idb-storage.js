@@ -189,18 +189,31 @@ const IDBStorage = {
    * Guarda una instantánea histórica de recuperación (Protocolo Anti-Pérdida de Datos)
    */
   async saveSnapshot(userId, snapshotData) {
-    if (!this.isSupported()) return false;
+    if (!this.isSupported() || !snapshotData) return false;
     try {
       const key = `snapshot_${userId || 'default'}_history`;
       let history = (await this.get(key)) || [];
       if (!Array.isArray(history)) history = [];
+
+      // Evitar guardar si es idéntico al snapshot más reciente
+      if (history.length > 0 && history[0].data && typeof history[0].data === 'object') {
+        const lastKeys = Object.keys(history[0].data.plans || {}).length;
+        const curKeys = Object.keys(snapshotData.plans || {}).length;
+        if (lastKeys === curKeys && history[0].timestamp) {
+          const diffMs = Date.now() - new Date(history[0].timestamp).getTime();
+          // Si han pasado menos de 60 segundos y la cantidad de planes es idéntica, no saturar
+          if (diffMs < 60000) return true;
+        }
+      }
+
       const newSnapshot = {
         timestamp: new Date().toISOString(),
         summary: `Respaldo del ${new Date().toLocaleDateString('es-CO')} a las ${new Date().toLocaleTimeString('es-CO')}`,
         data: snapshotData
       };
       history.unshift(newSnapshot);
-      if (history.length > 20) history = history.slice(0, 20); // Conservar hasta 20 puntos de restauración
+      // Conservar máximo 5 puntos de restauración para no saturar memoria ni congelar el hilo principal
+      if (history.length > 5) history = history.slice(0, 5);
       await this.set(key, history);
       return true;
     } catch (e) {

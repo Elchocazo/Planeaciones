@@ -239,6 +239,21 @@ class ImportServiceClass {
       merged.teacherNotebook.practicalActivity = parsedData.teacherNotebook.practicalActivity.trim();
     }
 
+    if (parsedData.teacherNotebook.additionalNotes && parsedData.teacherNotebook.additionalNotes.trim()) {
+      merged.teacherNotebook.additionalNotes = parsedData.teacherNotebook.additionalNotes.trim();
+    }
+
+    // Organizar el taller en hoja independiente en notebookContent si está disponible NotebookEditor
+    // Limpiamos el notebookContent anterior para evitar que se reutilice un fragmento viejo o truncado
+    if (parsedData.teacherNotebook?.studentNotebookContent || parsedData.teacherNotebook?.practicalActivity) {
+      delete merged.notebookContent;
+    }
+
+    const nbEditor = (typeof NotebookEditor !== 'undefined') ? NotebookEditor : (typeof window !== 'undefined' ? window.NotebookEditor : null);
+    if (nbEditor && typeof nbEditor._prepareInitialHtml === 'function') {
+      merged.notebookContent = nbEditor._prepareInitialHtml(merged);
+    }
+
     // SALVAGUARDA FUNDAMENTAL: Guardar texto original íntegro
     merged.teacherNotebook.sourceText = parsedData.teacherNotebook.sourceText;
 
@@ -285,13 +300,38 @@ class ImportServiceClass {
       });
     }
 
+    let slotId = options.scheduleSlotId || (target ? target.scheduleSlotId : null) || null;
+    let slotTime = options.time || (target ? target.time : null) || '';
+    let slotStart = options.startTime || (target ? target.startTime : null) || '';
+    let slotEnd = options.endTime || (target ? target.endTime : null) || '';
+
+    if (!slotId && typeof ScheduleRepository !== 'undefined' && ScheduleRepository.getSlotsForDate) {
+      try {
+        const slots = ScheduleRepository.getSlotsForDate(date, tid) || [];
+        const found = slots.find(s => {
+          const s1 = repo ? repo._norm(s.subjectName || s.subject) : '';
+          const s2 = repo ? repo._norm(subject) : '';
+          const g1 = repo ? (repo._normGrade ? repo._normGrade(s.gradeName || s.grade) : repo._norm(s.gradeName || s.grade)) : '';
+          const g2 = repo ? (repo._normGrade ? repo._normGrade(grade) : repo._norm(grade)) : '';
+          return (s1 === s2 || s1.includes(s2) || s2.includes(s1)) && (g1 === g2);
+        });
+        if (found) {
+          slotId = found.id;
+          slotTime = found.time || slotTime;
+          slotStart = found.startTime || slotStart;
+          slotEnd = found.endTime || slotEnd;
+        }
+      } catch (eSlot) {}
+    }
+
     const newClassData = {
       id: repo && repo.generateClassId ? repo.generateClassId('cls') : `cls_${Date.now().toString(36)}`,
       teacherId: tid,
+      scheduleSlotId: slotId,
       date,
-      startTime: options.startTime || '',
-      endTime: options.endTime || '',
-      time: options.time || '',
+      startTime: slotStart,
+      endTime: slotEnd,
+      time: slotTime,
       subjectId: repo && repo._slugify ? repo._slugify(subject) : 'general',
       subjectName: subject,
       gradeId: repo && repo._slugify ? repo._slugify(grade) : 'general',
@@ -333,6 +373,12 @@ class ImportServiceClass {
       attachments: [],
       version: 1
     };
+
+    // Organizar el taller en hoja independiente en notebookContent si está disponible NotebookEditor
+    const nbEditor = (typeof NotebookEditor !== 'undefined') ? NotebookEditor : (typeof window !== 'undefined' ? window.NotebookEditor : null);
+    if (nbEditor && typeof nbEditor._prepareInitialHtml === 'function') {
+      newClassData.notebookContent = nbEditor._prepareInitialHtml(newClassData);
+    }
 
     if (repo && repo.createClass) {
       return repo.createClass(newClassData, tid);

@@ -34,7 +34,15 @@ class SequenceServiceClass {
       planned: planned,
       pending: pending,
       percentage: percentage,
-      classes: classes.sort((a, b) => (a.sequenceNumber || 0) - (b.sequenceNumber || 0))
+      classes: classes.sort((a, b) => {
+        const seqA = parseInt(a.sequenceNumber, 10) || 0;
+        const seqB = parseInt(b.sequenceNumber, 10) || 0;
+        if (seqA !== seqB) return seqA - seqB;
+        const dateA = a.date || '';
+        const dateB = b.date || '';
+        if (dateA !== dateB) return dateA.localeCompare(dateB);
+        return (a.startTime || a.time || '').localeCompare(b.startTime || b.time || '');
+      })
     };
   }
 
@@ -69,17 +77,28 @@ class SequenceServiceClass {
 
       // Normalizar para clave única de agrupación sin duplicaciones por espacios o mayúsculas
       const sNorm = subjRaw.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-      const gNorm = gradeRaw.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-      const grpNorm = groupRaw.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const cleanGrd = gradeRaw.replace(/[^0-9a-zA-Z]/g, '').toLowerCase();
+      const cleanGrp = groupRaw.replace(/[^0-9a-zA-Z]/g, '').toLowerCase();
 
-      // Si el grupo es diferente del grado (ej. 4°A vs 4°B), diferenciarlo claramente
-      const hasDistinctGroup = grpNorm !== gNorm && grpNorm.length > 0 && !gNorm.includes(grpNorm);
-      const key = hasDistinctGroup ? `${sNorm}__${gNorm}__${grpNorm}` : `${sNorm}__${gNorm}`;
+      // Grados equivalentes: '4°a' y '4a' son el mismo grado/grupo (sin redundancias tipo '4°A (4A)')
+      const isEquivalent = (cleanGrd === cleanGrp) || (cleanGrd.length > 0 && cleanGrp.length > 0 && (cleanGrd.includes(cleanGrp) || cleanGrp.includes(cleanGrd)));
+      const hasDistinctGroup = !isEquivalent && groupRaw.length > 0;
+
+      // Formato limpio del grado escolar (ej: '4°A', '4°B', '8°')
+      let displayGrade = gradeRaw;
+      const matchAB = cleanGrd.match(/^(\d+)([ab])$/i);
+      if (matchAB) {
+        displayGrade = `${matchAB[1]}°${matchAB[2].toUpperCase()}`;
+      } else if (cleanGrd.match(/^\d+$/)) {
+        displayGrade = `${cleanGrd}°`;
+      }
+
+      const key = hasDistinctGroup ? `${sNorm}__${cleanGrd}__${cleanGrp}` : `${sNorm}__${cleanGrd || 'gen'}`;
 
       if (!groupsMap[key]) {
         groupsMap[key] = {
           subjectName: subjRaw,
-          gradeName: hasDistinctGroup ? `${gradeRaw} (${groupRaw})` : gradeRaw,
+          gradeName: hasDistinctGroup ? `${displayGrade} (${groupRaw})` : displayGrade,
           group: groupRaw,
           period: period,
           classes: []
@@ -90,7 +109,30 @@ class SequenceServiceClass {
 
     const results = [];
     Object.values(groupsMap).forEach(g => {
-      const sortedClasses = g.classes.sort((a, b) => (a.sequenceNumber || 0) - (b.sequenceNumber || 0));
+      const sortedClasses = g.classes.sort((a, b) => {
+        const seqA = parseInt(a.sequenceNumber, 10) || 0;
+        const seqB = parseInt(b.sequenceNumber, 10) || 0;
+        if (seqA !== seqB) return seqA - seqB;
+        const dateA = a.date || '';
+        const dateB = b.date || '';
+        if (dateA !== dateB) return dateA.localeCompare(dateB);
+        return (a.startTime || a.time || '').localeCompare(b.startTime || b.time || '');
+      });
+
+      // Detectar si existen números de clase duplicados o desordenados
+      const seenNums = new Set();
+      let hasDuplicateNumbers = false;
+      for (const c of sortedClasses) {
+        const num = parseInt(c.sequenceNumber, 10);
+        if (num > 0) {
+          if (seenNums.has(num)) {
+            hasDuplicateNumbers = true;
+            break;
+          }
+          seenNums.add(num);
+        }
+      }
+
       const plannedCount = sortedClasses.filter(c => {
         const isStatusPlanned = c.status === 'planned' || c.status === 'completed';
         const hasContent = Boolean(
@@ -104,6 +146,11 @@ class SequenceServiceClass {
         return isStatusPlanned && hasContent;
       }).length;
       const totalCount = sortedClasses.length;
+
+      const mirrorInfo = typeof ClassRepository !== 'undefined' && ClassRepository.getMirrorGradeInfo
+        ? ClassRepository.getMirrorGradeInfo(g.gradeName, g.group, g.subjectName)
+        : null;
+
       results.push({
         subjectName: g.subjectName,
         gradeName: g.gradeName,
@@ -113,6 +160,8 @@ class SequenceServiceClass {
         planned: plannedCount,
         pending: totalCount - plannedCount,
         percentage: totalCount > 0 ? Math.round((plannedCount / totalCount) * 100) : 0,
+        hasDuplicateNumbers: hasDuplicateNumbers,
+        mirrorInfo: mirrorInfo,
         classes: sortedClasses
       });
     });

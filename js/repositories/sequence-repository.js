@@ -42,6 +42,15 @@ class SequenceRepositoryClass {
       .replace(/[\u0300-\u036f]/g, "");
   }
 
+  _normGrade(grd) {
+    return String(grd || '')
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^0-9a-z]/g, "");
+  }
+
   async init(teacherId) {
     const tid = teacherId || this._getCurrentTeacherId();
     if (this._cache[tid]) return this._cache[tid];
@@ -99,6 +108,17 @@ class SequenceRepositoryClass {
 
   _normalizeScope(scopeOrPeriod, subject, grade, groupOrTeacherId, teacherId) {
     if (typeof scopeOrPeriod === 'string') {
+      const trimmed = scopeOrPeriod.trim();
+      const isPeriod = /^[1-4](°|o|\.º|\.o)?$/i.test(trimmed);
+      if (!isPeriod && subject) {
+        return {
+          period: grade || '1°',
+          subject: scopeOrPeriod,
+          grade: subject,
+          group: groupOrTeacherId || subject,
+          teacherId: teacherId
+        };
+      }
       let group = grade;
       let tid = teacherId;
       if (teacherId === undefined && typeof groupOrTeacherId === 'string' && groupOrTeacherId.startsWith('usr_')) {
@@ -124,16 +144,20 @@ class SequenceRepositoryClass {
     const all = this.getAllSequences(tid);
 
     const targetSub = this._norm(scope.subject || scope.subjectName);
-    const targetGrd = this._norm(scope.grade || scope.gradeName);
-    const targetGrp = this._norm(scope.group || scope.grade || scope.gradeName);
+    const targetGrd = this._normGrade(scope.grade || scope.gradeName);
+    const targetGrp = this._normGrade(scope.group || scope.grade || scope.gradeName);
     const targetPer = this._norm(scope.period || '1°');
+
+    if (!targetSub || !targetGrd) {
+      return [];
+    }
 
     return all.filter(seq => {
       if (targetPer && this._norm(seq.period) !== targetPer) return false;
       if (targetSub && this._norm(seq.subjectName || seq.subjectId) !== targetSub) return false;
-      if (targetGrd && this._norm(seq.gradeName || seq.gradeId) !== targetGrd) return false;
+      if (targetGrd && this._normGrade(seq.gradeName || seq.gradeId) !== targetGrd) return false;
       const seqGroup = seq.group || seq.gradeName || seq.grade;
-      if (targetGrp && seqGroup && this._norm(seqGroup) !== targetGrp) return false;
+      if (targetGrp && seqGroup && this._normGrade(seqGroup) !== targetGrp) return false;
       return true;
     }).sort((a, b) => (a.sequenceNumber || 0) - (b.sequenceNumber || 0));
   }

@@ -170,6 +170,9 @@ class AppRouterClass {
   }
 
   _updateContainerVisibility(canonical) {
+    if (!this.viewContainers || !this.viewContainers[canonical]) {
+      this._bindContainers();
+    }
     if (!this.viewContainers) return;
     Object.keys(this.viewContainers).forEach(vKey => {
       const el = this.viewContainers[vKey];
@@ -187,11 +190,18 @@ class AppRouterClass {
       legacyPlanner.style.display = (canonical === 'editor' && !this.viewContainers.editor) ? 'block' : 'none';
     }
 
+    if (canonical === 'editor') {
+      const edEl = document.getElementById('class-editor-view');
+      if (edEl) edEl.style.display = 'block';
+      const dashEl = document.getElementById('dashboard-view');
+      if (dashEl) dashEl.style.display = 'none';
+    }
+
     if (document.body) {
       if (canonical === 'notebook') {
         document.body.classList.add('notebook-mode');
       } else {
-        document.body.classList.remove('notebook-mode');
+        document.body.classList.remove('notebook-mode', 'printing-notebook');
       }
     }
   }
@@ -201,13 +211,16 @@ class AppRouterClass {
    */
   navigateTo(viewName, options = {}) {
     // force:true siempre pasa (permite re-renderizado post-carga de datos)
-    if (this._isNavigating && !options.force) return false;
+    if (options.force) {
+      this._isNavigating = false;
+    }
+    if (this._isNavigating) return false;
     this._isNavigating = true;
     try {
       const canonical = (viewName === 'class-editor') ? 'editor' : viewName;
       const isSameView = this.currentView === canonical;
       const isSameClass = !options.classId || options.classId === this.currentOptions?.classId;
-      const targetContainer = this.viewContainers[canonical];
+      const targetContainer = this.viewContainers ? this.viewContainers[canonical] : document.getElementById(`${canonical}-view`);
       const isContainerEmpty = targetContainer && !targetContainer.innerHTML.trim();
 
       if (isSameView && isSameClass && !options.force && !isContainerEmpty) return false;
@@ -252,7 +265,12 @@ class AppRouterClass {
                 }, '', hashUrl);
               }
             }
-          } catch (e) {}
+          } catch (e) {
+            try {
+              const hashUrl = '#' + canonical + (options.classId ? `?id=${encodeURIComponent(options.classId)}` : '');
+              window.location.hash = hashUrl;
+            } catch (err2) {}
+          }
         }
       }
 
@@ -370,6 +388,12 @@ class AppRouterClass {
   _onViewActivated(viewName, options = {}) {
     try {
       if (viewName === 'dashboard') {
+        const isCoord = (typeof UserService !== 'undefined' && UserService.isCoordinatorActive && UserService.isCoordinatorActive()) ||
+                        (typeof AuthModal !== 'undefined' && AuthModal.getSession && AuthModal.getSession()?.role === 'coordinator');
+        if (isCoord) {
+          this.navigateTo('calendar', { replace: true, force: true });
+          return;
+        }
         if (typeof DashboardView !== 'undefined' && DashboardView.render) {
           DashboardView.render();
         }
@@ -390,6 +414,16 @@ class AppRouterClass {
           RecoveryView.render();
         }
       } else if (viewName === 'editor') {
+        const isCoord = (typeof UserService !== 'undefined' && UserService.isCoordinatorActive && UserService.isCoordinatorActive()) ||
+                        (typeof AuthModal !== 'undefined' && AuthModal.getSession && AuthModal.getSession()?.role === 'coordinator');
+        if (isCoord) {
+          const targetId = options.classId || (typeof AppState !== 'undefined' ? AppState.get('currentClassId') : null);
+          if (targetId && typeof CoordinatorView !== 'undefined') {
+            CoordinatorView.inspectPlan('usr_manuel', null, targetId);
+          }
+          this.navigateTo('sequences', { replace: true, force: true });
+          return;
+        }
         if (typeof ClassEditorView !== 'undefined') {
           if (options.classId) {
             ClassEditorView.loadClass(options.classId);
