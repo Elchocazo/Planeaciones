@@ -653,7 +653,7 @@ const FirestoreService = {
                     c.dayNumber = String(schedSeq);
                   }
                 }
-                ClassRepository.saveClass(c, tid);
+                ClassRepository.saveClass(c, tid, { skipCloud: true });
                 restoredClassesCount++;
               }
             });
@@ -664,7 +664,7 @@ const FirestoreService = {
             Object.keys(bundle.plans).forEach(d => {
               const p = bundle.plans[d];
               if (p) {
-                PlanRepository.savePlan(tid, d, p, { skipBroadcast: true });
+                PlanRepository.savePlan(tid, d, p, { skipBroadcast: true, skipCloud: true });
                 restoredPlansCount++;
               }
             });
@@ -715,7 +715,7 @@ const FirestoreService = {
               cloudCls.dayNumber = String(schedSeq);
             }
           }
-          ClassRepository.saveClass(cloudCls, tid);
+          ClassRepository.saveClass(cloudCls, tid, { skipCloud: true });
           restoredClassesCount++;
         }
       });

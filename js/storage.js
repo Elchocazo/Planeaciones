@@ -1170,16 +1170,25 @@ const StorageService = {
   },
 
   /**
+   * El respaldo físico en disco (/api/autosave) solo existe cuando la app se ejecuta con
+   * servidor_local.py en el propio equipo. En file:// o en el hosting estático (Firebase)
+   * no se intenta, evitando serializar y subir varios MB en cada guardado.
+   */
+  canUseDiskEndpoint() {
+    if (this._hasDiskEndpoint === false) return false;
+    if (typeof window === 'undefined' || !window.fetch || !window.location) return false;
+    const loc = window.location;
+    if (loc.protocol !== 'http:' && loc.protocol !== 'https:') return false;
+    const host = String(loc.hostname || '').toLowerCase();
+    return host === 'localhost' || host === '127.0.0.1' || host === '[::1]' || host === '::1';
+  },
+
+  /**
    * Envía un respaldo en segundo plano al servidor local (para guardado físico a disco duro)
    */
   async syncToDisk(payload = null) {
-    if (this._hasDiskEndpoint === false) return false;
+    if (!this.canUseDiskEndpoint()) return false;
     try {
-      if (typeof window === 'undefined' || !window.fetch) return false;
-      if (typeof window !== 'undefined' && window.location && window.location.protocol === 'file:') {
-        this._hasDiskEndpoint = false;
-        return false;
-      }
       const dataToSync = payload || {
         version: '2.0',
         exportedAt: new Date().toISOString(),
@@ -1292,12 +1301,15 @@ const StorageService = {
       IDBStorage.requestPersistence();
     }
 
-    setInterval(() => {
+    this._heartbeatTimer = setInterval(() => {
       // Solo guardar si hay cambios pendientes
       if (this._isDirty || (typeof AppState !== 'undefined' && AppState.get('isDirty'))) {
         this.executeAutoSaveProtocol(false);
       }
     }, intervalMs);
+    if (this._heartbeatTimer && typeof this._heartbeatTimer.unref === 'function') {
+      this._heartbeatTimer.unref();
+    }
 
     // Salvaguardas ante cierre de pestaña o cambio de visibilidad solo si hay cambios sucios
     if (typeof window !== 'undefined') {

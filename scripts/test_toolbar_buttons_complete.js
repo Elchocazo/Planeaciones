@@ -24,8 +24,12 @@ const testHtml = `<!DOCTYPE html>
 .notebook-page-break { border-top: 1px dashed red; }
 </style>
 </head>
-<body>
-<div id="notebook-mount-point"></div>
+<body class="notebook-mode">
+<div class="app-container">
+  <main id="notebook-view" class="notebook-fullpage-layout" style="display: block;">
+    <section id="notebook-mount-point"></section>
+  </main>
+</div>
 
 <script>
 // Mock environment
@@ -67,9 +71,10 @@ ${notebookEditorCode}
 <div id="test-results"></div>
 
 <script>
-try {
-  // Mount the editor
-  NotebookEditor.openInPage(0);
+window.addEventListener('load', () => {
+  try {
+    // Mount the editor
+    NotebookEditor.openInPage(0);
 
   const results = {};
   const editor = document.getElementById('notebook-single-editor');
@@ -195,6 +200,7 @@ try {
 } catch (e) {
   document.getElementById('test-results').textContent = 'ERROR: ' + e.stack;
 }
+});
 </script>
 </body>
 </html>`;

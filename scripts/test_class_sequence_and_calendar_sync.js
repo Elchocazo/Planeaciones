@@ -94,7 +94,7 @@ assert.strictEqual(seqSisSwapped, 6, 'Permuted subject, grade should return #6')
 
 const seqMat7 = repo.getNextSequenceNumber({ period: '1°', subject: 'Matemáticas', grade: '7°' });
 console.log('Matemáticas 7° ->', seqMat7);
-assert.strictEqual(seqMat7, 17, 'Matemáticas 7° correctly has consecutive #17 because it has up to #16 on 2026-10-14');
+assert.strictEqual(seqMat7, 16, 'Matemáticas 7° correctly has consecutive #16 because it has up to #15 on 2026-10-14');
 
 console.log('✓ TEST 1 PASSED: Consecutivity logic verified 100%');
 

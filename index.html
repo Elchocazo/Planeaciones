@@ -1166,10 +1166,26 @@
   <!-- Contenedor de Notificaciones Toast -->
   <div class="toast-container" id="toast-container"></div>
 
-  <!-- Firebase SDK v10 (Compat) y Configuración Nube Firestore / Auth -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <!-- Firebase SDK v10 (Compat): carga NO bloqueante. La app arranca y funciona en modo local
+       aunque no haya Internet; FirestoreService espera a window.FirebaseSDKReady para conectarse. -->
+  <script>
+    window.FirebaseSDKReady = (function () {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) return Promise.resolve(false);
+      var base = 'https://www.gstatic.com/firebasejs/10.12.0/';
+      var files = ['firebase-app-compat.js', 'firebase-auth-compat.js', 'firebase-firestore-compat.js'];
+      return new Promise(function (resolve) {
+        var remaining = files.length, failed = false;
+        files.forEach(function (f) {
+          var s = document.createElement('script');
+          s.src = base + f;
+          s.async = false; // conserva el orden de ejecución sin bloquear el analizador HTML
+          s.onload = function () { if (--remaining === 0) resolve(!failed); };
+          s.onerror = function () { failed = true; if (--remaining === 0) resolve(false); };
+          document.head.appendChild(s);
+        });
+      });
+    })();
+  </script>
   <script src="js/firebase-config.js?v=20261002-v7"></script>
 
   <!-- Scripts de la Aplicación -->

@@ -18,7 +18,9 @@ global.localStorage = {
   getItem(k) { return this.store[k] !== undefined ? this.store[k] : null; },
   setItem(k, v) { this.store[k] = String(v); },
   removeItem(k) { delete this.store[k]; },
-  clear() { for (let k in this.store) delete this.store[k]; }
+  clear() { for (let k in this.store) delete this.store[k]; },
+  key(i) { return Object.keys(this.store)[i] || null; },
+  get length() { return Object.keys(this.store).length; }
 };
 
 global.document = {

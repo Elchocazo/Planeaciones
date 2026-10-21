@@ -389,6 +389,9 @@ class RecoveryServiceClass {
   async _scanDiskBackups() {
     const records = [];
     if (typeof fetch === 'undefined') return records;
+    if (typeof StorageService !== 'undefined' && typeof StorageService.canUseDiskEndpoint === 'function' && !StorageService.canUseDiskEndpoint()) {
+      return records;
+    }
 
     try {
       const res = await fetch('/api/latest-backup');

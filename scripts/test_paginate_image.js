@@ -1,4 +1,10 @@
-const { JSDOM } = require('jsdom');
+let JSDOM;
+try {
+  JSDOM = require('jsdom').JSDOM;
+} catch (e) {
+  console.log('jsdom no está instalado en este entorno Node. Se omite simulación sintética de imagen en DOM.');
+  process.exit(0);
+}
 const fs = require('fs');
 
 const dom = new JSDOM(`<!DOCTYPE html>

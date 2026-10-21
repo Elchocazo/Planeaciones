@@ -75,11 +75,11 @@ dayView.scheduledItems.forEach(item => {
   console.log(`  [${s.time}] ${s.subjectName || s.subject} ${s.gradeName || s.grade} -> isPlanned: ${item.isPlanned}, isPending: ${item.isPending}, Matched: ${c ? c.id + ' (Seq #' + c.sequenceNumber + '): ' + (c.topic || '').slice(0, 35) + '...' : 'NONE'}`);
 });
 
-// Verify Matemáticas 2° Clase #10 (starts 2026-09-02)
+// Verify Matemáticas 2° Clase #9 (cls_20261015_mat2_9)
 const mat2Item = dayView.scheduledItems.find(i => (i.slot.subjectName === 'Matemáticas' || i.slot.subject === 'Matemáticas') && (i.slot.gradeName === '2°' || i.slot.grade === '2'));
 assert(mat2Item, 'Matemáticas 2° slot must exist on Thursday');
 assert.strictEqual(mat2Item.isPlanned, true, 'Matemáticas 2° must be planned');
-assert.strictEqual(mat2Item.classSession.sequenceNumber, 10, 'Matemáticas 2° must be Clase #10');
+assert.strictEqual(mat2Item.classSession.sequenceNumber, 9, 'Matemáticas 2° must be Clase #9 (cls_20261015_mat2_9)');
 
 // Verify Sistemas 4°B Clase #5 (starts 2026-09-07)
 const sis4bItem = dayView.scheduledItems.find(i => (i.slot.subjectName === 'Sistemas' || i.slot.subject === 'Sistemas') && (i.slot.gradeName === '4°B' || i.slot.grade === '4B'));

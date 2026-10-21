@@ -644,6 +644,21 @@ class ImportParserClass {
     return { text: shielded, blocks };
   }
 
+  shieldMathBlocks(text) {
+    if (!text || typeof text !== 'string' || !text.includes('$$')) return { text, blocks: [] };
+    const blocks = [];
+    const shielded = text.replace(/\$\$([^\$\n\r]+?)\$\$/g, (match, formula) => {
+      const trimmedFormula = formula.trim();
+      if (!trimmedFormula || /^[\s,.;:\-–—\(\)\[\]\{\}]+$/.test(trimmedFormula) || (trimmedFormula.length < 2 && !/[0-9xyzabc]/i.test(trimmedFormula))) {
+        return match;
+      }
+      const ph = `___MATH_BLOCK_SHIELD_${blocks.length}___`;
+      blocks.push({ placeholder: ph, formula: trimmedFormula });
+      return `\n\n${ph}\n\n`;
+    });
+    return { text: shielded, blocks };
+  }
+
   renderCodeBlockHtml(block) {
     if (block.isHtml) return block.html;
     let langDisplay = (block.language || 'Código').toUpperCase();
@@ -669,8 +684,10 @@ class ImportParserClass {
 
     // Proteger y aislar bloques de código antes de cualquier procesamiento regex
     const { text: codeShieldedContent, blocks: codeBlocks } = this.shieldCodeBlocks(content);
+    // Proteger y aislar fórmulas matemáticas LaTeX ($$formula$$)
+    const { text: mathShieldedContent, blocks: mathBlocks } = this.shieldMathBlocks(codeShieldedContent);
 
-    let trimmed = this.cleanDocumentArtifacts(codeShieldedContent.trim());
+    let trimmed = this.cleanDocumentArtifacts(mathShieldedContent.trim());
     if (!trimmed || trimmed === '<p><br/></p>' || trimmed === '<p><br></p>' || trimmed === '<br>') return '';
 
     // Si ya contiene etiquetas HTML estructurales Y no contiene títulos en Markdown sin renderizar ni viñetas colapsadas
@@ -698,8 +715,11 @@ class ImportParserClass {
 
     let text = this.unglueText(textToProcess);
 
-    // Asegurar que encabezados mayores como TALLER / EJERCICIO PRÁCTICO queden separados en su propio bloque
-    text = text.replace(/((?:^|\n)\s*(?:\*{0,2})(?:TALLER\b[^\n:]*|ACTIVIDAD(?:ES)?\s+PR[AÁ]CTIC[OA]S?[^\n:]*|EJERCICIO(?:S)?\s+PR[AÁ]CTIC[OA]S?[^\n:]*)(?:\*{0,2}))\s*\n(?!\n)/gi, '$1\n\n');
+    // Asegurar que encabezados mayores como TALLER / EJERCICIO PRÁCTICO queden separados en su propio bloque independiente
+    text = text.replace(/(?:^|\n)\s*((?:\*{0,2})(?:TALLER\b[^\n:]*|ACTIVIDAD(?:ES)?\s+PR[AÁ]CTIC[OA]S?[^\n:]*|EJERCICIO(?:S)?\s+PR[AÁ]CTIC[OA]S?[^\n:]*)(?:\*{0,2}))\s*(?=\n|$)/gi, (m, p1) => `\n\n${p1}\n\n`);
+
+    // Asegurar que fórmulas matemáticas ($$formula$$) queden aisladas en su propio bloque
+    text = text.replace(/(?:\s*)(\$\$[^\$\n]+\$\$)(?:\s*)/g, '\n\n$1\n\n');
 
     // Dividir en bloques por dobles saltos de línea
     const blocks = text.split(/\n{2,}/);
@@ -719,6 +739,17 @@ class ImportParserClass {
         const codeBlockData = codeBlocks && codeBlocks[idx];
         if (codeBlockData) {
           htmlBlocks.push(this.renderCodeBlockHtml(codeBlockData));
+          continue;
+        }
+      }
+
+      // 0a. Fórmula matemática protegida (LaTeX)
+      const mathShieldMatch = block.match(/^___MATH_BLOCK_SHIELD_(\d+)___$/);
+      if (mathShieldMatch) {
+        const idx = parseInt(mathShieldMatch[1], 10);
+        const mathData = mathBlocks && mathBlocks[idx];
+        if (mathData) {
+          htmlBlocks.push(`<div class="notebook-math-block" style="text-align:center; margin:0.6rem 0; padding:8px 12px; background:#f8fafc; border:1.5px solid #cbd5e1; border-radius:6px; font-family:'Cambria Math', 'Times New Roman', serif; font-size:1.15rem; font-weight:700; color:#1e3a8a; letter-spacing:0.5px;">${this._escape(mathData.formula)}</div>`);
           continue;
         }
       }
@@ -1082,12 +1113,12 @@ class ImportParserClass {
     // Blindaje de secciones pedagógicas: dentro de studentNotebook o practicalActivity,
     // solo se permite la salida ante encabezados mayores explícitos para no fragmentar por palabras coincidentes
     if (currentSection === 'studentNotebook') {
-      const isExit = /^(?:TALLER\s*[\/:\-]\s*(?:ACTIVIDAD(?:ES)?|EJERCICIO(?:S)?|GU[IÍ]A)\s*PR[AÁ]CTIC[OA]S?(?:\s+DE\s+LA\s+CLASE)?|TALLER\s+PR[AÁ]CTIC[OA]\s+DE\s+LA\s+CLASE|TALLER\s+PR[AÁ]CTICO\s+FORMATIVO|TALLER\s+DE\s+APLICACI[OÓ]N\s+(?:EN\s+CLASE|DE\s+LA\s+CLASE)|ACTIVIDAD(?:ES)?\s+PR[AÁ]CTIC[OA]S?\s+DE\s+LA\s+CLASE|EJERCICIO(?:S)?\s+PR[AÁ]CTIC[OA]S?\s+DE\s+LA\s+CLASE|TALLER\s+PR[AÁ]CTICO(?:\s+EN\s+CLASE)?\s*$|TALLER\s*[\/:\-]\s*(?:ACTIVIDAD|EJERCICIO)\s*$|NOTAS?\s+ADICIONALES|OBSERVACIONES\s+DEL\s+DOCENTE|PARTE\s+[12]|SECUENCIA\s+DID[AÁ]CTICA\s+ESTRUCTURADA|FASE\s+DE|RECURSOS|MATERIALES|EVALUACI[OÓ]N|TAREAS|COMPROMISOS)\b/i.test(upper);
+      const isExit = /^(?:TALLER\s*[\/:\-]\s*(?:ACTIVIDAD(?:ES)?|EJERCICIO(?:S)?|GU[IÍ]A)\s*PR[AÁ]CTIC[OA]S?(?:\s+DE\s+LA\s+CLASE)?|TALLER\s+PR[AÁ]CTIC[OA]\s+DE\s+LA\s+CLASE|TALLER\s+PR[AÁ]CTICO\s+FORMATIVO|TALLER\s+DE\s+APLICACI[OÓ]N\s+(?:EN\s+CLASE|DE\s+LA\s+CLASE)|ACTIVIDAD(?:ES)?\s+PR[AÁ]CTIC[OA]S?\s+DE\s+LA\s+CLASE|EJERCICIO(?:S)?\s+PR[AÁ]CTIC[OA]S?\s+DE\s+LA\s+CLASE|TALLER\s+PR[AÁ]CTICO(?:\s+EN\s+CLASE)?\s*$|TALLER\s*[\/:\-]\s*(?:ACTIVIDAD|EJERCICIO)\s*$|NOTAS?\s+ADICIONALES|OBSERVACIONES(?:\s+PEDAG[OÓ]GICAS|\s+DEL\s+DOCENTE)?|PARTE\s+[12]|SECUENCIA\s+DID[AÁ]CTICA\s+ESTRUCTURADA|FASE\s+DE|RECURSOS|MATERIALES|EVALUACI[OÓ]N|TAREAS|COMPROMISOS)\b/i.test(upper);
       if (!isExit) {
         return null;
       }
     } else if (currentSection === 'practicalActivity') {
-      const isExit = /^(?:NOTAS?\s+ADICIONALES|OBSERVACIONES\s+DEL\s+DOCENTE|PARTE\s+[12]|SECUENCIA\s+DID[AÁ]CTICA\s+ESTRUCTURADA|FASE\s+DE\s+(?:INICIO|DESARROLLO|CIERRE)|RECURSOS|MATERIALES|EVALUACI[OÓ]N|TAREAS|COMPROMISOS|INFORMACI[OÓ]N\s+GENERAL|DATOS\s+GENERALES|PLANEACI[OÓ]N\s+DE\s+CLASE|GU[IÍ]A\s+DE\s+CONTENIDO|DIN[AÁ]MICA)\b/i.test(upper);
+      const isExit = /^(?:NOTAS?\s+ADICIONALES|OBSERVACIONES(?:\s+PEDAG[OÓ]GICAS|\s+DEL\s+DOCENTE)?|PARTE\s+[12]|SECUENCIA\s+DID[AÁ]CTICA\s+ESTRUCTURADA|FASE\s+DE\s+(?:INICIO|DESARROLLO|CIERRE)|RECURSOS|MATERIALES|EVALUACI[OÓ]N|TAREAS|COMPROMISOS|INFORMACI[OÓ]N\s+GENERAL|DATOS\s+GENERALES|PLANEACI[OÓ]N\s+DE\s+CLASE|GU[IÍ]A\s+DE\s+CONTENIDO|DIN[AÁ]MICA)\b/i.test(upper);
       if (!isExit) {
         return null;
       }
@@ -1196,7 +1227,7 @@ class ImportParserClass {
         return null;
       }
       const inDidactic = ['inicio', 'desarrollo', 'cierre', 'recursos', 'tareas', 'evaluation', 'observaciones'].includes(currentSection);
-      const isExplicitHeading = /^(?:TALLER\s*[\/:\-]\s*(?:ACTIVIDAD(?:ES)?|EJERCICIO(?:S)?|GU[IÍ]A)\s*PR[AÁ]CTIC[OA]S?(?:\s+DE\s+LA\s+CLASE)?|TALLER\s+PR[AÁ]CTIC[OA]\s+DE\s+LA\s+CLASE|TALLER\s+PR[AÁ]CTICO\s+FORMATIVO|TALLER\s+DE\s+APLICACI[OÓ]N\s+(?:EN\s+CLASE|DE\s+LA\s+CLASE)|ACTIVIDAD(?:ES)?\s+PR[AÁ]CTIC[OA]S?\s+DE\s+LA\s+CLASE|EJERCICIO(?:S)?\s+PR[AÁ]CTIC[OA]S?\s+DE\s+LA\s+CLASE|TALLER\s+PR[AÁ]CTICO(?:\s+EN\s+CLASE)?\s*$|TALLER\s*[\/:\-]\s*(?:ACTIVIDAD|EJERCICIO)\s*$)/i.test(upper);
+      const isExplicitHeading = /^(?:TALLER\s*[\/:\-]\s*(?:ACTIVIDAD(?:ES)?|EJERCICIO(?:S)?|GU[IÍ]A)\s*PR[AÁ]CTIC[OA]S?(?:\s+DE\s+LA\s+CLASE)?|TALLER\s+PR[AÁ]CTIC[OA]\s+DE\s+LA\s+CLASE|TALLER\s+PR[AÁ]CTICO\s+FORMATIVO|TALLER\s+DE\s+APLICACI[OÓ]N\s+(?:EN\s+CLASE|DE\s+LA\s+CLASE)|ACTIVIDAD(?:ES)?\s+PR[AÁ]CTIC[OA]S?(?:\s+DE\s+LA\s+CLASE)?|EJERCICIO(?:S)?\s+PR[AÁ]CTIC[OA]S?(?:\s+DE\s+LA\s+CLASE)?|TALLER\s+PR[AÁ]CTICO(?:\s+EN\s+CLASE)?\s*$|TALLER\s*[\/:\-]\s*(?:ACTIVIDAD(?:ES)?|EJERCICIO(?:S)?|GU[IÍ]A(?:S)?)\s*$|TALLER\s*(?::|\b|$))/i.test(upper);
       if (inDidactic && !isExplicitHeading) {
         return null;
       }

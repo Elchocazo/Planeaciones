@@ -373,8 +373,11 @@ class MigrationManagerClass {
         await IDBStorage.set(`migration_backup_${teacherId}_pre_v4`, snapshot);
       }
 
-      // Respaldo en disco si server.js está activo
-      if (typeof fetch !== 'undefined') {
+      // Respaldo en disco si servidor_local.py está activo (solo en localhost)
+      const diskAllowed = typeof StorageService !== 'undefined' && typeof StorageService.canUseDiskEndpoint === 'function'
+        ? StorageService.canUseDiskEndpoint()
+        : false;
+      if (diskAllowed && typeof fetch !== 'undefined') {
         try {
           await fetch('/api/autosave', {
             method: 'POST',

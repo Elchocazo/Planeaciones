@@ -4,7 +4,7 @@ const NotebookEditor = require('../js/notebook-editor.js');
 const { PageConfig, PaginationEngine } = require('../js/core/pagination-engine.js');
 
 const testInputFile = fs.readFileSync('scripts/test_user_robotica_input.js', 'utf8');
-const match = testInputFile.match(/const rawInput = `([\s\S]+?)`;/);
+const match = testInputFile.match(/const (?:rawInput|userText) = `([\s\S]+?)`;/);
 const text = match[1];
 
 const parsed = ImportParser.parse(text);

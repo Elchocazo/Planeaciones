@@ -292,7 +292,9 @@ const App = {
     if (adminToolsEl) adminToolsEl.style.display = 'flex';
     if (mainNavEl) {
       mainNavEl.style.display = 'flex';
-      const navButtons = mainNavEl.querySelectorAll('.app-nav-btn');
+      const navButtons = typeof mainNavEl.querySelectorAll === 'function'
+        ? mainNavEl.querySelectorAll('.app-nav-btn')
+        : [];
       navButtons.forEach(btn => {
         btn.style.display = 'inline-flex';
       });
@@ -942,9 +944,9 @@ const App = {
 
   bindEvents() {
     const importInput = document.getElementById('import-backup-file');
-    if (importInput) {
+    if (importInput && typeof importInput.addEventListener === 'function') {
       importInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
+        const file = e.target.files && e.target.files[0];
         if (!file) return;
         const reader = new FileReader();
         reader.onload = (evt) => {
@@ -961,7 +963,7 @@ const App = {
     }
 
     const newSubjectInput = document.getElementById('input-new-matrix-subject');
-    if (newSubjectInput) {
+    if (newSubjectInput && typeof newSubjectInput.addEventListener === 'function') {
       newSubjectInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
           e.preventDefault();
@@ -971,7 +973,7 @@ const App = {
     }
 
     const newGradeInput = document.getElementById('input-new-grade-item');
-    if (newGradeInput) {
+    if (newGradeInput && typeof newGradeInput.addEventListener === 'function') {
       newGradeInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
           e.preventDefault();

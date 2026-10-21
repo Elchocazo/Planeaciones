@@ -1,4 +1,13 @@
 {
+  "name": "planeador-de-clases-multigrados",
+  "version": "5.0.0",
+  "description": "Planeador pedagógico multigrado con generación DOCX/PDF y sincronización local/offline",
+  "main": "index.html",
+  "scripts": {
+    "start": "python servidor_local.py",
+    "test": "node scripts/run_all_tests.js",
+    "bench": "node scripts/bench_save_with_seed.js"
+  },
   "dependencies": {
     "jszip": "^3.10.1"
   }

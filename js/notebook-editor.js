@@ -604,6 +604,10 @@ const NotebookEditor = {
     const mount = document.getElementById('notebook-mount-point');
     if (!mount) return;
 
+    // Perfil de coordinación: modo solo lectura (antes no se declaraba aquí y lanzaba ReferenceError)
+    const isCoord = (typeof UserService !== 'undefined' && UserService.isCoordinatorActive && UserService.isCoordinatorActive()) ||
+                    (typeof AuthModal !== 'undefined' && AuthModal.getSession && AuthModal.getSession()?.role === 'coordinator');
+
     const profile = (typeof StorageService !== 'undefined') ? StorageService.getProfile() : {};
     const formattedDate = window.Planner.formatFullDate ? window.Planner.formatFullDate(this.currentDateStr) : this.currentDateStr;
     const cls = this.currentClassData;
@@ -1005,7 +1009,6 @@ const NotebookEditor = {
         raw = `<h2>🎯 ${this.escapeHtml(top)}</h2>\n\n${cls.didacticSequence.desarrollo}`;
       }
     }
-    raw = this.cleanDocumentArtifacts(raw);
 
     // Comprobar si existe actividad práctica / taller registrada en la clase
     const practical = this.cleanDocumentArtifacts((cls?.teacherNotebook?.practicalActivity || cls?.practicalActivity || cls?.actividadPractica || cls?.taller || '').trim());
@@ -2539,12 +2542,12 @@ const NotebookEditor = {
    */
   formatNotebookHtml(content, force = false) {
     if (!content || typeof content !== 'string') return '';
-    const trimmed = this.cleanDocumentArtifacts(content.trim());
+    const trimmed = content.trim();
     if (!trimmed || trimmed === '<p><br/></p>' || trimmed === '<p><br></p>' || trimmed === '<br>') return '';
 
-    // Si ya es HTML estructurado y NO tiene encabezados o viñetas en Markdown crudo ni viñetas colapsadas
+    // Si ya es HTML estructurado y NO tiene encabezados o viñetas en Markdown crudo ni viñetas colapsadas ni fórmulas pendientes
     const hasRichTags = /<(?:p|h[1-6]|ul|ol|table|div|blockquote)[^>]*>/i.test(trimmed);
-    const hasRawMarkdown = /\*\*\d+[\.\)]\s+[A-ZÁÉÍÓÚÑ¿¡]|\*\*(?:Regla|Paso|Norma|Lectura|Definici[oó]n|Importante)[\s\w#º°\d]*:|\n•\s*\*\*|•\s+\*\*|\*\*[^*]+\*\*|##\s+[A-ZÁÉÍÓÚÑ]/.test(trimmed);
+    const hasRawMarkdown = /\$\$[^\$\n\r]+\$\$|\*\*\d+[\.\)]\s+[A-ZÁÉÍÓÚÑ¿¡]|\*\*(?:Regla|Paso|Norma|Lectura|Definici[oó]n|Importante)[\s\w#º°\d]*:|\n•\s*\*\*|•\s+\*\*|\*\*[^*]+\*\*|##\s+[A-ZÁÉÍÓÚÑ]/.test(trimmed);
     const bulletCount = (trimmed.match(/•/g) || []).length;
     const liCount = (trimmed.match(/<li\b/gi) || []).length;
     const hasUnstructuredBullets = (bulletCount > 0 && liCount === 0) || (bulletCount > 1 && liCount < bulletCount / 2) ||
@@ -2557,7 +2560,7 @@ const NotebookEditor = {
       (/(?:TEMAS\s+DEL|DESEMPEÑOS?\s+DE|CRITERIOS?\s+DE|Fase\s+de|Eje\s+temático|Tiempo:)/i.test(trimmed) || /(?:[A-ZÁÉÍÓÚÑ][^:\n]{2,40}:\s+){2,}/.test(trimmed));
 
     if (!force && hasRichTags && !hasRawMarkdown && !hasUnstructuredBullets && !isMonolithicParagraph) {
-      return this._cleanAutoCallouts(trimmed);
+      return this._cleanAutoCallouts(this.cleanDocumentArtifacts(trimmed));
     }
 
     // Usar el convertidor centralizado de ImportParser si está disponible
@@ -2612,7 +2615,10 @@ const NotebookEditor = {
       .replace(/\n{3,}/g, '\n\n');
 
     // Asegurar que encabezados mayores como TALLER / EJERCICIO PRÁCTICO queden separados en su propio bloque
-    text = text.replace(/((?:^|\n)\s*(?:\*{0,2})(?:TALLER\b[^\n:]*|ACTIVIDAD(?:ES)?\s+PR[AÁ]CTIC[OA]S?[^\n:]*|EJERCICIO(?:S)?\s+PR[AÁ]CTIC[OA]S?[^\n:]*)(?:\*{0,2}))\s*\n(?!\n)/gi, '$1\n\n');
+    text = text.replace(/(?:^|\n)\s*((?:\*{0,2})(?:TALLER\b[^\n:]*|ACTIVIDAD(?:ES)?\s+PR[AÁ]CTIC[OA]S?[^\n:]*|EJERCICIO(?:S)?\s+PR[AÁ]CTIC[OA]S?[^\n:]*)(?:\*{0,2}))\s*(?=\n|$)/gi, (m, p1) => `\n\n${p1}\n\n`);
+
+    // Asegurar que fórmulas matemáticas ($$formula$$) queden aisladas en su propio bloque
+    text = text.replace(/(?:\s*)(\$\$[^\$\n]+\$\$)(?:\s*)/g, '\n\n$1\n\n');
 
     const blocks = text.split(/\n{2,}/);
     const htmlBlocks = [];

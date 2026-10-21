@@ -454,8 +454,8 @@ class SequenceViewClass {
                   <span>📅</span> Ir al Calendario
                 </button>
               ` : `
-                <button type="button" class="btn btn-secondary btn-sm" onclick="AppRouter.navigateTo('dashboard')" title="Regresar al Inicio" style="display:inline-flex; align-items:center; gap:6px; font-weight:700; padding:7px 16px; border-radius:10px; background:#ffffff; color:#334155; border:1.5px solid #cbd5e1; box-shadow:0 1px 3px rgba(0,0,0,0.05); cursor:pointer;">
-                  <span>←</span> Volver al Inicio
+                <button type="button" class="btn btn-secondary btn-sm" onclick="AppRouter.goBack()" title="Regresar a la sección anterior" style="display:inline-flex; align-items:center; gap:6px; font-weight:700; padding:7px 16px; border-radius:10px; background:#ffffff; color:#334155; border:1.5px solid #cbd5e1; box-shadow:0 1px 3px rgba(0,0,0,0.05); cursor:pointer;">
+                  <span>←</span> Volver
                 </button>
               `}
             </div>

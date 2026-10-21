@@ -250,6 +250,9 @@ class ClassRepositoryClass {
     if (typeof window !== 'undefined' && typeof window.BroadcastChannel !== 'undefined') {
       try {
         this._channel = new BroadcastChannel('planeaciones_class_sync_v4');
+        if (typeof this._channel.unref === 'function') {
+          this._channel.unref();
+        }
         this._channel.onmessage = (event) => this._handleBroadcast(event.data);
       } catch (e) {}
     }
@@ -1119,9 +1122,10 @@ class ClassRepositoryClass {
     const group = incoming.group || existing?.group || gradeName;
     const period = incoming.period || existing?.period || '1°';
 
-    // sequenceNumber: PERMANENTE E INMUTABLE
-    let sequenceNumber = incoming.sequenceNumber !== undefined && incoming.sequenceNumber !== null
-      ? parseInt(incoming.sequenceNumber, 10)
+    // sequenceNumber: PERMANENTE E INMUTABLE (Soporta esquemas v1-v5: sequenceNumber, consecutive, dayNumber)
+    const rawSeq = incoming.sequenceNumber ?? incoming.consecutive ?? incoming.dayNumber;
+    let sequenceNumber = rawSeq !== undefined && rawSeq !== null && !isNaN(parseInt(String(rawSeq).replace(/[^0-9]/g, ''), 10))
+      ? parseInt(String(rawSeq).replace(/[^0-9]/g, ''), 10)
       : (existing?.sequenceNumber ? parseInt(existing.sequenceNumber, 10) : null);
 
     if (!sequenceNumber || isNaN(sequenceNumber)) {
@@ -1562,9 +1566,15 @@ class ClassRepositoryClass {
       }
     }
 
-    // Guardar snapshot previo de seguridad
+    // Guardar snapshot previo de seguridad (historial acotado: se conservan las últimas
+    // SNAPSHOT_HISTORY versiones por clase para no crecer indefinidamente en IndexedDB)
     if (existing) {
       this._saveSnapshot(tid, `class_${normalized.id}_v${existing.version}`, existing);
+      const SNAPSHOT_HISTORY = 15;
+      const staleVersion = Number(existing.version) - SNAPSHOT_HISTORY;
+      if (staleVersion > 0 && typeof IDBStorage !== 'undefined' && typeof IDBStorage.delete === 'function') {
+        IDBStorage.delete(`snapshot_${tid}_class_${normalized.id}_v${staleVersion}`).catch(() => {});
+      }
     }
 
     map[normalized.id] = normalized;
@@ -1573,7 +1583,7 @@ class ClassRepositoryClass {
     let syncedMirror = null;
     if (!options.isMirrorSync) {
       try {
-        syncedMirror = this.syncMirrorClass(normalized, tid, { skipPersist: true });
+        syncedMirror = this.syncMirrorClass(normalized, tid, { skipPersist: true, skipCloud: !!options.skipCloud });
       } catch (e) {
         console.warn('[ClassRepository] Error al sincronizar clase espejo:', e);
       }
@@ -1584,7 +1594,8 @@ class ClassRepositoryClass {
     this._updateSequenceIndex(normalized);
 
     // Sincronización automática con Google Cloud Firestore
-    if (typeof FirestoreService !== 'undefined' && typeof FirestoreService.isReady === 'function' && FirestoreService.isReady()) {
+    // (skipCloud: datos que vienen de la nube no se reenvían, evitando escrituras eco y bucles con onSnapshot)
+    if (!options.skipCloud && typeof FirestoreService !== 'undefined' && typeof FirestoreService.isReady === 'function' && FirestoreService.isReady()) {
       try {
         const clsRef = FirestoreService.db.collection('school_classes_v1').doc(`${tid}_${normalized.id}`);
         const p = JSON.parse(JSON.stringify(normalized));
@@ -1791,7 +1802,7 @@ class ClassRepositoryClass {
     }
     this._broadcastSave(mirrorCls);
 
-    if (typeof FirestoreService !== 'undefined' && typeof FirestoreService.isReady === 'function' && FirestoreService.isReady()) {
+    if (!options.skipCloud && typeof FirestoreService !== 'undefined' && typeof FirestoreService.isReady === 'function' && FirestoreService.isReady()) {
       try {
         const clsRef = FirestoreService.db.collection('school_classes_v1').doc(`${tid}_${mirrorCls.id}`);
         const p = JSON.parse(JSON.stringify(mirrorCls));
@@ -2419,36 +2430,102 @@ class ClassRepositoryClass {
       return;
     }
 
+    // La caché en memoria se actualiza de inmediato (lecturas siempre frescas).
     this._cache[tid] = sessionsMap;
-    const key = this.getStorageKey(tid);
 
-    // 1. LocalStorage
-    try {
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem(key, JSON.stringify(sessionsMap));
+    // Escritura agrupada: varias llamadas a _persist dentro de la misma tarea síncrona
+    // (guardar un plan con N clases, sincronizar espejos, realinear consecutivos, importar)
+    // producen UNA sola serialización del mapa completo en lugar de N.
+    // Se usa una microtarea: se ejecuta antes de que el navegador pueda pintar, cambiar de
+    // página o cerrar la pestaña, por lo que no existe ventana de pérdida de datos.
+    if (!this._pendingPersist) this._pendingPersist = new Set();
+    this._pendingPersist.add(tid);
+    if (!this._persistScheduled) {
+      this._persistScheduled = true;
+      const run = () => this.flushPersist();
+      if (typeof queueMicrotask === 'function') queueMicrotask(run);
+      else Promise.resolve().then(run);
+    }
+  }
+
+  /**
+   * Vuelca de forma inmediata a LocalStorage + IndexedDB los mapas pendientes.
+   * Es idempotente y puede invocarse manualmente (p. ej. antes de exportar un respaldo).
+   */
+  flushPersist() {
+    this._persistScheduled = false;
+    const pending = this._pendingPersist ? Array.from(this._pendingPersist) : [];
+    if (this._pendingPersist) this._pendingPersist.clear();
+
+    pending.forEach(tid => {
+      const sessionsMap = this._cache[tid];
+      if (!sessionsMap) return;
+      const key = this.getStorageKey(tid);
+
+      // 1. LocalStorage
+      let lsOk = typeof localStorage === 'undefined';
+      try {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem(key, JSON.stringify(sessionsMap));
+          lsOk = true;
+        }
+      } catch (e) {
+        console.warn('[ClassRepository] LocalStorage lleno o no disponible. Se asegura en IndexedDB.', e && e.name);
       }
-    } catch (e) {
-      console.warn('[ClassRepository] LocalStorage lleno. Se asegura en IndexedDB.');
-    }
 
-    // 2. IndexedDB
-    if (typeof IDBStorage !== 'undefined' && IDBStorage.set) {
-      IDBStorage.set(key, sessionsMap).catch(() => {});
-    }
+      // 2. IndexedDB (capa de alta capacidad). Si ambas capas fallan se notifica al usuario:
+      //    nunca se informa "guardado" cuando la operación falló.
+      if (typeof IDBStorage !== 'undefined' && IDBStorage.set) {
+        IDBStorage.set(key, sessionsMap).then(ok => {
+          if (ok === false && !lsOk) this._reportPersistFailure(tid);
+        }).catch(() => {
+          if (!lsOk) this._reportPersistFailure(tid);
+        });
+      } else if (!lsOk) {
+        this._reportPersistFailure(tid);
+      }
+      if (lsOk) this._lastPersistError = null;
 
-    // 3. Sincronización diferida (debounced) con PlanRepository en modo espejo para evitar bloqueos
-    if (this._syncLegacyTimer) clearTimeout(this._syncLegacyTimer);
-    this._syncLegacyTimer = setTimeout(() => {
-      this._syncLegacyPlanMirror(sessionsMap, tid);
-    }, 1200);
-    if (this._syncLegacyTimer && typeof this._syncLegacyTimer.unref === 'function') {
-      this._syncLegacyTimer.unref();
-    }
+      // 3. Sincronización diferida (debounced) con PlanRepository en modo espejo para evitar bloqueos
+      if (this._syncLegacyTimer) clearTimeout(this._syncLegacyTimer);
+      this._syncLegacyTimer = setTimeout(() => {
+        this._syncLegacyPlanMirror(this._cache[tid] || sessionsMap, tid);
+      }, 1200);
+      if (this._syncLegacyTimer && typeof this._syncLegacyTimer.unref === 'function') {
+        this._syncLegacyTimer.unref();
+      }
+    });
+  }
+
+  _reportPersistFailure(tid) {
+    this._lastPersistError = { teacherId: tid, at: new Date().toISOString() };
+    console.error('[ClassRepository] ERROR: no se pudo guardar en LocalStorage ni en IndexedDB. Exporte un respaldo JSON.');
+    try {
+      if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function' && typeof CustomEvent !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('planner-storage-error', { detail: this._lastPersistError }));
+      }
+      if (typeof App !== 'undefined' && typeof App.showToast === 'function') {
+        App.showToast('⚠ No se pudo guardar en este navegador (almacenamiento lleno o bloqueado). Descargue un respaldo JSON ahora.', 'error');
+      }
+    } catch (e) {}
   }
 
   _syncLegacyPlanMirror(sessionsMap, teacherId) {
     try {
-      const plansByDate = {};
+      const legacyKey = 'teacher_planner_plans_' + teacherId + '_v3';
+      let plansByDate = {};
+      try {
+        if (typeof localStorage !== 'undefined') {
+          const raw = localStorage.getItem(legacyKey);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === 'object') {
+              plansByDate = Object.assign({}, parsed);
+            }
+          }
+        }
+      } catch (e) {}
+
       Object.values(sessionsMap).forEach(cls => {
         const d = cls.date;
         if (!plansByDate[d]) {
@@ -2462,8 +2539,11 @@ class ClassRepositoryClass {
             attachments: [],
             generalNotes: ''
           };
+        } else if (!Array.isArray(plansByDate[d].classes)) {
+          plansByDate[d].classes = [];
         }
-        plansByDate[d].classes.push({
+
+        const clsItem = {
           id: cls.id,
           classId: cls.id,
           date: cls.date,
@@ -2492,11 +2572,17 @@ class ClassRepositoryClass {
           notebookContent: cls.notebookContent || cls.teacherNotebook?.studentNotebookContent || '',
           attachments: cls.attachments || [],
           version: cls.version || 1
-        });
+        };
+
+        const existingIdx = plansByDate[d].classes.findIndex(c => c && (c.id === cls.id || c.classId === cls.id));
+        if (existingIdx >= 0) {
+          plansByDate[d].classes[existingIdx] = clsItem;
+        } else {
+          plansByDate[d].classes.push(clsItem);
+        }
       });
 
       // Actualizar localStorage v3 para compatibilidad sin bloquear la UI
-      const legacyKey = 'teacher_planner_plans_' + teacherId + '_v3';
       if (typeof localStorage !== 'undefined') {
         localStorage.setItem(legacyKey, JSON.stringify(plansByDate));
       }

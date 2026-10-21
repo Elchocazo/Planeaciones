@@ -1,6 +1,14 @@
 const base64 = 'ABCDEF1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'.repeat(10000);
 const rawHtml = '<p>Texto</p><img src="data:image/png;base64,' + base64 + '"><p>Texto</p>';
 
+// Blindaje de imagen conforme a Regla 5 de GEMINI.md
+const imagePlaceholders = [];
+const shieldedHtml = rawHtml.replace(/<img\b[^>]*>/gi, (m) => {
+  const ph = `___IMG_SHIELD_${imagePlaceholders.length}___`;
+  imagePlaceholders.push(m);
+  return ph;
+});
+
 const regexes = [
   { name: '1_crit', fn: s => s.replace(/(?:^|\n)\s*Criterios\s+de(?!\s+evaluaci[oó]n)[\s:]*(?=[•\-\*]|\n|$)/gi, '\nCriterios de evaluación:\n') },
   { name: '1_inst', fn: s => s.replace(/(?:^|\n)\s*Instrumentos\s+de(?!\s+evaluaci[oó]n)[\s:]*(?=[•\-\*]|\n|$)/gi, '\nInstrumentos de evaluación:\n') },
@@ -20,13 +28,13 @@ const regexes = [
   { name: '7_paren', fn: s => s.replace(/([a-záéíóúñA-ZÁÉÍÓÚÑ0-9,])\s*\n\s*(\([a-záéíóúñA-ZÁÉÍÓÚÑ0-9])/g, '$1 $2') },
   { name: '8_guion', fn: s => s.replace(/(?<!\b(?:en|de|con|el|la|un|una))\b([a-záéíóúñA-ZÁÉÍÓÚÑ]+)\s*-\s*\n\s*([a-záéíóúñ]+)\b/g, '$1-$2') },
   { name: '9_list',  fn: s => s.replace(/([^\n])\n*((?:Criterios|Instrumentos)\s+de\s+evaluaci[oó]n:)/gi, '$1\n\n$2') },
-  { name: '10_head', fn: s => s.replace(/([^\n:]+:)\s*\n{2,}([•]|[-*](?!\*))/g, '$1\n$2') },
+  { name: '10_head', fn: s => s.replace(/([^\n:]{1,120}:)\s*\n{2,}([•]|[-*](?!\*))/g, '$1\n$2') },
   { name: '11_trip', fn: s => s.replace(/\n{3,}/g, '\n\n') }
 ];
 
 regexes.forEach(({ name, fn }) => {
   console.time(name);
-  fn(rawHtml);
+  fn(shieldedHtml);
   console.timeEnd(name);
 });
 console.log('All tests in cleanBrokenLinebreaks finished!');

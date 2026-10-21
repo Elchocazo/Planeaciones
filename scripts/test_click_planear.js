@@ -127,6 +127,7 @@ async function testPlanearClick() {
   } else {
     console.log('No slots found in repository!');
   }
+  process.exit(0);
 }
 
 testPlanearClick();

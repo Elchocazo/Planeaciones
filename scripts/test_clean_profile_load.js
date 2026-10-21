@@ -85,6 +85,8 @@ try {
     App.init();
     console.log('App.init() executed successfully!');
   }
+  process.exit(0);
 } catch(err) {
   console.error('FATAL ERROR in App.init():', err);
+  process.exit(1);
 }

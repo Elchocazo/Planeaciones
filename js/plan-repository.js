@@ -47,6 +47,9 @@ const PlanRepository = {
         if (typeof window !== 'undefined' && typeof window.BroadcastChannel !== 'undefined') {
           try {
             this._channel = new BroadcastChannel('planeaciones_sync_v3');
+            if (typeof this._channel.unref === 'function') {
+              this._channel.unref();
+            }
             this._channel.onmessage = (event) => this._handleBroadcastMessage(event.data);
           } catch (eChan) {
             console.warn('[PlanRepository] BroadcastChannel no disponible:', eChan);
@@ -133,6 +136,7 @@ const PlanRepository = {
   },
 
   clearCache() {
+    this.flushPersist();
     this._cache = {};
   },
 
@@ -415,22 +419,9 @@ const PlanRepository = {
     if (!this._cache[tid]) this._cache[tid] = {};
     this._cache[tid][date] = finalizedPlan;
 
-    // 5. Persistir en LocalStorage
-    const key = this.getStorageKey(tid);
-    try {
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem(key, JSON.stringify(this._cache[tid]));
-      }
-    } catch (eLS) {
-      console.warn('[PlanRepository] LocalStorage lleno o error al guardar. Se prioriza IndexedDB.');
-    }
-
-    // 6. Persistir en IndexedDB de Alta Capacidad (Sin limite de tamano)
-    if (typeof IDBStorage !== 'undefined' && IDBStorage.set) {
-      IDBStorage.set(key, this._cache[tid]).catch(err => {
-        console.warn('[PlanRepository] Error al escribir en IndexedDB:', err);
-      });
-    }
+    // 5-6. Persistir en LocalStorage + IndexedDB (escritura agrupada: un guardado de N clases
+    //      en la misma tarea produce una sola serialización)
+    this._schedulePersist(tid);
 
     // 7. Notificar a todas las demas pestanas via BroadcastChannel
     if (this._channel) {
@@ -452,8 +443,8 @@ const PlanRepository = {
       this._syncToDisk(tid);
     }, 1500);
 
-    // 9. Sincronización automática con Google Cloud Firestore
-    if (typeof FirestoreService !== 'undefined' && typeof FirestoreService.savePlan === 'function') {
+    // 9. Sincronización automática con Google Cloud Firestore (no reenviar datos que vienen de la nube)
+    if (!options.skipCloud && typeof FirestoreService !== 'undefined' && typeof FirestoreService.savePlan === 'function') {
       FirestoreService.savePlan(tid, date, finalizedPlan).catch(err => {
         console.warn('[PlanRepository] Error al sincronizar con Firestore:', err);
       });
@@ -622,22 +613,8 @@ const PlanRepository = {
     if (!this._cache[tid]) this._cache[tid] = {};
     this._cache[tid][date] = currentPlan;
 
-    // Persistir en LocalStorage v3
-    const key = this.getStorageKey(tid);
-    try {
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem(key, JSON.stringify(this._cache[tid]));
-      }
-    } catch (eLS) {
-      console.warn('[PlanRepository] LocalStorage lleno o error al guardar clase. Se prioriza IndexedDB.');
-    }
-
-    // Persistir en IndexedDB
-    if (typeof IDBStorage !== 'undefined' && IDBStorage.set) {
-      IDBStorage.set(key, this._cache[tid]).catch(err => {
-        console.warn('[PlanRepository] Error al escribir en IndexedDB:', err);
-      });
-    }
+    // Persistir en LocalStorage v3 + IndexedDB (escritura agrupada por tarea)
+    this._schedulePersist(tid);
 
     // Notificar a otras pestañas via BroadcastChannel
     if (this._channel) {
@@ -840,14 +817,15 @@ const PlanRepository = {
       }
 
       const classId = inc.id || exist?.id || this.generateClassId(planId);
-      const seqNum = inc.sequenceNumber || exist?.sequenceNumber || parseInt(inc.dayNumber || exist?.dayNumber || (idx + 1), 10) || 1;
+      const seqNum = inc.sequenceNumber || inc.consecutive || exist?.sequenceNumber || exist?.consecutive || parseInt(inc.dayNumber || exist?.dayNumber || (idx + 1), 10) || 1;
       const safeClass = {
         id: classId,
         planId: planId,
         date: date, // INMUTABLE
         dayOfWeek: inc.dayOfWeek || exist?.dayOfWeek || '',
-        dayNumber: String(inc.dayNumber || exist?.dayNumber || seqNum),
+        dayNumber: String(inc.dayNumber || exist?.dayNumber || inc.consecutive || seqNum),
         sequenceNumber: seqNum,
+        consecutive: seqNum,
         time: inc.time || exist?.time || '',
         subject: inc.subject || exist?.subject || '',
         grade: inc.grade || exist?.grade || '',
@@ -935,10 +913,64 @@ const PlanRepository = {
   },
 
   /**
-   * Envio de respaldo fisico a disco via servidor Node local
+   * Agenda una escritura única (microtarea) del mapa de planes del docente en
+   * LocalStorage + IndexedDB. La caché en memoria ya está actualizada.
+   */
+  _schedulePersist(teacherId) {
+    if (!this._pendingPersist) this._pendingPersist = new Set();
+    this._pendingPersist.add(teacherId);
+    if (this._persistScheduled) return;
+    this._persistScheduled = true;
+    const run = () => this.flushPersist();
+    if (typeof queueMicrotask === 'function') queueMicrotask(run);
+    else Promise.resolve().then(run);
+  },
+
+  flushPersist() {
+    this._persistScheduled = false;
+    const pending = this._pendingPersist ? Array.from(this._pendingPersist) : [];
+    if (this._pendingPersist) this._pendingPersist.clear();
+    pending.forEach(tid => {
+      let data = this._cache[tid];
+      if (!data) return;
+      const key = this.getStorageKey(tid);
+      try {
+        if (typeof localStorage !== 'undefined') {
+          // Regla 10: Fusión aditiva y conservativa. Preservar cualquier fecha preexistente en disco
+          const raw = localStorage.getItem(key);
+          if (raw) {
+            try {
+              const existingOnDisk = JSON.parse(raw);
+              if (existingOnDisk && typeof existingOnDisk === 'object') {
+                Object.keys(existingOnDisk).forEach(d => {
+                  if (!data[d]) {
+                    data[d] = existingOnDisk[d];
+                  }
+                });
+              }
+            } catch (e) {}
+          }
+          localStorage.setItem(key, JSON.stringify(data));
+        }
+      } catch (eLS) {
+        console.warn('[PlanRepository] LocalStorage lleno o error al guardar. Se prioriza IndexedDB.');
+      }
+      if (typeof IDBStorage !== 'undefined' && IDBStorage.set) {
+        IDBStorage.set(key, data).catch(err => {
+          console.warn('[PlanRepository] Error al escribir en IndexedDB:', err);
+        });
+      }
+    });
+  },
+
+  /**
+   * Envio de respaldo fisico a disco via servidor local (servidor_local.py).
+   * Solo se intenta cuando StorageService confirma que el endpoint puede existir
+   * (no en file:// ni en el hosting estático), evitando subir MBs en cada guardado.
    */
   async _syncToDisk(teacherId) {
     if (typeof window === 'undefined' || !window.fetch) return;
+    if (typeof StorageService !== 'undefined' && typeof StorageService.canUseDiskEndpoint === 'function' && !StorageService.canUseDiskEndpoint()) return;
     try {
       const allPlans = this.getAllPlans(teacherId);
       const payload = {
@@ -947,12 +979,15 @@ const PlanRepository = {
         teacherId: teacherId,
         plans: allPlans
       };
-      await fetch('/api/autosave', {
+      const resp = await fetch('/api/autosave', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-    } catch (e) {}
+      if (typeof StorageService !== 'undefined') StorageService._hasDiskEndpoint = !!(resp && resp.ok);
+    } catch (e) {
+      if (typeof StorageService !== 'undefined') StorageService._hasDiskEndpoint = false;
+    }
   }
 };
 
