@@ -86,9 +86,24 @@ class ImportParserClass {
         str = str.replace(/(?:^|\n)\s*(?:•\s*)?[\*•\-\–—_]{1,3}\s*(?=\n|$)/g, '\n');
       }
       if (str.includes('*')) {
+        // Proteger asteriscos aritméticos como multiplicación (ej. "(-4) * (+6)", "3 * 5")
+        // SOLO si están entre operandos aritméticos o paréntesis, nunca entre asteriscos **
+        const mathMults = [];
+        str = str.replace(/(?<=[a-zA-Z0-9\)\%\|])\s*\*\s*(?=[a-zA-Z0-9\(\-\|])/g, (match) => {
+          const ph = `___MATH_MULT_CLEAN_${mathMults.length}___`;
+          mathMults.push(match);
+          return ph;
+        });
+
         str = str.replace(/(?<=[^\*\s])\*{1,3}(?=[^\*]|$)/g, '');
         str = str.replace(/\*{1,3}/g, '');
         str = str.replace(/(?<!\([^\n\)]*)\s*\*{1,2}\)\s*(?=\n|•|$)/g, '');
+
+        if (mathMults.length > 0) {
+          mathMults.forEach((multStr, idx) => {
+            str = str.replace(`___MATH_MULT_CLEAN_${idx}___`, multStr);
+          });
+        }
       }
     }
 
@@ -259,7 +274,49 @@ class ImportParserClass {
     });
 
     // 4b. Despegar subtítulos con dos puntos dentro de párrafos monoliticos: ej. ". Correo electrónico:", ". Herramientas de chat:"
-    clean = clean.replace(/([.!?])\s+([A-ZÁÉÍÓÚÑ][^:\n\r]{2,55}:)(?=\s+[A-ZÁÉÍÓÚÑa-záéíóúñ0-9«\"]|\s*$)/g, '$1\n• $2');
+    clean = clean.replace(/(?<!\b\d)([.)])\s+([A-ZÁÉÍÓÚÑ][^:\n\r]{2,55}:)(?=\s+[A-ZÁÉÍÓÚÑa-záéíóúñ0-9«\"]|\s*$)/g, '$1\n• $2');
+
+    // 4b2. Despegar instrucciones numeradas con dos puntos seguidas de incisos con letras (ej. "1. Resuelve las siguientes operaciones:\na)")
+    clean = clean.replace(/(^|\n)(\d+[\.\)]\s+[^\n:]{2,80}:)\s*\n(?=[a-e]\))/gi, '$1$2\n\n');
+
+    // 4b3. Despegar ítems numerados inline tras punto o paréntesis de cierre (ej. "a) ... 2. Calcula...")
+    clean = clean.replace(/([.!?\)]|^)\s*(\d+[\.\)])\s+(?=[A-ZÁÉÍÓÚÑa-z¿¡|(\-])/g, (m, p1, num) => {
+      return (p1 ? p1 + '\n' : '') + num + ' ';
+    });
+
+    // 4b4. Despegar "Ejemplo \d+:" inline para que cada ejemplo quede en su propio renglón
+    clean = clean.replace(/([^\n])\s+(Ejemplo\s*\d+\s*:)/gi, '$1\n$2');
+
+    // 4b5. Despegar incisos con letras inline: " a) ", " b) ", " c) "
+    clean = clean.replace(/([^\n])\s+([a-e]\))\s+/g, '$1\n$2 ');
+
+    // 4b6. Despegar operaciones de signos en línea "+ por + = + - por - = +"
+    clean = clean.replace(/([=+])\s+([+-]\s+por\s+[+-]\s+=)/g, '$1\n$2');
+
+    // 4b7. Despegar secciones universales pedagógicas conocidas si vienen inline
+    const universalSections = [
+      'Solucionario(?:\\s+del\\s+docente)?',
+      'Ejemplos?\\s+resueltos?',
+      'Jerarqu[ií]a\\s+de\\s+operaciones',
+      'Conceptos?\\s+clave',
+      'Ley\\s+de\\s+signos',
+      'Reglas?\\s+para\\s+operar',
+      'Preguntas?\\s+(?:de\\s+reflexi[oó]n|orientadoras?|gu[ií]a)',
+      'Glosario(?:\\s+de\\s+t[eé]rminos)?'
+    ].join('|');
+    clean = clean.replace(new RegExp('([^\\n])\\s+(' + universalSections + ')(?=\\s+|$)', 'gi'), (match, charBefore, secName, offset, fullStr) => {
+      const prefixBefore = fullStr.substring(Math.max(0, offset - 30), offset + charBefore.length);
+      if (/(?:la|el|de|del|en|para|por|sobre|con|sin|cada|su|sus|uso)\s*$/i.test(prefixBefore)) {
+        return match;
+      }
+      return charBefore + '\n\n' + secName + '\n\n';
+    });
+
+    // 4b8. Despegar títulos en Title Case cuando vienen en texto corrido monolítico
+    const titleStarters = '(?:Los|Las|El|La|En|Para|Por|Se\\b|Son\\b|Es\\b|Un|Una|Consiste\\b|Permite\\b|Representan\\b|Cada\\b|Todo\\b|Toda\\b|Cuando\\b|Al\\b)';
+    clean = clean.replace(new RegExp('(?:^|([.!?])\\s+)([A-ZÁÉÍÓÚÑ][a-záéíóúñ]{2,15}(?:\\s+(?:(?:en|la|el|los|las|de|del|y|o|para|con|a|sobre|por)\\s+)*[A-ZÁÉÍÓÚÑa-záéíóúñ]{2,15}){0,5})\\s+(' + titleStarters + '\\s+[a-záéíóúñ])', 'gu'), (m, p1, title, next) => {
+      return (p1 ? p1 + '\n\n' : '') + title + '\n\n' + next;
+    });
 
     // 4c. Despegar oraciones de desempeños que inician con verbo de acción
     const actionVerbs = '(?:Identifica|Selecciona|Aplica|Reconoce|Comprende|Explica|Describe|Analiza|Utiliza|Propone|Evalúa|Distingue|Clasifica|Diseña|Construye|Elabora)';
@@ -344,6 +401,40 @@ class ImportParserClass {
     // 10. Despegar reglas, pasos, normas, notas y subtítulos con dos puntos (ej. "**Regla número 1:**", "**Lectura completa:**")
     clean = clean.replace(/([.!?:;)\]\*])\s*(\*{1,2}(?:Regla(?:\s+(?:fundamental|de\s+memoria\s+f[aá]cil|n[úu]mero))?|Paso\s*[A-Z\d]|Norma\s*\d+|Lectura\s+completa|Definici[oó]n|Ejemplo(?:\s+paso\s+a\s+paso)?|Importante|Nota|Pregunta)\b[^:\n\r]{0,50}:\*{0,2})/gi, '$1\n\n$2');
 
+    // 10b. Aislar líneas de encabezado independientes que tengan solo un salto de línea
+    const rawLines = clean.split('\n');
+    const processedLines = [];
+    for (let i = 0; i < rawLines.length; i++) {
+      const line = rawLines[i].trim();
+      if (!line) {
+        processedLines.push('');
+        continue;
+      }
+      const isStandaloneHeading = (
+        line.length >= 3 && line.length <= 75 &&
+        /^[A-ZÁÉÍÓÚÑ\p{Emoji}]/u.test(line) &&
+        !/[.,;?!]$/.test(line) &&
+        !/^(?:En|Por|Con|Sin|Hacia|Desde|Durante|Sobre|Bajo|Entre|Ante|Tras)\s+(?:la|el|los|las|un|una|unos|unas|mi|tu|su)\b/i.test(line) &&
+        !/^(?:con|sin|de|del|para|por|hacia|desde)\s+[a-z]/i.test(line) &&
+        !/\.\s+[A-Z]/.test(line) &&
+        !/^[•\-\*\d]/.test(line) &&
+        !/[=+><]/.test(line)
+      ) || /^(?:Taller|Solucionario|Ejemplos\s+resueltos|Conceptos\s+clave|Ley\s+de\s+signos|Reglas?\s+para\s+operar|Jerarqu[ií]a\s+de\s+operaciones)\b/i.test(line);
+
+      if (isStandaloneHeading) {
+        if (processedLines.length > 0 && processedLines[processedLines.length - 1] !== '') {
+          processedLines.push('');
+        }
+        processedLines.push(line);
+        if (i + 1 < rawLines.length && rawLines[i + 1].trim() !== '') {
+          processedLines.push('');
+        }
+      } else {
+        processedLines.push(line);
+      }
+    }
+    clean = processedLines.join('\n');
+
     // 11. Limpiar saltos indebidos en toda la estructura
     clean = this.cleanBrokenLinebreaks(clean);
 
@@ -424,9 +515,9 @@ class ImportParserClass {
       return prefix + prep + ' ' + nextChar;
     });
 
-    // 6. Unir líneas que terminan en palabra normal y la siguiente empieza con minúscula (continuación directa de renglón tras corte suave)
-    // Ej: "...del\nmapa conceptual" -> "...del mapa conceptual"
-    clean = clean.replace(/([a-záéíóúñA-ZÁÉÍÓÚÑ0-9,])\s*\n\s*([a-záéíóúñ])/g, '$1 $2');
+    // 6. Unir líneas que terminan en palabra normal y la siguiente empieza con minúscula (continuación directa de renglón tras corte suave de párrafo largo)
+    // Solo si la línea es de párrafo largo (> 55 caracteres) para preservar versos líricos de poemas o estrofas cortas
+    clean = clean.replace(/([^\n]{55,}[a-záéíóúñA-ZÁÉÍÓÚÑ0-9,])\s*\n\s*([a-záéíóúñ])/g, '$1 $2');
 
     // 7. Unir líneas que terminan en texto y continúan con paréntesis explicativo en la línea siguiente
     // Ej: "consignado en el cuaderno\n(jerarquía..." -> "consignado en el cuaderno (jerarquía..."
@@ -701,15 +792,23 @@ class ImportParserClass {
     // Detectar si el contenido es un párrafo monolítico sin estructurar (ej. todo el cuaderno pegado en una sola etiqueta <p>)
     const pCount = (trimmed.match(/<p\b/gi) || []).length;
     const plainTextLen = trimmed.replace(/<[^>]+>/g, '').trim().length;
-    const isMonolithicParagraph = (pCount <= 2 && plainTextLen > 250) && 
-      (/(?:TEMAS\s+DEL|DESEMPEÑOS?\s+DE|CRITERIOS?\s+DE|Fase\s+de|Eje\s+temático|Tiempo:)/i.test(trimmed) || /(?:[A-ZÁÉÍÓÚÑ][^:\n]{2,40}:\s+){2,}/.test(trimmed));
+    const isMonolithicParagraph = (pCount <= 2 && plainTextLen > 200) && (
+      /(?:TEMAS\s+DEL|DESEMPEÑOS?\s+DE|CRITERIOS?\s+DE|Fase\s+de|Eje\s+temático|Tiempo:|Taller|Actividad|Solucionario|Ejemplos|Conceptos|Reglas|Definici[oó]n)/i.test(trimmed) ||
+      /(?:[A-ZÁÉÍÓÚÑ][^:\n]{2,40}:\s+){2,}/.test(trimmed) ||
+      /\d+[\.\)]\s+[A-ZÁÉÍÓÚÑ]/.test(trimmed) ||
+      /[a-d]\)\s+/.test(trimmed) ||
+      (plainTextLen > 400 && (trimmed.match(/\.\s+[A-ZÁÉÍÓÚÑ]/g) || []).length >= 2)
+    );
 
-    if (hasRichTags && !hasRawMarkdownHeadings && !hasUnstructuredBullets && !isMonolithicParagraph) {
+    const isWordHtml = /class=["']?Mso|mso-|style=["'][^"']*mso-/i.test(trimmed) ||
+      /<p[^>]*>\s*<(?:b|strong)[^>]*>[^<]{3,80}<\/(?:b|strong)>\s*<\/p>/i.test(trimmed);
+
+    if (hasRichTags && !hasRawMarkdownHeadings && !hasUnstructuredBullets && !isMonolithicParagraph && !isWordHtml) {
       return trimmed;
     }
 
     let textToProcess = trimmed;
-    if ((hasUnstructuredBullets || isMonolithicParagraph) && /<[^>]+>/.test(trimmed)) {
+    if ((hasUnstructuredBullets || isMonolithicParagraph || isWordHtml) && /<[^>]+>/.test(trimmed)) {
       textToProcess = this.convertHtmlToFormattedText(trimmed);
     }
 
@@ -774,12 +873,23 @@ class ImportParserClass {
         continue;
       }
 
-      // 1b. Títulos y Encabezados mayores numerados, con ## o en MAYÚSCULAS
-      const headingMatch = block.match(/^(?:#{1,3}\s+)(.+)$/) ||
-                           block.match(/^(?:#{1,3}\s+|\*{0,2})(\d+[\.\)]\s+[A-ZÁÉÍÓÚÑ¿¡][^\n*]+?)\*{0,2}$/) ||
-                           block.match(/^([\p{Lu}0-9\s\/\-:\(\)]{6,}[\p{Lu}0-9\)])$/u);
-      if (headingMatch) {
-        let title = (headingMatch[1] || headingMatch[0]).replace(/[\*#]/g, '').trim();
+      // 1b. Títulos y Encabezados mayores numerados, con ## o en MAYÚSCULAS o Títulos pedagógicos
+      const isMdHeading = block.match(/^(?:#{1,3}\s+)(.+)$/);
+      const isBoldHeading = block.match(/^\*{2}([^*]+?)\*{2}$/);
+      const isNumberedHeading = block.match(/^(?:\*{2})(\d+[\.\)]\s+[A-ZÁÉÍÓÚÑ¿¡][^\n*]+?)\*{2}$/) && !block.includes('\n');
+      const isAllCapsHeading = !block.includes('\n') && block.length >= 4 && block.length <= 80 && /^[\p{Lu}0-9\s\/\-:\(\)]+$/u.test(block) && /[A-ZÁÉÍÓÚÑ]{3,}/.test(block);
+      const isStandaloneHeading = !block.includes('\n') && block.length >= 3 && block.length <= 75 &&
+        /^[A-ZÁÉÍÓÚÑ\p{Emoji}]/u.test(block) &&
+        !/[.,;?!]$/.test(block) &&
+        !/^(?:En|Por|Con|Sin|Hacia|Desde|Durante|Sobre|Bajo|Entre|Ante|Tras)\s+(?:la|el|los|las|un|una|unos|unas|mi|tu|su)\b/i.test(block) &&
+        !/^(?:con|sin|de|del|para|por|hacia|desde)\s+[a-z]/i.test(block) &&
+        !/\.\s+[A-Z]/.test(block) &&
+        !/^[•\-\*\d]/.test(block) &&
+        !/[=+><]/.test(block);
+
+      if (isMdHeading || isBoldHeading || isNumberedHeading || isAllCapsHeading || isStandaloneHeading) {
+        let rawTitle = (isMdHeading && isMdHeading[1]) || (isBoldHeading && isBoldHeading[1]) || (isNumberedHeading && isNumberedHeading[1]) || block || '';
+        let title = rawTitle.replace(/[\*#]/g, '').trim();
 
         // Detección especial de TALLER / EJERCICIO PRÁCTICO: independizar en una hoja con ficha estudiantil
         const isTallerHeading = /^(?:TALLER\s*[\/:\-]\s*(?:ACTIVIDAD(?:ES)?|EJERCICIO(?:S)?|GU[IÍ]A)\s*PR[AÁ]CTIC[OA]S?(?:\s+DE\s+LA\s+CLASE)?|TALLER\s+PR[AÁ]CTIC[OA]\s+DE\s+LA\s+CLASE|TALLER\s+PR[AÁ]CTICO\s+FORMATIVO|TALLER\s+DE\s+APLICACI[OÓ]N\s+(?:EN\s+CLASE|DE\s+LA\s+CLASE)|ACTIVIDAD(?:ES)?\s+PR[AÁ]CTIC[OA]S?\s+DE\s+LA\s+CLASE|EJERCICIO(?:S)?\s+PR[AÁ]CTIC[OA]S?\s+DE\s+LA\s+CLASE|TALLER\s+PR[AÁ]CTICO(?:\s+EN\s+CLASE)?\s*$|TALLER\s*[\/:\-]\s*(?:ACTIVIDAD|EJERCICIO)\s*$)/i.test(title) && !/^TALLER\s+PR[AÁ]CTICO\s*:\s*[A-ZÁÉÍÓÚÑ]/i.test(title);
@@ -809,10 +919,12 @@ class ImportParserClass {
         else if (/PAR[AÁ]METROS|FORMATO|ESPECIFICACI/i.test(title)) icon = '📐 ';
         else if (/REGLAS|NORMAS|ESTILO|DIGITACI[OÓ]N/i.test(title)) icon = '⌨️ ';
         else if (/PROCEDIMIENTO|T[EÉ]CNICO|RESUMEN|PASO/i.test(title)) icon = '🛠️ ';
-        else if (/SUSTRACCI[OÓ]N|ADICI[OÓ]N|N[UÚ]MEROS|OPERACION|MATEM[AÁ]TICA/i.test(title)) icon = '🔢 ';
+        else if (/SUSTRACCI[OÓ]N|ADICI[OÓ]N|N[UÚ]MEROS|OPERACION|MATEM[AÁ]TICA|ABSOLUTO/i.test(title)) icon = '🔢 ';
         else if (/SIGNO|PAR[EÉ]NTESIS|LEY/i.test(title)) icon = '⚡ ';
         else if (/M[EÉ]TODO|POLINOMIO|CADENA/i.test(title)) icon = '📋 ';
         else if (/CONEXI[OÓ]N|SIGUIENTE/i.test(title)) icon = '🚀 ';
+        else if (/SOLUCIONARIO|RESPUESTA/i.test(title)) icon = '💡 ';
+        else if (/CONCEPTOS?|IDEA|GLOSARIO/i.test(title)) icon = '💡 ';
         else if (!/^[\d\.\s\p{Emoji}]/u.test(title)) icon = '📌 ';
 
         htmlBlocks.push(`<h2 style="color:#1e3a8a; margin-top:1.1rem; margin-bottom:0.4rem; font-size:1.15rem; font-weight:700; border-bottom:1.5px solid #bfdbfe; padding-bottom:4px; letter-spacing:-0.01em;">${icon}${this._escape(title)}</h2>`);
@@ -828,21 +940,37 @@ class ImportParserClass {
       }
 
       // 3. Reglas pedagógicas, pasos, ejemplos o definiciones formateados limpiamente como párrafo con título en negrita
-      const ruleMatch = block.match(/^\*{0,2}((?:Regla(?:\s+(?:fundamental|de\s+memoria\s+f[aá]cil|n[úu]mero))?|Norma\s*\d+|Lectura\s+completa|Definici[oó]n|Ejemplo(?:\s+paso\s+a\s+paso)?|Importante|Nota|Pregunta)[\s\w#º°\d\(\)]*:)\*{0,2}\s*([\s\S]+)$/i);
+      const ruleMatch = block.match(/^\*{0,2}((?:Regla(?:\s+(?:fundamental|de\s+memoria\s+f[aá]cil|n[úu]mero))?|Norma\s*\d+|Lectura\s+completa|Definici[oó]n|Ejemplo(?:\s+paso\s+a\s+paso|\s*\d+)?|Importante|Nota|Pregunta)[^\n:]*:)\*{0,2}\s*([\s\S]+)$/i);
       if (ruleMatch) {
         const ruleLabel = ruleMatch[1].replace(/[\*#]/g, '').trim();
-        const ruleBody = this._formatInlineMarkdown(ruleMatch[2]);
+        const ruleLines = ruleMatch[2].split('\n').map(l => l.trim()).filter(Boolean);
+        const ruleBody = ruleLines.map(l => this._formatInlineMarkdown(l)).join('<br/>');
         htmlBlocks.push(`<p style="margin-top:0.35rem; margin-bottom:0.25rem; line-height:1.4;"><strong style="color:#1d4ed8;">${this._escape(ruleLabel)}</strong> ${ruleBody}</p>`);
         continue;
       }
 
-      // 4. Bloques de viñetas o listas (líneas que inician con •, -, *)
+      // 4a. Bloques de lista alfabética (a) b) c) o a. b. c.)
       const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
       const validLines = lines.filter(l => !/^[\s\*•\-\–—_]{1,3}$/.test(l));
-      const isBulletList = validLines.length > 0 && validLines.every(l => /^[•\-\*]\s+/.test(l));
+      const isLetteredList = validLines.length > 0 && validLines.every(l => /^[a-zA-Z][\.\)]\s+/.test(l));
+      if (isLetteredList) {
+        const listItemsHtml = validLines.map(l => {
+          const m = l.match(/^([a-zA-Z][\.\)])\s*(.*)$/);
+          if (!m) return '';
+          return `<li style="margin-bottom:0.25rem;"><strong style="color:#1d4ed8;">${this._escape(m[1])}</strong> ${this._formatInlineMarkdown(m[2])}</li>`;
+        }).filter(Boolean).join('');
+        if (listItemsHtml) {
+          htmlBlocks.push(`<ul style="margin:0.25rem 0 0.5rem 1.25rem; list-style-type:none; padding-left:0.5rem; line-height:1.45; color:#1e293b;">${listItemsHtml}</ul>`);
+        }
+        continue;
+      }
+
+      // 4b. Bloques de viñetas o listas (líneas que inician con •, -, *)
+      const isBulletLine = (l) => /^[•]\s+/.test(l) || (/^[\-\*]\s+/.test(l) && !/[-+]\s*(?:por|mas|más|menos|entre|[0-9\(\)\|])|=/i.test(l));
+      const isBulletList = validLines.length > 0 && validLines.every(l => isBulletLine(l));
       if (isBulletList) {
         const listItemsHtml = validLines.map(l => {
-          const content = l.replace(/^[•\-\*]\s+/, '').trim();
+          const content = l.replace(/^[•]\s+|^(?:[\-\*]\s+)/, '').trim();
           if (!content || /^[\s\*•\-\–—_.]+$/.test(content)) return '';
           return `<li style="margin-bottom:0.2rem;">${this._formatInlineMarkdown(content)}</li>`;
         }).filter(Boolean).join('');
@@ -867,16 +995,16 @@ class ImportParserClass {
       }
 
       // 6. Si contiene viñetas intercaladas en el bloque
-      if (validLines.some(l => /^[•\-\*]\s+/.test(l))) {
+      if (validLines.some(l => isBulletLine(l))) {
         let currentP = [];
         let currentList = [];
         for (const line of validLines) {
-          if (/^[•\-\*]\s+/.test(line)) {
+          if (isBulletLine(line)) {
             if (currentP.length > 0) {
-              htmlBlocks.push(`<p style="margin-bottom:0.35rem; line-height:1.45; text-align:justify;">${this._formatInlineMarkdown(currentP.join(' '))}</p>`);
+              htmlBlocks.push(`<p style="margin-bottom:0.35rem; line-height:1.45; text-align:justify;">${currentP.map(l => this._formatInlineMarkdown(l)).join('<br/>')}</p>`);
               currentP = [];
             }
-            const c = line.replace(/^[•\-\*]\s+/, '').trim();
+            const c = line.replace(/^[•]\s+|^(?:[\-\*]\s+)/, '').trim();
             if (c && !/^[\s\*•\-\–—_.]+$/.test(c)) {
               currentList.push(`<li style="margin-bottom:0.2rem;">${this._formatInlineMarkdown(c)}</li>`);
             }
@@ -892,15 +1020,20 @@ class ImportParserClass {
           htmlBlocks.push(`<ul style="margin:0.35rem 0 0.55rem 1.25rem; padding-left:0.8rem; line-height:1.45; color:#1e293b;">${currentList.join('')}</ul>`);
         }
         if (currentP.length > 0) {
-          htmlBlocks.push(`<p style="margin-bottom:0.35rem; line-height:1.45; text-align:justify;">${this._formatInlineMarkdown(currentP.join(' '))}</p>`);
+          htmlBlocks.push(`<p style="margin-bottom:0.35rem; line-height:1.45; text-align:justify;">${currentP.map(l => this._formatInlineMarkdown(l)).join('<br/>')}</p>`);
         }
         continue;
       }
 
-      // Párrafo estándar
-      const formattedPara = this._formatInlineMarkdown(block.replace(/\n/g, ' '));
-      if (formattedPara && !/^[\s\*•\-\–—_.]+$/.test(formattedPara)) {
-        htmlBlocks.push(`<p style="margin-top:0.3rem; margin-bottom:0.35rem; line-height:1.45; text-align:justify;">${formattedPara}</p>`);
+      // Párrafo estándar: si tiene múltiples líneas (ej. operaciones o pasos), preservar <br/>
+      if (validLines.length > 1) {
+        const formattedLines = validLines.map(l => this._formatInlineMarkdown(l));
+        htmlBlocks.push(`<p style="margin-top:0.3rem; margin-bottom:0.35rem; line-height:1.45; text-align:justify;">${formattedLines.join('<br/>')}</p>`);
+      } else {
+        const formattedPara = this._formatInlineMarkdown(block);
+        if (formattedPara && !/^[\s\*•\-\–—_.]+$/.test(formattedPara)) {
+          htmlBlocks.push(`<p style="margin-top:0.3rem; margin-bottom:0.35rem; line-height:1.45; text-align:justify;">${formattedPara}</p>`);
+        }
       }
     }
 
@@ -918,20 +1051,35 @@ class ImportParserClass {
   _formatInlineMarkdown(str) {
     if (!str) return '';
     let cleaned = this.cleanDocumentArtifacts(str);
+
+    // Proteger asteriscos matemáticos como multiplicación: ej. "(-4) * (+6)", "3 * 5"
+    const mathAsterisks = [];
+    cleaned = cleaned.replace(/(?<=[a-zA-Z0-9\)\%\|])\s*\*\s*(?=[a-zA-Z0-9\(\-\|])/g, (match) => {
+      const ph = `___MATH_MULT_${mathAsterisks.length}___`;
+      mathAsterisks.push(match);
+      return ph;
+    });
+
     let res = this._escape(cleaned);
     // Pares de negrita **texto**
     res = res.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-    // Pares de cursiva *texto*
-    res = res.replace(/(^|[^\*])\*([^\*]+?)\*([^\*]|$)/g, '$1<em>$2</em>$3');
-    // Limpiar asteriscos huérfanos residuales
-    res = res.replace(/\*{1,3}/g, '');
+    // Pares de cursiva *texto* (CommonMark: el asterisco debe tocar el texto sin espacios)
+    res = res.replace(/(?:^|[^\*\w])\*([^\s\*][^\*\n]*?[^\s\*])\*(?=[^\*\w]|$)/g, '$1<em>$2</em>$3');
+    // Limpiar asteriscos dobles o triples huérfanos residuales (sin borrar asteriscos simples que queden)
+    res = res.replace(/\*{2,}/g, '');
     // Limpiar paréntesis o corchetes de cierre huérfanos con asteriscos como **) solo si NO hay apertura '('
     if (!res.includes('(')) {
       res = res.replace(/\s*\*{1,3}\)\s*$/g, '');
     }
+    // Restaurar asteriscos de multiplicación matemática protegidos
+    if (mathAsterisks.length > 0) {
+      mathAsterisks.forEach((multStr, idx) => {
+        res = res.replace(`___MATH_MULT_${idx}___`, this._escape(multStr));
+      });
+    }
     // Enlaces markdown
     res = res.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
-    if (!res.startsWith('<strong>')) {
+    if (!res.startsWith('<strong>') && !res.startsWith('<h') && !res.startsWith('<div')) {
       res = res.replace(/^([A-ZÁÉÍÓÚÑa-záéíóúñ0-9\s\(\)\/]{2,45}:)\s*/, '<strong>$1</strong> ');
     }
     return res.trim();

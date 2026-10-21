@@ -1,5 +1,6 @@
 const { execSync } = require('child_process');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 console.log('================================================================');
@@ -206,9 +207,10 @@ window.addEventListener('load', () => {
 </html>`;
 
 fs.writeFileSync('temp_test_complete_suite.html', testHtml);
+const tempProfileDir = path.join(os.tmpdir(), 'chrome_tb_profile_' + Date.now());
 try {
   const absPath = 'file:///' + path.resolve('temp_test_complete_suite.html').replace(/\\/g, '/');
-  const output = execSync(`"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --headless --disable-gpu --virtual-time-budget=2000 --dump-dom "${absPath}"`, { encoding: 'utf8' });
+  const output = execSync(`"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --headless --disable-gpu --user-data-dir="${tempProfileDir}" --no-first-run --no-default-browser-check --disable-background-networking --disable-sync --disable-default-apps --virtual-time-budget=2000 --dump-dom "${absPath}"`, { encoding: 'utf8', timeout: 15000 });
   const m = output.match(/<div id="test-results">([\s\S]*?)<\/div>/);
   if (m && m[1].startsWith('{')) {
     const res = JSON.parse(m[1]);
@@ -231,4 +233,5 @@ try {
   }
 } finally {
   if (fs.existsSync('temp_test_complete_suite.html')) fs.unlinkSync('temp_test_complete_suite.html');
+  try { fs.rmSync(tempProfileDir, { recursive: true, force: true }); } catch (e) {}
 }

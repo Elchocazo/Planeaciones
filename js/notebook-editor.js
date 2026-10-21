@@ -1069,8 +1069,13 @@ const NotebookEditor = {
       // Si el contenido original era un párrafo monolítico, actualizarlo en la clase para que quede estructurado de forma persistente
       const pCount = (raw.match(/<p\b/gi) || []).length;
       const plainTextLen = raw.replace(/<[^>]+>/g, '').trim().length;
-      const isMonolithic = (pCount <= 2 && plainTextLen > 250) && 
-        (/(?:TEMAS\s+DEL|DESEMPEÑOS?\s+DE|CRITERIOS?\s+DE|Fase\s+de|Eje\s+temático|Tiempo:)/i.test(raw) || /(?:[A-ZÁÉÍÓÚÑ][^:\n]{2,40}:\s+){2,}/.test(raw));
+      const isMonolithic = (pCount <= 2 && plainTextLen > 200) && (
+        /(?:TEMAS\s+DEL|DESEMPEÑOS?\s+DE|CRITERIOS?\s+DE|Fase\s+de|Eje\s+temático|Tiempo:|Taller|Actividad|Solucionario|Ejemplos|Conceptos|Reglas|Definici[oó]n)/i.test(raw) ||
+        /(?:[A-ZÁÉÍÓÚÑ][^:\n]{2,40}:\s+){2,}/.test(raw) ||
+        /\d+[\.\)]\s+[A-ZÁÉÍÓÚÑ]/.test(raw) ||
+        /[a-d]\)\s+/.test(raw) ||
+        (plainTextLen > 400 && (raw.match(/\.\s+[A-ZÁÉÍÓÚÑ]/g) || []).length >= 2)
+      );
       if (isMonolithic && formatted && cls) {
         cls.notebookContent = formatted;
         if (!cls.teacherNotebook) cls.teacherNotebook = {};
@@ -1191,8 +1196,9 @@ const NotebookEditor = {
         const html = clipboardData.getData('text/html');
         const text = clipboardData.getData('text/plain');
 
-        // Si viene texto plano o Markdown que necesita estructuración pedagógica
-        if (text && (/\*\*|•|#{1,3}\s+|\d+[\.\)]\s+[A-ZÁÉÍÓÚÑ¿¡]|\bRegla\b|\bPaso\b/.test(text) || !html)) {
+        // Si viene texto plano o HTML que necesita estructuración pedagógica
+        const needsFormatting = (text && (/\*\*|•|#{1,3}\s+|\d+[\.\)]\s+[A-ZÁÉÍÓÚÑ¿¡]|\bRegla\b|\bPaso\b|[a-d]\)\s+|[=+\-]\s+por/i.test(text) || text.split('\n').length >= 3 || !html));
+        if (needsFormatting) {
           e.preventDefault();
           let formatted = this.formatNotebookHtml(text);
           // Garantizar que no se inyecten cajas azules automáticas (callouts) al pegar
@@ -1204,7 +1210,7 @@ const NotebookEditor = {
             this.triggerAutoSave(false);
             this._updateWordCount();
             if (typeof App !== 'undefined' && App.showToast) {
-              App.showToast('✨ Contenido insertado con formato adecuado en el cuaderno', 'info');
+              App.showToast('✨ Contenido estructurado adecuadamente en el cuaderno', 'info');
             }
             return;
           }
@@ -1214,15 +1220,13 @@ const NotebookEditor = {
           if (typeof this._cleanAutoCallouts === 'function') {
             cleanHtml = this._cleanAutoCallouts(cleanHtml);
           }
-          if (/\*\*|•|\d+[\.\)]\s+[A-ZÁÉÍÓÚÑ¿¡]/.test(cleanHtml)) {
-            e.preventDefault();
-            const formatted = this.formatNotebookHtml(cleanHtml);
-            if (formatted) {
-              document.execCommand('insertHTML', false, formatted);
-              this.triggerAutoSave(false);
-              this._updateWordCount();
-              return;
-            }
+          e.preventDefault();
+          const formatted = this.formatNotebookHtml(cleanHtml);
+          if (formatted) {
+            document.execCommand('insertHTML', false, formatted);
+            this.triggerAutoSave(false);
+            this._updateWordCount();
+            return;
           }
         }
       }
@@ -2556,10 +2560,18 @@ const NotebookEditor = {
     // Detectar si el contenido es un párrafo monolítico sin estructurar (ej. todo el cuaderno pegado en una sola etiqueta <p>)
     const pCount = (trimmed.match(/<p\b/gi) || []).length;
     const plainTextLen = trimmed.replace(/<[^>]+>/g, '').trim().length;
-    const isMonolithicParagraph = (pCount <= 2 && plainTextLen > 250) && 
-      (/(?:TEMAS\s+DEL|DESEMPEÑOS?\s+DE|CRITERIOS?\s+DE|Fase\s+de|Eje\s+temático|Tiempo:)/i.test(trimmed) || /(?:[A-ZÁÉÍÓÚÑ][^:\n]{2,40}:\s+){2,}/.test(trimmed));
+    const isMonolithicParagraph = (pCount <= 2 && plainTextLen > 200) && (
+      /(?:TEMAS\s+DEL|DESEMPEÑOS?\s+DE|CRITERIOS?\s+DE|Fase\s+de|Eje\s+temático|Tiempo:|Taller|Actividad|Solucionario|Ejemplos|Conceptos|Reglas|Definici[oó]n)/i.test(trimmed) ||
+      /(?:[A-ZÁÉÍÓÚÑ][^:\n]{2,40}:\s+){2,}/.test(trimmed) ||
+      /\d+[\.\)]\s+[A-ZÁÉÍÓÚÑ]/.test(trimmed) ||
+      /[a-d]\)\s+/.test(trimmed) ||
+      (plainTextLen > 400 && (trimmed.match(/\.\s+[A-ZÁÉÍÓÚÑ]/g) || []).length >= 2)
+    );
 
-    if (!force && hasRichTags && !hasRawMarkdown && !hasUnstructuredBullets && !isMonolithicParagraph) {
+    const isWordHtml = /class=["']?Mso|mso-|style=["'][^"']*mso-/i.test(trimmed) ||
+      /<p[^>]*>\s*<(?:b|strong)[^>]*>[^<]{3,80}<\/(?:b|strong)>\s*<\/p>/i.test(trimmed);
+
+    if (!force && hasRichTags && !hasRawMarkdown && !hasUnstructuredBullets && !isMonolithicParagraph && !isWordHtml) {
       return this._cleanAutoCallouts(this.cleanDocumentArtifacts(trimmed));
     }
 
@@ -2583,8 +2595,13 @@ const NotebookEditor = {
 
     const pCount = (cleanInput.match(/<p\b/gi) || []).length;
     const plainTextLen = cleanInput.replace(/<[^>]+>/g, '').trim().length;
-    const isMonolithicParagraph = (pCount <= 2 && plainTextLen > 250) && 
-      (/(?:TEMAS\s+DEL|DESEMPEÑOS?\s+DE|CRITERIOS?\s+DE|Fase\s+de|Eje\s+temático|Tiempo:)/i.test(cleanInput) || /(?:[A-ZÁÉÍÓÚÑ][^:\n]{2,40}:\s+){2,}/.test(cleanInput));
+    const isMonolithicParagraph = (pCount <= 2 && plainTextLen > 200) && (
+      /(?:TEMAS\s+DEL|DESEMPEÑOS?\s+DE|CRITERIOS?\s+DE|Fase\s+de|Eje\s+temático|Tiempo:|Taller|Actividad|Solucionario|Ejemplos|Conceptos|Reglas|Definici[oó]n)/i.test(cleanInput) ||
+      /(?:[A-ZÁÉÍÓÚÑ][^:\n]{2,40}:\s+){2,}/.test(cleanInput) ||
+      /\d+[\.\)]\s+[A-ZÁÉÍÓÚÑ]/.test(cleanInput) ||
+      /[a-d]\)\s+/.test(cleanInput) ||
+      (plainTextLen > 400 && (cleanInput.match(/\.\s+[A-ZÁÉÍÓÚÑ]/g) || []).length >= 2)
+    );
 
     if ((hasUnstructuredBullets || isMonolithicParagraph) && /<[^>]+>/.test(cleanInput)) {
       cleanInput = cleanInput
