@@ -1658,6 +1658,10 @@ class ClassRepositoryClass {
         observations: normalized.observations || normalized.didacticSequence?.observaciones || '',
         notebookContent: normalized.notebookContent || normalized.teacherNotebook?.studentNotebookContent || '',
         attachments: Array.isArray(normalized.attachments) ? normalized.attachments : [],
+        curriculum: normalized.curriculum || null,
+        didacticSequence: normalized.didacticSequence || normalized.pedagogy || null,
+        pedagogy: normalized.pedagogy || normalized.didacticSequence || null,
+        teacherNotebook: normalized.teacherNotebook || null,
         status: normalized.status || 'planned',
         version: normalized.version || 1
       };

@@ -388,6 +388,10 @@ const StorageService = {
             observations: cs.observations || cs.teacherNotebook?.additionalNotes || '',
             notebookContent: cs.notebookContent || cs.teacherNotebook?.studentNotebookContent || '',
             attachments: Array.isArray(cs.attachments) ? cs.attachments : [],
+            curriculum: cs.curriculum || null,
+            didacticSequence: cs.didacticSequence || cs.pedagogy || null,
+            pedagogy: cs.pedagogy || cs.didacticSequence || null,
+            teacherNotebook: cs.teacherNotebook || null,
             status: cs.status || 'planned',
             version: cs.version || 1
           };

@@ -186,29 +186,36 @@ class ImportServiceClass {
 
     // 3. Secuencia Didáctica: Merge inteligente (Req. 22-27)
     if (!merged.didacticSequence) merged.didacticSequence = {};
+    if (!merged.pedagogy) merged.pedagogy = {};
     if (parsedData.didacticSequence.inicio && parsedData.didacticSequence.inicio.trim()) {
       merged.didacticSequence.inicio = parsedData.didacticSequence.inicio.trim();
+      merged.pedagogy.inicio = merged.didacticSequence.inicio;
     }
     if (parsedData.didacticSequence.desarrollo && parsedData.didacticSequence.desarrollo.trim()) {
       merged.didacticSequence.desarrollo = parsedData.didacticSequence.desarrollo.trim();
+      merged.pedagogy.desarrollo = merged.didacticSequence.desarrollo;
+      merged.description = merged.didacticSequence.desarrollo;
     }
     if (parsedData.didacticSequence.cierre && parsedData.didacticSequence.cierre.trim()) {
       merged.didacticSequence.cierre = parsedData.didacticSequence.cierre.trim();
+      merged.pedagogy.cierre = merged.didacticSequence.cierre;
     }
     if (parsedData.didacticSequence.recursos && parsedData.didacticSequence.recursos.trim()) {
       merged.didacticSequence.recursos = parsedData.didacticSequence.recursos.trim();
+      merged.pedagogy.recursos = merged.didacticSequence.recursos;
     }
     if (parsedData.didacticSequence.tareas && parsedData.didacticSequence.tareas.trim()) {
       merged.didacticSequence.tareas = parsedData.didacticSequence.tareas.trim();
+      merged.pedagogy.tareas = merged.didacticSequence.tareas;
     }
     if (parsedData.didacticSequence.evaluation && parsedData.didacticSequence.evaluation.trim()) {
       merged.didacticSequence.evaluation = parsedData.didacticSequence.evaluation.trim();
+      merged.pedagogy.evaluacion = merged.didacticSequence.evaluation;
     }
     const parsedObs = (parsedData.didacticSequence?.observaciones || parsedData.observations || '').trim();
     if (parsedObs) {
       merged.didacticSequence.observaciones = parsedObs;
       merged.observations = parsedObs;
-      if (!merged.pedagogy) merged.pedagogy = {};
       merged.pedagogy.observaciones = parsedObs;
     }
     if (parsedData.didacticSequence.durations) {

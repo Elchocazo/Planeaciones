@@ -391,7 +391,7 @@ class ImportModalClass {
       this.close();
 
       if (typeof App !== 'undefined' && App.showToast) {
-        App.showToast(`✅ Planeación importada a Clase #${updated.sequenceNumber}.`, 'success');
+        App.showToast(`✅ Planeación importada y guardada en Clase #${updated.sequenceNumber}.`, 'success');
       }
 
       this._showUndoToast(updated.id);
@@ -400,6 +400,9 @@ class ImportModalClass {
         this.onSuccessCallback(updated);
       } else if (typeof ClassEditorView !== 'undefined' && ClassEditorView.loadClass) {
         ClassEditorView.loadClass(updated.id);
+        if (typeof ClassEditorView.saveCurrentClass === 'function') {
+          ClassEditorView.saveCurrentClass(false);
+        }
       } else if (typeof DashboardView !== 'undefined' && DashboardView.render) {
         DashboardView.render();
       }

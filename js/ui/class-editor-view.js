@@ -45,6 +45,18 @@ class ClassEditorViewClass {
         if (!this.container || this.container.offsetParent === null || !this.currentClass) return;
         this.handlePaste(e);
       });
+
+      // Salvaguarda obligatoria contra pérdida de datos al cerrar o recargar
+      window.addEventListener('beforeunload', () => {
+        if (this.container && this.container.offsetParent !== null && this.currentClass) {
+          this.saveCurrentClass(false);
+        }
+      });
+      window.addEventListener('pagehide', () => {
+        if (this.container && this.container.offsetParent !== null && this.currentClass) {
+          this.saveCurrentClass(false);
+        }
+      });
     }
   }
 
@@ -89,8 +101,12 @@ class ClassEditorViewClass {
     this._syncFromDomToCurrentClass();
     if (typeof ImportModal !== 'undefined') {
       ImportModal.open(this.currentClass, (updatedClass) => {
+        if (!updatedClass) return;
         this.currentClass = JSON.parse(JSON.stringify(updatedClass));
         this.render();
+        // AUTO-GUARDADO OBLIGATORIO TRAS IMPORTAR:
+        // Asegura que la información cargada en el cuaderno y en la tabla persista de inmediato
+        this.saveCurrentClass(false);
       });
     } else {
       alert('El módulo de importación no está disponible.');
@@ -98,11 +114,8 @@ class ClassEditorViewClass {
   }
 
   openNotebookEditor() {
-    this._syncFromDomToCurrentClass();
+    this.saveCurrentClass(false);
     if (this.currentClass && this.currentClass.id) {
-      if (typeof ClassService !== 'undefined' && ClassService.saveClass) {
-        ClassService.saveClass(this.currentClass);
-      }
       if (typeof AppRouter !== 'undefined') {
         AppRouter.navigateTo('notebook', { classId: this.currentClass.id });
       }
@@ -699,7 +712,18 @@ class ClassEditorViewClass {
       if (this.currentClass) this.currentClass.status = 'planned';
     }
 
-    const saved = ClassService.saveClassNow(data, { isAutoSave: false });
+    let saved = null;
+    if (typeof ClassService !== 'undefined' && typeof ClassService.saveClassNow === 'function') {
+      saved = ClassService.saveClassNow(data, { isAutoSave: false });
+    } else if (typeof ClassRepository !== 'undefined' && typeof ClassRepository.saveClass === 'function') {
+      saved = ClassRepository.saveClass(data);
+      if (typeof AppState !== 'undefined') {
+        AppState.set('isDirty', false);
+        AppState.set('saveStatus', 'saved');
+      }
+    } else {
+      saved = data;
+    }
     if (saved) {
       this.currentClass = saved;
       if (typeof AppState !== 'undefined') {
@@ -1295,7 +1319,7 @@ class ClassEditorViewClass {
 
   goBack() {
     this._syncFromDomToCurrentClass();
-    if (typeof AppState !== 'undefined' && AppState.get('isDirty')) {
+    if (this.currentClass) {
       this.saveCurrentClass(false);
     }
     if (typeof AppRouter !== 'undefined' && AppRouter.goBack) {

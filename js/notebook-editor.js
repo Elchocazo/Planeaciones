@@ -560,14 +560,17 @@ const NotebookEditor = {
     if (typeof ImportModal !== 'undefined' && ImportModal.open) {
       let cls = this.currentClassData;
       if (!cls && this.currentClassId && typeof ClassRepository !== 'undefined') {
-        cls = ClassRepository.getClassById(this.currentClassId);
+        cls = ClassRepository.getClass(this.currentClassId) || (ClassRepository.getClassById ? ClassRepository.getClassById(this.currentClassId) : null);
       }
       ImportModal.open(cls, (updatedClass) => {
+        if (!updatedClass) return;
         if (this.currentClassId) {
-          this.openForClassById(this.currentClassId, this.isStandalone);
+          this.openByClassId(this.currentClassId, this.isStandalone);
         } else if (this.currentClassIndex !== null) {
           this.openForClass(this.currentClassIndex);
         }
+        // Guardar automáticamente el cuaderno tras importar
+        this.saveCurrentNotebookContent(false);
       });
     } else {
       alert('El asistente de importación no está disponible.');
