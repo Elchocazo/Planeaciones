@@ -168,12 +168,16 @@ class ClassEditorViewClass {
                     max="999" 
                     onchange="ClassEditorView.onSequenceNumberChange(this.value)"
                     oninput="ClassEditorView.onFieldInput(event)"
+                    onkeydown="if(event.key==='Enter'){ event.preventDefault(); ClassEditorView.propagateCurrentSequenceNumber(); }"
                     style="width:52px; height:27px; text-align:center; font-weight:800; font-size:0.95rem; border-radius:6px; border:1px solid #bfdbfe; color:#1e3a8a; background:#ffffff; padding:0 2px; outline:none;"
-                    title="Editar directamente el número de clase" />
+                    title="Editar directamente el número de clase (Enter o botón Propagar)" />
                   <button type="button" 
-                    onclick="ClassEditorView.openChangeNumberModal()" 
+                    id="editor-btn-propagate-seq"
+                    onclick="ClassEditorView.propagateCurrentSequenceNumber()" 
+                    onmouseover="this.style.background='rgba(255,255,255,0.38)'"
+                    onmouseout="this.style.background='rgba(255,255,255,0.22)'"
                     style="background:rgba(255,255,255,0.22); border:none; color:#ffffff; font-size:0.75rem; font-weight:700; padding:3px 8px; border-radius:6px; cursor:pointer; transition:all 0.15s;" 
-                    title="Opciones avanzadas y propagar conteo consecutivo hacia adelante">
+                    title="Aplicar este número y acomodar correlativamente (+1, +2, +3...) las clases siguientes">
                     ⚙️ Propagar
                   </button>
                 </div>
@@ -1040,7 +1044,9 @@ class ClassEditorViewClass {
     if (!body || !this.currentClass) return;
 
     const cls = this.currentClass;
-    const currentNum = parseInt(String(cls.sequenceNumber || cls.dayNumber || 1), 10);
+    const seqInput = document.getElementById('editor-input-seq-number');
+    const inputVal = seqInput ? parseInt(seqInput.value.trim(), 10) : NaN;
+    const currentNum = (!isNaN(inputVal) && inputVal > 0) ? inputVal : parseInt(String(cls.sequenceNumber || cls.dayNumber || 1), 10);
     const subName = cls.subjectName || cls.subject || 'Asignatura';
     const grdName = cls.gradeName || cls.grade || '';
 
@@ -1087,6 +1093,27 @@ class ClassEditorViewClass {
     }
   }
 
+  /**
+   * Propaga directamente el número de clase ingresado en el encabezado
+   * y reacomoda automáticamente las clases posteriores (+1, +2, +3...).
+   */
+  propagateCurrentSequenceNumber() {
+    if (!this.currentClass) return;
+    const input = document.getElementById('editor-input-seq-number');
+    const rawVal = input ? input.value : (this.currentClass.sequenceNumber || 1);
+    const newNum = parseInt(String(rawVal).trim(), 10);
+
+    if (isNaN(newNum) || newNum <= 0) {
+      if (typeof App !== 'undefined' && App.showToast) {
+        App.showToast('Ingresa un número de clase válido mayor a 0', 'warning');
+      }
+      if (input && typeof input.focus === 'function') input.focus();
+      return;
+    }
+
+    this.applySequenceNumberChange(newNum, true);
+  }
+
   applyChangeNumberFromModal() {
     if (!this.currentClass) return;
     const input = document.getElementById('modal-editor-new-number-input') || document.getElementById('modal-new-number-input');
@@ -1098,22 +1125,49 @@ class ClassEditorViewClass {
       if (typeof App !== 'undefined' && App.showToast) {
         App.showToast('Ingresa un número de clase válido mayor a 0', 'warning');
       }
-      input.focus();
+      if (input && typeof input.focus === 'function') input.focus();
       return;
     }
 
     const propagate = propagateBox ? propagateBox.checked : true;
     this.closeChangeNumberModal();
+    this.applySequenceNumberChange(newNum, propagate);
+  }
 
-    this._syncFromDomToCurrentClass();
+  /**
+   * Aplica un nuevo número de clase de forma atómica y consistente,
+   * propagando hacia adelante en ClassRepository y StorageService.
+   */
+  applySequenceNumberChange(newNum, propagate = true) {
+    if (!this.currentClass) return;
 
-    const targetSub = String(this.currentClass.subjectName || this.currentClass.subject || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-    const targetGrd = String(this.currentClass.gradeName || this.currentClass.grade || '').toLowerCase().replace(/[^0-9a-z]/gi, '').trim();
+    this._syncFromDomToCurrentClass(false);
+
+    const normSub = (typeof ClassRepository !== 'undefined' && typeof ClassRepository._norm === 'function')
+      ? (s) => ClassRepository._norm(s)
+      : (s) => String(s || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+    const normGrd = (typeof ClassRepository !== 'undefined' && typeof ClassRepository._normGrade === 'function')
+      ? (g) => ClassRepository._normGrade(g)
+      : (g) => String(g || '').toLowerCase().replace(/[^0-9a-z]/gi, '').trim();
+
+    const normPeriod = (p) => {
+      if (!p) return '1°';
+      const clean = String(p).trim();
+      const digit = clean.replace(/[^1-4]/g, '');
+      return digit ? `${digit}°` : clean;
+    };
+
+    const targetSub = normSub(this.currentClass.subjectName || this.currentClass.subject);
+    const targetGrd = normGrd(this.currentClass.gradeName || this.currentClass.grade || this.currentClass.group);
+    const targetPeriod = normPeriod(this.currentClass.period);
+    const currentDate = this.currentClass.date;
+    const tid = (typeof ClassRepository !== 'undefined' && typeof ClassRepository._getCurrentTeacherId === 'function')
+      ? ClassRepository._getCurrentTeacherId()
+      : (this.currentClass.teacherId || 'usr_manuel');
 
     this.currentClass.sequenceNumber = newNum;
     this.currentClass.dayNumber = String(newNum);
-
-    const tid = (typeof ClassRepository !== 'undefined' && ClassRepository._getCurrentTeacherId) ? ClassRepository._getCurrentTeacherId() : 'usr_manuel';
 
     if (typeof ClassRepository !== 'undefined' && ClassRepository.saveClass) {
       const saved = ClassRepository.saveClass(this.currentClass, tid);
@@ -1123,33 +1177,45 @@ class ClassEditorViewClass {
     const seqInput = document.getElementById('editor-input-seq-number');
     if (seqInput) seqInput.value = newNum;
 
-    let nextNum = newNum + 1;
+    let propagatedCount = 0;
 
     if (propagate) {
       try {
-        const currentDate = this.currentClass.date;
-        const curPeriod = String(this.currentClass.period || '1°').trim();
-
+        let futureClasses = [];
         if (typeof ClassRepository !== 'undefined' && ClassRepository.getAllClasses) {
           const allClasses = ClassRepository.getAllClasses(tid);
-          const futureClasses = allClasses.filter(c => {
-            if (!c.date) return false;
+          futureClasses = allClasses.filter(c => {
+            if (!c || !c.id || !c.date) return false;
+            if (ClassRepository.isDeletedClass && ClassRepository.isDeletedClass(c.id, tid)) return false;
+            if (ClassRepository.isBackupClass && ClassRepository.isBackupClass(c)) return false;
+
+            const sub = normSub(c.subjectName || c.subject);
+            const grd = normGrd(c.gradeName || c.grade || c.group);
+            if (sub !== targetSub || grd !== targetGrd) return false;
+
+            if (normPeriod(c.period) !== targetPeriod) return false;
+
             if (c.date < currentDate) return false;
             if (c.date === currentDate && c.id === this.currentClass.id) return false;
-            if (curPeriod && String(c.period || '1°').trim() !== curPeriod) return false;
-            const sub = String(c.subjectName || c.subject || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-            const grd = String(c.gradeName || c.grade || '').toLowerCase().replace(/[^0-9a-z]/gi, '').trim();
-            return sub === targetSub && grd === targetGrd;
-          }).sort((a, b) => {
+
+            return true;
+          });
+
+          futureClasses.sort((a, b) => {
             if (a.date !== b.date) return (a.date || '').localeCompare(b.date || '');
+            const timeA = a.startTime || a.time || '';
+            const timeB = b.startTime || b.time || '';
+            if (timeA && timeB && timeA !== timeB) return timeA.localeCompare(timeB);
             return (parseInt(a.sequenceNumber, 10) || 0) - (parseInt(b.sequenceNumber, 10) || 0);
           });
 
+          let nextNum = newNum + 1;
           futureClasses.forEach(fc => {
             fc.sequenceNumber = nextNum;
             fc.dayNumber = String(nextNum);
             nextNum++;
-            ClassRepository.saveClass(fc, tid);
+            propagatedCount++;
+            ClassRepository.saveClass(fc, tid, { isMirrorSync: true });
           });
         }
 
@@ -1157,26 +1223,31 @@ class ClassEditorViewClass {
           const allPlans = StorageService.getAllPlans();
           const futureDates = Object.keys(allPlans).filter(d => d >= currentDate).sort();
 
-          let runningNum = newNum;
           for (const d of futureDates) {
             const plan = allPlans[d];
             if (!plan || !Array.isArray(plan.classes)) continue;
 
             let planMod = false;
             for (const c of plan.classes) {
-              const sub = String(c.subject || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-              const grd = String(c.grade || '').toLowerCase().replace(/[^0-9a-z]/gi, '').trim();
-              if (sub === targetSub && grd === targetGrd) {
-                if (d === currentDate && c.id === this.currentClass.id) {
+              const sub = normSub(c.subjectName || c.subject);
+              const grd = normGrd(c.gradeName || c.grade || c.group);
+              if (sub === targetSub && grd === targetGrd && normPeriod(c.period) === targetPeriod) {
+                if (c.id === this.currentClass.id || (d === currentDate && c.id === this.currentClass.id)) {
                   c.dayNumber = String(newNum);
                   c.sequenceNumber = newNum;
-                  runningNum = newNum + 1;
-                } else if (d > currentDate || (d === currentDate && c.id !== this.currentClass.id)) {
-                  c.dayNumber = String(runningNum);
-                  c.sequenceNumber = runningNum;
-                  runningNum++;
+                  planMod = true;
+                } else {
+                  const matched = futureClasses.find(fc => 
+                    (fc.id && (fc.id === c.id || fc.id === c.classId)) || 
+                    (fc.classId && (fc.classId === c.id || fc.classId === c.classId))
+                  ) || futureClasses.find(fc => fc.date === d && normSub(fc.subjectName || fc.subject) === sub && normGrd(fc.gradeName || fc.grade || fc.group) === grd);
+
+                  if (matched) {
+                    c.dayNumber = String(matched.sequenceNumber);
+                    c.sequenceNumber = matched.sequenceNumber;
+                    planMod = true;
+                  }
                 }
-                planMod = true;
               }
             }
             if (planMod) {
@@ -1203,10 +1274,22 @@ class ClassEditorViewClass {
       } catch (e) {}
     }
 
+    const scrollY = (typeof window !== 'undefined') ? window.scrollY : 0;
     this.render();
+    if (scrollY > 0 && typeof window !== 'undefined') {
+      window.scrollTo(0, scrollY);
+    }
+
+    if (typeof window !== 'undefined' && window.Calendar && typeof window.Calendar.updateDayIndicators === 'function') {
+      window.Calendar.updateDayIndicators();
+    }
 
     if (typeof App !== 'undefined' && App.showToast) {
-      App.showToast(`✓ Número de clase cambiado a #${newNum}. ${propagate ? 'Secuencia continuada hacia adelante.' : ''}`, 'success');
+      if (propagate && propagatedCount > 0) {
+        App.showToast(`✓ Clase actualizada a #${newNum}. Secuencia propagada a ${propagatedCount} clase(s) posterior(es).`, 'success');
+      } else {
+        App.showToast(`✓ Clase actualizada a #${newNum}.`, 'success');
+      }
     }
   }
 
