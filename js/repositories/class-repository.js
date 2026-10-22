@@ -1779,23 +1779,33 @@ class ClassRepositoryClass {
 
     // Sincronización automática con Google Cloud Firestore
     // (skipCloud: datos que vienen de la nube no se reenvían, evitando escrituras eco y bucles con onSnapshot)
-    if (!options.skipCloud && typeof FirestoreService !== 'undefined' && typeof FirestoreService.isReady === 'function' && FirestoreService.isReady()) {
-      try {
-        const clsRef = FirestoreService.db.collection('school_classes_v1').doc(`${tid}_${normalized.id}`);
-        const p = JSON.parse(JSON.stringify(normalized));
-        p.teacherId = tid;
-        p.cloudUpdatedAt = firebase.firestore.FieldValue.serverTimestamp();
-        clsRef.set(p, { merge: true }).catch(() => {});
-      } catch (e) {}
+    if (!options.skipCloud && typeof FirestoreService !== 'undefined') {
+      if (typeof FirestoreService.enqueueChange === 'function') {
+        FirestoreService.enqueueChange(tid, {
+          entityType: 'class',
+          entityId: normalized.id,
+          docPath: `school_classes_v1/${tid}_${normalized.id}`,
+          action: 'upsert',
+          data: normalized
+        });
+      } else if (typeof FirestoreService.isReady === 'function' && FirestoreService.isReady()) {
+        try {
+          const clsRef = FirestoreService.db.collection('school_classes_v1').doc(`${tid}_${normalized.id}`);
+          const p = JSON.parse(JSON.stringify(normalized));
+          p.teacherId = tid;
+          p.cloudUpdatedAt = firebase.firestore.FieldValue.serverTimestamp();
+          clsRef.set(p, { merge: true }).catch(() => {});
+        } catch (e) {}
+      }
     }
 
     console.log(`[ClassRepository:UPDATE_CLASS] ID: ${normalized.id} Sub: ${normalized.subjectName} Grd: ${normalized.gradeName} Seq: #${normalized.sequenceNumber} v: ${normalized.version}`);
 
     // Sincronización bidireccional con PlanRepository para visibilidad garantizada en Calendario y Planeador Diario
     if (!options.isPlanSync && !options.isClassSync) {
-      this._syncToPlanRepository(normalized, tid);
+      this._syncToPlanRepository(normalized, tid, options);
       if (syncedMirror) {
-        this._syncToPlanRepository(syncedMirror, tid);
+        this._syncToPlanRepository(syncedMirror, tid, options);
       }
     }
 
@@ -1805,7 +1815,7 @@ class ClassRepositoryClass {
   /**
    * Sincroniza una clase de ClassRepository con PlanRepository asegurando que exista en la fecha correspondiente.
    */
-  _syncToPlanRepository(normalized, tid) {
+  _syncToPlanRepository(normalized, tid, options = {}) {
     if (!normalized || !normalized.date) return;
     if (typeof PlanRepository === 'undefined' || typeof PlanRepository.getPlan !== 'function' || typeof PlanRepository.savePlan !== 'function') return;
 
@@ -1855,7 +1865,7 @@ class ClassRepositoryClass {
       } else {
         currentPlan.classes.push(planClassFormat);
       }
-      PlanRepository.savePlan(tid, planDate, currentPlan, { isClassSync: true, forceEmpty: true });
+      PlanRepository.savePlan(tid, planDate, currentPlan, { isClassSync: true, forceEmpty: true, skipCloud: true });
     } catch (e) {
       console.warn('[ClassRepository] Error al sincronizar clase con PlanRepository:', e);
     }
@@ -1990,14 +2000,24 @@ class ClassRepositoryClass {
     }
     this._broadcastSave(mirrorCls);
 
-    if (!options.skipCloud && typeof FirestoreService !== 'undefined' && typeof FirestoreService.isReady === 'function' && FirestoreService.isReady()) {
-      try {
-        const clsRef = FirestoreService.db.collection('school_classes_v1').doc(`${tid}_${mirrorCls.id}`);
-        const p = JSON.parse(JSON.stringify(mirrorCls));
-        p.teacherId = tid;
-        p.cloudUpdatedAt = firebase.firestore.FieldValue.serverTimestamp();
-        clsRef.set(p, { merge: true }).catch(() => {});
-      } catch (e) {}
+    if (!options.skipCloud && typeof FirestoreService !== 'undefined') {
+      if (typeof FirestoreService.enqueueChange === 'function') {
+        FirestoreService.enqueueChange(tid, {
+          entityType: 'class',
+          entityId: mirrorCls.id,
+          docPath: `school_classes_v1/${tid}_${mirrorCls.id}`,
+          action: 'upsert',
+          data: mirrorCls
+        });
+      } else if (typeof FirestoreService.isReady === 'function' && FirestoreService.isReady()) {
+        try {
+          const clsRef = FirestoreService.db.collection('school_classes_v1').doc(`${tid}_${mirrorCls.id}`);
+          const p = JSON.parse(JSON.stringify(mirrorCls));
+          p.teacherId = tid;
+          p.cloudUpdatedAt = firebase.firestore.FieldValue.serverTimestamp();
+          clsRef.set(p, { merge: true }).catch(() => {});
+        } catch (e) {}
+      }
     }
 
     console.log(`[ClassRepository:SYNC_MIRROR] Sincronizada clase espejo ${mirrorCls.id} (${mirrorInfo.targetGradeName} #${targetSeq}) desde ${sourceClass.id} (${sourceClass.gradeName})`);
@@ -2479,6 +2499,26 @@ class ClassRepositoryClass {
 
     // 6. Sincronizar eliminación en la nube con Cloud Firestore
     if (typeof FirestoreService !== 'undefined') {
+      if (!fallbackOptions.skipCloud && typeof FirestoreService.enqueueChange === 'function') {
+        if (classId) {
+          FirestoreService.enqueueChange(tid, {
+            entityType: 'class',
+            entityId: classId,
+            docPath: `school_classes_v1/${tid}_${classId}`,
+            action: 'delete',
+            date: targetDate
+          });
+        }
+        if (existing?.id && existing.id !== classId) {
+          FirestoreService.enqueueChange(tid, {
+            entityType: 'class',
+            entityId: existing.id,
+            docPath: `school_classes_v1/${tid}_${existing.id}`,
+            action: 'delete',
+            date: targetDate
+          });
+        }
+      }
       try {
         if (typeof FirestoreService.deleteClassFromCloud === 'function') {
           if (classId) FirestoreService.deleteClassFromCloud(tid, classId, targetDate);

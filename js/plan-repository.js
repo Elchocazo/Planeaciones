@@ -490,10 +490,20 @@ const PlanRepository = {
     }, 1500);
 
     // 9. Sincronización automática con Google Cloud Firestore (no reenviar datos que vienen de la nube)
-    if (!options.skipCloud && typeof FirestoreService !== 'undefined' && typeof FirestoreService.savePlan === 'function') {
-      FirestoreService.savePlan(tid, date, finalizedPlan).catch(err => {
-        console.warn('[PlanRepository] Error al sincronizar con Firestore:', err);
-      });
+    if (!options.skipCloud && typeof FirestoreService !== 'undefined') {
+      if (typeof FirestoreService.enqueueChange === 'function') {
+        FirestoreService.enqueueChange(tid, {
+          entityType: 'plan',
+          entityId: date,
+          docPath: `${FirestoreService.COLLECTION_PATH || 'school_plans_v1'}/${tid}_${date}`,
+          action: 'upsert',
+          data: finalizedPlan
+        });
+      } else if (typeof FirestoreService.savePlan === 'function') {
+        FirestoreService.savePlan(tid, date, finalizedPlan).catch(err => {
+          console.warn('[PlanRepository] Error al sincronizar con Firestore:', err);
+        });
+      }
     }
 
     // 10. Sincronización inmediata con ClassRepository (Dashboard, Calendario y Secuencias)
@@ -505,7 +515,7 @@ const PlanRepository = {
             ...cls,
             date: date,
             planId: finalizedPlan.id || ('plan_' + date)
-          }, tid, { ...options, isPlanSync: true });
+          }, tid, { ...options, isPlanSync: true, skipCloud: true });
         } catch (eCr) {
           console.warn('[PlanRepository] Error al sincronizar clase con ClassRepository:', eCr);
         }
@@ -518,7 +528,7 @@ const PlanRepository = {
   /**
    * Elimina una planeacion para una fecha (con snapshot de seguridad antes de borrar)
    */
-  deletePlan(teacherId, date) {
+  deletePlan(teacherId, date, options = {}) {
     const tid = teacherId || this._getCurrentTeacherId();
     const existing = this.getPlan(tid, date);
     if (!existing) return true;
@@ -539,6 +549,17 @@ const PlanRepository = {
 
     if (typeof IDBStorage !== 'undefined' && IDBStorage.set) {
       IDBStorage.set(key, all).catch(() => {});
+    }
+
+    if (!options?.skipCloud && typeof FirestoreService !== 'undefined') {
+      if (typeof FirestoreService.enqueueChange === 'function') {
+        FirestoreService.enqueueChange(tid, {
+          entityType: 'plan',
+          entityId: date,
+          docPath: `${FirestoreService.COLLECTION_PATH || 'school_plans_v1'}/${tid}_${date}`,
+          action: 'delete'
+        });
+      }
     }
 
     return true;

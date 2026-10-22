@@ -589,24 +589,43 @@ const FirestoreConfigModal = {
       : {};
 
     const isConnected = (typeof FirestoreService !== 'undefined') && FirestoreService.isReady();
+    const isSyncing = (typeof FirestoreService !== 'undefined') && FirestoreService.isSyncing();
     const statusMsg = (typeof FirestoreService !== 'undefined') ? FirestoreService.statusMessage : 'Modo local';
+    const pendingCount = (typeof FirestoreService !== 'undefined' && typeof FirestoreService.getPendingQueueCount === 'function')
+      ? FirestoreService.getPendingQueueCount('usr_manuel')
+      : 0;
+
+    let statusTitle = isConnected ? 'Conectado a Firestore' : 'Modo Local / Desconectado';
+    let statusIcon = isConnected ? '🟢' : '🟡';
+    if (isConnected) {
+      if (isSyncing) {
+        statusIcon = '⏳';
+        statusTitle = 'Sincronizando con la Nube';
+      } else if (pendingCount > 0) {
+        statusIcon = '🟡';
+        statusTitle = `Conectado (${pendingCount} cambio${pendingCount > 1 ? 's' : ''} pendiente${pendingCount > 1 ? 's' : ''})`;
+      } else {
+        statusIcon = '🟢';
+        statusTitle = 'Todo sincronizado (Nube al día)';
+      }
+    }
 
     container.innerHTML = `
       <!-- Estado de la Nube -->
       <div style="background:${isConnected ? '#ecfdf5' : '#fffbeb'}; border:1px solid ${isConnected ? '#a7f3d0' : '#fde68a'}; border-radius:8px; padding:0.9rem; margin-bottom:1.25rem; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
         <div>
           <div style="font-weight:700; font-size:0.9rem; color:${isConnected ? '#065f46' : '#92400e'}; display:flex; align-items:center; gap:6px;">
-            <span>${isConnected ? '🟢' : '🟡'}</span>
-            <span>Estado: ${isConnected ? 'Conectado a Firestore' : 'Modo Local / Desconectado'}</span>
+            <span>${statusIcon}</span>
+            <span>Estado: ${statusTitle}</span>
           </div>
           <div style="font-size:0.78rem; color:var(--slate-500); margin-top:2px;">
-            ${(typeof FirestoreService !== 'undefined' && FirestoreService.status === 'syncing') ? '⏳ ' + statusMsg : '✔️ ' + statusMsg}
+            ${isSyncing ? '⏳ ' + statusMsg : '✔️ ' + statusMsg}
           </div>
         </div>
 
         <div style="display:flex; gap:0.4rem; align-items:center;">
-          ${(typeof FirestoreService !== 'undefined' && FirestoreService.status === 'syncing') ? `
-            <button type="button" class="btn btn-secondary btn-sm" style="font-size:0.75rem; background:#fee2e2; color:#b91c1c; border-color:#fca5a5;" onclick="FirestoreService._updateStatus('connected', 'Conectado a Firestore (En línea)'); FirestoreConfigModal.renderForm();" title="Detener proceso de sincronización actual">
+          ${isSyncing ? `
+            <button type="button" class="btn btn-secondary btn-sm" style="font-size:0.75rem; background:#fee2e2; color:#b91c1c; border-color:#fca5a5;" onclick="FirestoreService.pauseSync(); FirestoreConfigModal.renderForm();" title="Detener proceso de sincronización actual">
               ⏹️ Detener
             </button>
           ` : ''}
@@ -800,10 +819,21 @@ const FirestoreConfigModal = {
 
   async syncNow() {
     if (typeof FirestoreService !== 'undefined' && FirestoreService.isReady()) {
-      App.showToast('Sincronizando planeaciones con Firestore...', 'info');
+      App.showToast('Sincronizando con Firestore...', 'info');
       try {
-        await FirestoreService.downloadAllFromCloud('usr_manuel');
-        App.showToast('¡Sincronización completada con la nube!', 'success');
+        if (!FirestoreService.isInitialSyncDone('usr_manuel')) {
+          await FirestoreService.runInitialSync('usr_manuel');
+          App.showToast('¡Sincronización inicial completada con la nube!', 'success');
+        } else {
+          const pending = FirestoreService.getPendingQueueCount('usr_manuel');
+          if (pending > 0) {
+            await FirestoreService.processSyncQueue('usr_manuel');
+            App.showToast(`¡${pending} cambio(s) pendiente(s) sincronizado(s)!`, 'success');
+          } else {
+            await FirestoreService.downloadAllFromCloud('usr_manuel');
+            App.showToast('¡Todo sincronizado con la nube!', 'success');
+          }
+        }
         if (typeof CoordinatorView !== 'undefined' && document.getElementById('coordinator-dashboard-modal')?.classList.contains('active')) {
           CoordinatorView.renderDashboard();
         }
