@@ -1046,11 +1046,12 @@ const NotebookEditor = {
 
     if (practical) {
       // Verificar si el contenido práctico ya está presente dentro de raw
-      const practicalSnippet = practical.replace(/<[^>]+>/g, '').trim().slice(0, 40);
-      const rawText = (raw || '').replace(/<[^>]+>/g, '');
+      const practicalSnippet = practical.replace(/<[^>]+>/g, '').toLowerCase().replace(/[\s\u00a0\u200B]+/g, ' ').trim().slice(0, 30);
+      const rawText = (raw || '').replace(/<[^>]+>/g, '').toLowerCase().replace(/[\s\u00a0\u200B]+/g, ' ');
       const alreadyIncluded = practicalSnippet && rawText.includes(practicalSnippet);
+      const hasWorksheetHeaderInRaw = /class=["']notebook-student-worksheet-header["']/i.test(raw);
 
-      if (!alreadyIncluded) {
+      if (!alreadyIncluded && !hasWorksheetHeaderInRaw) {
         const practicalFormatted = this.formatNotebookHtml(practical);
 
         if (raw && raw.trim()) {
@@ -1243,10 +1244,20 @@ const NotebookEditor = {
     // Salvaguarda al cambiar de pestaña o cerrar (registrar una sola vez globalmente)
     if (!this._boundUnloadEvents) {
       this._boundUnloadEvents = true;
-      window.addEventListener('beforeunload', () => this.saveCurrentNotebookContent(false));
+      const onUnloadNotebook = () => {
+        this.saveCurrentNotebookContent(false);
+        if (typeof ClassRepository !== 'undefined' && typeof ClassRepository.flushPersist === 'function') {
+          ClassRepository.flushPersist();
+        }
+        if (typeof PlanRepository !== 'undefined' && typeof PlanRepository.flushPersist === 'function') {
+          PlanRepository.flushPersist();
+        }
+      };
+      window.addEventListener('beforeunload', onUnloadNotebook);
+      window.addEventListener('pagehide', onUnloadNotebook);
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'hidden') {
-          this.saveCurrentNotebookContent(false);
+          onUnloadNotebook();
         }
       });
     }
@@ -1433,6 +1444,13 @@ const NotebookEditor = {
       if (planToSave) {
         if (StorageService.savePlan(dateStr, planToSave)) success = true;
       }
+    }
+
+    if (typeof ClassRepository !== 'undefined' && typeof ClassRepository.flushPersist === 'function') {
+      ClassRepository.flushPersist();
+    }
+    if (typeof PlanRepository !== 'undefined' && typeof PlanRepository.flushPersist === 'function') {
+      PlanRepository.flushPersist();
     }
 
     this._lastSavedContent = currentHtml;
@@ -2264,9 +2282,9 @@ const NotebookEditor = {
     `;
 
     const blob = new Blob(['\ufeff' + wordContent], { type: 'application/msword;charset=utf-8' });
-    const subClean = (subjectDisplay || 'Clase').replace(/[\s\/\\:*?"<>|]+/g, '_');
-    const grdClean = (gradeDisplay || '').replace(/[\s\/\\:*?"<>|]+/g, '_');
-    const fileName = `Cuaderno_${subClean}_${grdClean}_Clase_${classNum}_${cls.date || this.currentDateStr || 'sesion'}.doc`;
+    const subClean = (subjectDisplay || 'Materia').replace(/[\s\/\\:*?"<>|]+/g, ' ').trim();
+    const grdClean = (gradeDisplay || '').replace(/[\s\/\\:*?"<>|]+/g, ' ').trim();
+    const fileName = grdClean ? `Cuaderno docente - ${subClean} - ${grdClean}.doc` : `Cuaderno docente - ${subClean}.doc`;
 
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -2285,6 +2303,17 @@ const NotebookEditor = {
   printNotebook() {
     this.saveCurrentNotebookContent(false);
 
+    // Obtener datos de la clase actual
+    const cls = this.currentClassData || (this.currentClassIndex !== null && window.Planner?.currentPlan?.classes?.[this.currentClassIndex]) || {};
+    const subject = cls.subjectName || cls.subject || 'Materia';
+    const grade = cls.gradeName || cls.grade || '';
+
+    // Requisito: Nombre del documento al exportar "Cuaderno docente - Materia - Grado"
+    const origTitle = document.title;
+    const cleanSub = String(subject).replace(/[\/\\:*?"<>|]+/g, ' ').trim();
+    const cleanGrd = String(grade).replace(/[\/\\:*?"<>|]+/g, ' ').trim();
+    document.title = cleanGrd ? `Cuaderno docente - ${cleanSub} - ${cleanGrd}` : `Cuaderno docente - ${cleanSub}`;
+
     // =========================================================================
     // PASO 1: PREPARAR EL DOM PARA IMPRESIÓN LIMPIA
     // =========================================================================
@@ -2301,9 +2330,12 @@ const NotebookEditor = {
       hdrObs.style.display = 'none';
     }
 
-    // 1b. Ocultar marcadores de página del editor (Hoja 2, Hoja 3, etc.)
-    const pageBreakMarkers = document.querySelectorAll('.nb-auto-page-break');
-    pageBreakMarkers.forEach(el => { el.dataset.printHidden = '1'; el.style.display = 'none'; });
+    // 1b. Ocultar marcadores de página del editor y espaciadores efímeros de pantalla
+    const pageBreakMarkers = document.querySelectorAll('.nb-auto-page-break, .nb-page-break-spacer');
+    pageBreakMarkers.forEach(el => {
+      el.dataset.printHidden = '1';
+      el.style.display = 'none';
+    });
 
     // 1c. Despejar márgenes dinámicos aplicados por el separador de pantalla
     // Evita que Chromium sume el margen de pantalla (150-200px) encima de la hoja impresa
@@ -2311,8 +2343,24 @@ const NotebookEditor = {
     const breakTargets = editor ? editor.querySelectorAll('.nb-page-break-target, [data-orig-margin-top]') : [];
     const savedMargins = [];
     breakTargets.forEach(el => {
-      savedMargins.push({ el, marginTop: el.style.marginTop });
+      savedMargins.push({ el, marginTop: el.style.marginTop, hadClass: el.classList.contains('nb-page-break-target') });
       el.style.marginTop = '';
+      el.classList.remove('nb-page-break-target');
+    });
+
+    // 1c2. Detectar y ocultar saltos de página redundantes consecutivos para evitar hojas en blanco
+    const manualBreaks = editor ? Array.from(editor.querySelectorAll('.notebook-page-break')) : [];
+    const hiddenBreaks = [];
+    manualBreaks.forEach(br => {
+      let prev = br.previousElementSibling;
+      while (prev && (prev.classList.contains('nb-page-break-spacer') || prev.classList.contains('nb-auto-page-break') || (prev.nodeType === 1 && prev.style.display === 'none'))) {
+        prev = prev.previousElementSibling;
+      }
+      if (prev && prev.classList.contains('notebook-page-break')) {
+        br.dataset.printHiddenBreak = '1';
+        br.style.display = 'none';
+        hiddenBreaks.push(br);
+      }
     });
 
     // 1d. Ocultar el contador de palabras
@@ -2351,6 +2399,9 @@ const NotebookEditor = {
       if (restored) return;
       restored = true;
 
+      // Restaurar título de documento original
+      document.title = origTitle;
+
       document.body.classList.remove('printing-notebook');
 
       // Restaurar textarea de observaciones
@@ -2359,12 +2410,19 @@ const NotebookEditor = {
         if (obsDiv) obsDiv.remove();
       }
 
-      // Restaurar márgenes dinámicos del editor de pantalla
-      savedMargins.forEach(({ el, marginTop }) => {
+      // Restaurar márgenes dinámicos del editor de pantalla y clases
+      savedMargins.forEach(({ el, marginTop, hadClass }) => {
         if (marginTop) el.style.marginTop = marginTop;
+        if (hadClass) el.classList.add('nb-page-break-target');
       });
 
-      // Restaurar marcadores de página
+      // Restaurar saltos manuales ocultos
+      hiddenBreaks.forEach(br => {
+        delete br.dataset.printHiddenBreak;
+        br.style.display = '';
+      });
+
+      // Restaurar marcadores y espaciadores de página
       pageBreakMarkers.forEach(el => {
         delete el.dataset.printHidden;
         el.style.display = '';
@@ -2499,6 +2557,20 @@ const NotebookEditor = {
       .replace(/(?<=[^\*\s])\*{1,3}(?=[^\*]|$)/g, '')
       .replace(/\*{1,3}/g, '')
       .replace(/(?<!\([^\n\)]*)\s*\*{1,2}\)\s*(?=\n|•|$)/g, '');
+
+    // 8. Limpiar artefactos de visores PDF (ej. "PDF+ 1", "PDF+ 4", "PDF+", "50 PDF")
+    if (/PDF/i.test(clean)) {
+      clean = clean.replace(/\bPDF\s*\+\s*\d+\b/gi, '');
+      clean = clean.replace(/\bPDF\+\b/gi, '');
+      clean = clean.replace(/(?<=[0-9a-zA-Z\)\.\,\-])\s+PDF\b/gi, '');
+      clean = clean.replace(/\bPDF\s*$/gmi, '');
+    }
+
+    // 9. Limpiar encabezados Markdown vacíos o huérfanos (ej. "##", "###")
+    clean = clean.replace(/(?:^|\n)\s*#{1,6}\s*(?=\n|$)/g, '\n');
+
+    // 10. Limpiar chinchetas o pines pegados en opciones múltiples (ej. "📌 C) ", "📌 A)")
+    clean = clean.replace(/(?:^|\n)\s*📌\s*(\(?[a-dA-D][\.\)])/g, '\n$1');
 
     if (imagePlaceholders && imagePlaceholders.length > 0) {
       imagePlaceholders.forEach((imgTag, idx) => {
@@ -2640,12 +2712,20 @@ const NotebookEditor = {
     // Asegurar que fórmulas matemáticas ($$formula$$) queden aisladas en su propio bloque
     text = text.replace(/(?:\s*)(\$\$[^\$\n]+\$\$)(?:\s*)/g, '\n\n$1\n\n');
 
+    // Colapsar saltos dobles entre opciones alfabéticas consecutivas (A) B) C) D))
+    while (/((?:^|\n)[ \t]*\(?[a-dA-D][\.\)][^\n]*)\n{2,}(?=[ \t]*\(?[a-dA-D][\.\)])/.test(text)) {
+      text = text.replace(/((?:^|\n)[ \t]*\(?[a-dA-D][\.\)][^\n]*)\n{2,}(?=[ \t]*\(?[a-dA-D][\.\)])/g, '$1\n');
+    }
+
     const blocks = text.split(/\n{2,}/);
     const htmlBlocks = [];
 
     for (let b of blocks) {
       const block = b.trim();
       if (!block) continue;
+
+      // Descartar si el bloque completo es solo puntuación o almohadillas (#)
+      if (/^[\s,.;:\-–—\(\)\[\]\{\}\*•#]+$/.test(block)) continue;
 
       // 0. Fórmula matemática LaTeX ($$formula$$)
       const mathMatch = block.match(/^\$\$([^\$]+)\$\$$/);
@@ -2672,20 +2752,24 @@ const NotebookEditor = {
         continue;
       }
 
-      const headingMatch = block.match(/^(?:#{1,3}\s+)(.+)$/) ||
+      // Detectar si el bloque es una opción de pregunta (A, B, C, D o a, b, c, d)
+      const isOptionLine = /^\(?[a-zA-Z][\.\)]\s+/.test(block);
+
+      const headingMatch = !isOptionLine && (block.match(/^(?:#{1,3}\s+)(.+)$/) ||
                            block.match(/^(?:#{1,3}\s+|\*{0,2})(\d+[\.\)]\s+[A-ZÁÉÍÓÚÑ¿¡][^\n*]+?)\*{0,2}$/) ||
-                           block.match(/^([\p{Lu}0-9\s\/\-:\(\)]{6,}[\p{Lu}0-9\)])$/u);
+                           block.match(/^([\p{Lu}0-9\s\/\-:\(\)]{6,}[\p{Lu}0-9\)])$/u));
       if (headingMatch) {
         let title = (headingMatch[1] || headingMatch[0]).replace(/[\*#]/g, '').trim();
 
         // Detección especial de TALLER / EJERCICIO PRÁCTICO: independizar en una hoja con ficha estudiantil
         const isTallerHeading = /^(?:TALLER(?:\s*[\/:\-]\s*(?:ACTIVIDAD(?:ES)?|EJERCICIO(?:S)?|GU[IÍ]A)?\s*PR[AÁ]CTIC[OA]S?(?:\s+DE\s+LA\s+CLASE)?|\s*PR[AÁ]CTIC[OA]S?(?:\s+DE\s+LA\s+CLASE)?|\s+DE\s+APLICACI[OÓ]N|\s+EN\s+CLASE)?|ACTIVIDAD(?:ES)?\s+PR[AÁ]CTIC[OA]S?(?:\s+DE\s+LA\s+CLASE)?|EJERCICIO(?:S)?\s+PR[AÁ]CTIC[OA]S?(?:\s+DE\s+LA\s+CLASE)?)\b/i.test(title);
         if (isTallerHeading) {
+          const hasAlreadyWorksheetHeader = htmlBlocks.some(h => h.includes('notebook-student-worksheet-header'));
           const lastHtml = htmlBlocks[htmlBlocks.length - 1] || '';
-          if (htmlBlocks.length > 0 && !lastHtml.includes('notebook-page-break')) {
+          if (htmlBlocks.length > 0 && !lastHtml.includes('notebook-page-break') && !hasAlreadyWorksheetHeader) {
             htmlBlocks.push('<div class="notebook-page-break" contenteditable="false" data-page-break="true"><div class="page-break-line"></div><span class="page-break-label">📄 Hoja Independiente: Taller / Ejercicio Práctico</span></div>');
           }
-          if (!lastHtml.includes('notebook-student-worksheet-header')) {
+          if (!hasAlreadyWorksheetHeader) {
             htmlBlocks.push(`
 <div class="notebook-student-worksheet-header" style="border:2px solid #1e3a8a; border-radius:6px; padding:10px 14px; margin:0.8rem 0; background:#f8fafc; page-break-inside:avoid; break-inside:avoid;">
   <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1.5px solid #cbd5e1; padding-bottom:4px; margin-bottom:6px;">
@@ -2716,6 +2800,15 @@ const NotebookEditor = {
         continue;
       }
 
+      // Si el bloque es una opción individual de pregunta que quedó aislada
+      if (isOptionLine) {
+        const m = block.match(/^\(?([a-zA-Z][\.\)])\s*(.*)$/);
+        if (m) {
+          htmlBlocks.push(`<p class="notebook-quiz-single-option" style="margin:0.15rem 0 0.15rem 1.25rem; line-height:1.4; color:#1e293b; page-break-inside:avoid; break-inside:avoid;"><strong style="color:#1d4ed8;">${this.escapeHtml(m[1])}</strong> ${this._formatInlineMarkdown(m[2])}</p>`);
+          continue;
+        }
+      }
+
       // 3. Reglas pedagógicas, pasos, ejemplos o definiciones formateados limpiamente como párrafo con título en negrita
       const ruleMatch = block.match(/^\*{0,2}((?:Regla(?:\s+(?:fundamental|de\s+memoria\s+f[aá]cil|n[úu]mero))?|Norma\s*\d+|Lectura\s+completa|Definici[oó]n|Ejemplo(?:\s+paso\s+a\s+paso)?|Importante|Nota|Pregunta)[\s\w#º°\d\(\)]*:)\*{0,2}\s*([\s\S]+)$/i);
       if (ruleMatch) {
@@ -2727,6 +2820,20 @@ const NotebookEditor = {
 
       const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
       const validLines = lines.filter(l => !/^[\s\*•\-\–—_]{1,3}$/.test(l));
+
+      // Bloques de lista alfabética de opciones A) B) C) D)
+      if (validLines.length > 0 && validLines.every(l => /^\(?[a-zA-Z][\.\)]\s+/.test(l))) {
+        const listItemsHtml = validLines.map(l => {
+          const m = l.match(/^\(?([a-zA-Z][\.\)])\s*(.*)$/);
+          if (!m) return '';
+          return `<li style="margin-bottom:0.2rem;"><strong style="color:#1d4ed8;">${this.escapeHtml(m[1])}</strong> ${this._formatInlineMarkdown(m[2])}</li>`;
+        }).filter(Boolean).join('');
+        if (listItemsHtml) {
+          htmlBlocks.push(`<ul class="notebook-quiz-options" style="margin:0.25rem 0 0.5rem 1.25rem; list-style-type:none; padding-left:0.5rem; line-height:1.45; color:#1e293b; page-break-inside:avoid; break-inside:avoid;">${listItemsHtml}</ul>`);
+        }
+        continue;
+      }
+
       if (validLines.length > 0 && validLines.every(l => /^[•\-\*]\s+/.test(l))) {
         const listItemsHtml = validLines.map(l => {
           const c = l.replace(/^[•\-\*]\s+/, '').trim();

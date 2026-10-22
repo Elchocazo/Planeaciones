@@ -72,9 +72,26 @@ const PlanRepository = {
           });
         }
 
-        // Inicializar IndexedDB si esta disponible
+        // Inicializar IndexedDB si esta disponible y pre-cargar planeaciones existentes (Regla 10)
         if (typeof IDBStorage !== 'undefined' && IDBStorage.init) {
           await IDBStorage.init();
+          const tid = this._getCurrentTeacherId();
+          const keyV3 = this.getStorageKey(tid);
+          try {
+            const idbPlans = await IDBStorage.get(keyV3);
+            if (idbPlans && typeof idbPlans === 'object') {
+              if (!this._cache[tid]) this._cache[tid] = {};
+              Object.keys(idbPlans).forEach(d => {
+                const inc = idbPlans[d];
+                const exist = this._cache[tid][d];
+                if (!exist) {
+                  this._cache[tid][d] = this._normalizePlanStructure(tid, d, inc);
+                } else if ((inc.version || 0) > (exist.version || 0)) {
+                  this._cache[tid][d] = this._normalizePlanStructure(tid, d, inc);
+                }
+              });
+            }
+          } catch (eIdb) {}
         }
 
         this._isInitialized = true;
@@ -201,6 +218,16 @@ const PlanRepository = {
     // Normalizar identidad estable en cada plan cargado sin alterar fechas
     Object.keys(loaded).forEach(d => {
       loaded[d] = this._normalizePlanStructure(tid, d, loaded[d]);
+      if (loaded[d] && Array.isArray(loaded[d].classes)) {
+        loaded[d].classes = loaded[d].classes.filter(c => {
+          if (!c) return false;
+          const cId = c.id || c.classId;
+          if (cId && typeof ClassRepository !== 'undefined' && typeof ClassRepository.isDeletedClass === 'function') {
+            if (ClassRepository.isDeletedClass(cId, tid)) return false;
+          }
+          return true;
+        });
+      }
     });
 
     this._cache[tid] = loaded;
@@ -219,7 +246,18 @@ const PlanRepository = {
     }
     const plan = this._cache[tid] ? this._cache[tid][date] : null;
     if (!plan) return null;
-    return JSON.parse(JSON.stringify(plan));
+    const copy = JSON.parse(JSON.stringify(plan));
+    if (copy && Array.isArray(copy.classes)) {
+      copy.classes = copy.classes.filter(c => {
+        if (!c) return false;
+        const cId = c.id || c.classId;
+        if (cId && typeof ClassRepository !== 'undefined' && typeof ClassRepository.isDeletedClass === 'function') {
+          if (ClassRepository.isDeletedClass(cId, tid)) return false;
+        }
+        return true;
+      });
+    }
+    return copy;
   },
 
   /**
@@ -419,6 +457,14 @@ const PlanRepository = {
     if (!this._cache[tid]) this._cache[tid] = {};
     this._cache[tid][date] = finalizedPlan;
 
+    // Regla 10: Escritura síncrona inmediata en LocalStorage para garantizar permanencia ante F5
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const key = this.getStorageKey(tid);
+        localStorage.setItem(key, JSON.stringify(this._cache[tid]));
+      }
+    } catch (eLS) {}
+
     // 5-6. Persistir en LocalStorage + IndexedDB (escritura agrupada: un guardado de N clases
     //      en la misma tarea produce una sola serialización)
     this._schedulePersist(tid);
@@ -613,6 +659,14 @@ const PlanRepository = {
     if (!this._cache[tid]) this._cache[tid] = {};
     this._cache[tid][date] = currentPlan;
 
+    // Regla 10: Escritura síncrona inmediata en LocalStorage
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const key = this.getStorageKey(tid);
+        localStorage.setItem(key, JSON.stringify(this._cache[tid]));
+      }
+    } catch (eLS) {}
+
     // Persistir en LocalStorage v3 + IndexedDB (escritura agrupada por tarea)
     this._schedulePersist(tid);
 
@@ -658,6 +712,9 @@ const PlanRepository = {
    */
   deleteClass(teacherId, date, classId) {
     const tid = teacherId || this._getCurrentTeacherId();
+    if (typeof ClassRepository !== 'undefined' && typeof ClassRepository.markClassDeleted === 'function') {
+      ClassRepository.markClassDeleted(classId, tid);
+    }
     const currentPlan = this.getPlan(tid, date);
     if (!currentPlan || !Array.isArray(currentPlan.classes)) return false;
 
@@ -817,6 +874,12 @@ const PlanRepository = {
       }
 
       const classId = inc.id || exist?.id || this.generateClassId(planId);
+      const tid = this._getCurrentTeacherId();
+      if (typeof ClassRepository !== 'undefined' && typeof ClassRepository.isDeletedClass === 'function') {
+        if (ClassRepository.isDeletedClass(classId, tid) || (exist && ClassRepository.isDeletedClass(exist.id, tid))) {
+          return; // Clase explícitamente eliminada por el docente, no preservar
+        }
+      }
       const seqNum = inc.sequenceNumber || inc.consecutive || exist?.sequenceNumber || exist?.consecutive || parseInt(inc.dayNumber || exist?.dayNumber || (idx + 1), 10) || 1;
       const safeClass = {
         id: classId,

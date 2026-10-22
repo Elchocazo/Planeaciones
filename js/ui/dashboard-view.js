@@ -435,6 +435,9 @@ class DashboardViewClass {
                   📥 Descargas Word / PDF de este Día
                 </button>
               ` : `
+                <button type="button" class="btn btn-secondary btn-sm" onclick="DashboardView.openRescueModal()" style="background:#fef2f2; color:#b91c1c; border-color:#fecaca; font-weight:700;" title="Buscar y recuperar clases o textos redactados recientemente">
+                  🚑 Recuperar Clases 21-22
+                </button>
                 <button type="button" class="btn btn-primary" onclick="ImportModal.open(null, () => DashboardView.render())" title="Importar planeación inteligente desde texto o portapapeles">
                   📥 Importar planeación
                 </button>
@@ -1098,6 +1101,150 @@ class DashboardViewClass {
       NotificationService.show('Receso eliminado. Se han reanudado las planeaciones normales para esta fecha.', 'info');
     }
     this.setDate(dateStr);
+  }
+
+  closeRescueModal() {
+    const modal = document.getElementById('modal-rescue-october');
+    if (modal) modal.style.display = 'none';
+  }
+
+  openRescueModal() {
+    const tid = (typeof ClassRepository !== 'undefined') ? ClassRepository._getCurrentTeacherId() : 'usr_manuel';
+    if (typeof RecoveryService !== 'undefined' && typeof RecoveryService.rescueDisplacedOctoberClasses === 'function') {
+      RecoveryService.rescueDisplacedOctoberClasses(tid);
+    }
+
+    const repo = (typeof ClassRepository !== 'undefined') ? ClassRepository : null;
+    const allClasses = repo ? repo.getAllClasses(tid) : [];
+    
+    // Buscar clases de 21, 22 de octubre o modificadas recientemente
+    const candidates = allClasses.filter(c => {
+      if (!c) return false;
+      if (c.date === '2026-10-21' || c.date === '2026-10-22') return true;
+      const hasContent = Boolean(c.curriculum?.topic?.trim() || c.topic?.trim() || c.didacticSequence?.desarrollo?.trim() || c.description?.trim());
+      if (hasContent && (c.date === '2026-10-14' || c.date === '2026-10-15')) return true;
+      return false;
+    });
+
+    let modal = document.getElementById('modal-rescue-october');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'modal-rescue-october';
+      modal.className = 'modal-overlay';
+      modal.style.zIndex = '99999';
+      document.body.appendChild(modal);
+    }
+    modal.style.display = 'flex';
+
+    const classesHtml = candidates.length > 0 ? candidates.map(cls => {
+      const topic = cls.curriculum?.topic || cls.topic || 'Sin tema';
+      const rawInicio = cls.didacticSequence?.inicio || cls.pedagogy?.inicio || '';
+      const rawDesarrollo = cls.didacticSequence?.desarrollo || cls.pedagogy?.desarrollo || cls.description || '';
+      const snippet = rawInicio || rawDesarrollo;
+      return `
+        <div style="background:#fff; border:1px solid #e2e8f0; border-radius:8px; padding:12px; margin-bottom:10px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <div>
+              <strong style="color:#0f172a; font-size:0.95rem;">${this._escape(cls.subjectName || cls.subject)} — ${this._escape(cls.gradeName || cls.grade)}</strong>
+              <span style="font-size:0.75rem; background:#e0e7ff; color:#3730a3; padding:2px 8px; border-radius:10px; font-weight:700; margin-left:6px;">
+                Fecha actual: ${cls.date || 'Sin fecha'}
+              </span>
+            </div>
+            <span style="font-size:0.75rem; color:#64748b;">Clase #${cls.sequenceNumber || '?'}</span>
+          </div>
+          <div style="font-size:0.85rem; color:#334155; margin-bottom:6px;">
+            <strong>Tema:</strong> ${this._escape(topic)}
+          </div>
+          ${snippet ? `<div style="font-size:0.78rem; color:#64748b; background:#f8fafc; padding:6px 10px; border-radius:6px; margin-bottom:8px; max-height:80px; overflow-y:auto;">${this._escape(snippet.slice(0, 200))}...</div>` : ''}
+          <div style="display:flex; gap:6px; justify-content:flex-end; flex-wrap:wrap;">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="DashboardView.assignRescuedDate('${cls.id}', '2026-10-21')" style="font-size:0.75rem; background:#eff6ff; color:#1d4ed8; border-color:#bfdbfe;">
+              📅 Mover al 21 Oct
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="DashboardView.assignRescuedDate('${cls.id}', '2026-10-22')" style="font-size:0.75rem; background:#f0fdf4; color:#15803d; border-color:#bbf7d0;">
+              📅 Mover al 22 Oct
+            </button>
+            <button type="button" class="btn btn-primary btn-sm" onclick="DashboardView.closeRescueModal(); DashboardView.openClassForEditing('${cls.id}')" style="font-size:0.75rem;">
+              ✏️ Abrir y Editar
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('') : `
+      <div style="text-align:center; padding:24px; color:#64748b; background:#f8fafc; border-radius:8px; border:1px dashed #cbd5e1;">
+        <div style="font-size:2rem; margin-bottom:8px;">🔍</div>
+        <p style="margin:0 0 8px 0; font-weight:600;">No se detectaron planeaciones desplazadas en memoria.</p>
+        <p style="margin:0; font-size:0.8rem;">Todas las clases guardadas están correctamente vinculadas en el sistema.</p>
+      </div>
+    `;
+
+    modal.innerHTML = `
+      <div class="modal-card" style="max-width: 680px; width: 92%; max-height: 85vh; display:flex; flex-direction:column; padding: 24px; border-radius: 14px; box-shadow: 0 20px 40px rgba(0,0,0,0.22); background: #ffffff;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 12px; border-bottom:1px solid #f1f5f9; padding-bottom:10px;">
+          <h3 style="margin:0; font-size: 1.2rem; display:flex; align-items:center; gap: 8px; color:#991b1b;">
+            <span>🚑</span> Rescate y Recuperación de Clases
+          </h3>
+          <button type="button" class="btn-close" onclick="DashboardView.closeRescueModal()" style="border:none; background:transparent; font-size:1.5rem; cursor:pointer; color:#64748b;">×</button>
+        </div>
+
+        <p style="font-size: 0.85rem; color: #475569; margin: 0 0 14px 0;">
+          A continuación se muestran las planeaciones redactadas o importadas encontradas en el sistema. Puedes reasignarlas a su fecha correcta con un solo clic:
+        </p>
+
+        <div style="flex:1; overflow-y:auto; padding-right:4px;">
+          ${classesHtml}
+        </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid #f1f5f9; padding-top:12px; margin-top:12px;">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="DashboardView.downloadEmergencyBackup()" style="font-size:0.78rem;">
+            💾 Descargar Copia JSON de Respaldo
+          </button>
+          <button type="button" class="btn btn-secondary" onclick="DashboardView.closeRescueModal()">Cerrar</button>
+        </div>
+      </div>
+    `;
+  }
+
+  assignRescuedDate(classId, targetDate) {
+    const tid = (typeof ClassRepository !== 'undefined') ? ClassRepository._getCurrentTeacherId() : 'usr_manuel';
+    const repo = (typeof ClassRepository !== 'undefined') ? ClassRepository : null;
+    if (!repo) return;
+    const cls = repo.getClass(classId, tid);
+    if (cls) {
+      cls.date = targetDate;
+      cls.dayOfWeek = typeof ExportService !== 'undefined' ? ExportService.getDayOfWeekName(targetDate) : '';
+      cls.status = 'planned';
+      cls.isOrphaned = false;
+      repo.saveClass(cls, tid);
+      if (typeof NotificationService !== 'undefined' && NotificationService.show) {
+        NotificationService.show(`Clase reasignada con éxito a ${targetDate}`, 'success');
+      }
+      this.openRescueModal();
+      this.setDate(targetDate);
+    }
+  }
+
+  downloadEmergencyBackup() {
+    const tid = (typeof ClassRepository !== 'undefined') ? ClassRepository._getCurrentTeacherId() : 'usr_manuel';
+    const repo = (typeof ClassRepository !== 'undefined') ? ClassRepository : null;
+    const data = {
+      timestamp: new Date().toISOString(),
+      teacherId: tid,
+      classes: repo ? repo.getAllClasses(tid) : [],
+      localStorageDump: {}
+    };
+    if (typeof localStorage !== 'undefined') {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k) data.localStorageDump[k] = localStorage.getItem(k);
+      }
+    }
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `respaldo_emergencia_planeaciones_${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   _escape(str) {

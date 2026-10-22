@@ -111,22 +111,39 @@ const App = {
       }
     }
 
-    // 2. Protocolo de migración segura a v5 con respaldo automático y autorrecuperación preventiva
+    // 2. Protocolo de migración segura y auto-recuperación integral (Regla 10: Inviolabilidad de Planeaciones)
     if (typeof MigrationManager !== 'undefined' && MigrationManager.needsMigration()) {
       try {
         await MigrationManager.runMigration(tid);
       } catch (err) {
         console.error('[App] Error durante la migración segura:', err);
       }
-    } else if (typeof ClassRepository !== 'undefined') {
-      const currentClasses = ClassRepository.getAllClasses(tid);
-      if (currentClasses.length === 0 && typeof RecoveryService !== 'undefined') {
-        try {
-          console.log('[App] 0 clases en ClassRepository. Ejecutando autorrecuperación preventiva...');
+    }
+
+    // Auto-recuperación preventiva: escanear y rescatar cualquier planeación existente en snapshots,
+    // IndexedDB, LocalStorage o PlanRepository que no esté vinculada (Regla 10)
+    if (typeof RecoveryService !== 'undefined') {
+      try {
+        if (typeof RecoveryService.executeSafeRecovery === 'function') {
           await RecoveryService.executeSafeRecovery(tid);
-        } catch (err) {
-          console.error('[App] Error en autorrecuperación preventiva:', err);
         }
+        if (typeof RecoveryService.rescueDisplacedOctoberClasses === 'function') {
+          const res = RecoveryService.rescueDisplacedOctoberClasses(tid);
+          if (res && res.rescued > 0) {
+            console.log(`🎉 [App] Rescatadas ${res.rescued} clases del 21 y 22 de octubre.`);
+          }
+        }
+      } catch (errRecov) {
+        console.warn('[App] Aviso en auto-recuperación preventiva:', errRecov);
+      }
+    }
+
+    // Saneamiento definitivo de clases intrusas en 7° (Regla 10)
+    if (typeof ClassRepository !== 'undefined' && typeof ClassRepository.cleanMismatchedGrade7Classes === 'function') {
+      try {
+        ClassRepository.cleanMismatchedGrade7Classes(tid);
+      } catch (eClean7) {
+        console.warn('[App] Aviso en saneamiento de 7°:', eClean7);
       }
     }
 
@@ -982,18 +999,35 @@ const App = {
       });
     }
 
-    // Auto-guardado de seguridad al cerrar o recargar la pestaña
+    // Auto-guardado de seguridad al cerrar o recargar la pestaña (Regla 10: Inviolabilidad ante F5)
     if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
-      window.addEventListener('beforeunload', () => {
-        if (this.activeView === 'planner' && window.Planner) {
-          window.Planner.saveCurrentPlan(false);
+      const flushAllOnUnload = () => {
+        try {
+          if (window.Planner && typeof window.Planner.saveCurrentPlan === 'function') {
+            window.Planner.saveCurrentPlan(false);
+          }
+          if (window.ClassEditorView && typeof window.ClassEditorView.saveCurrentClass === 'function') {
+            window.ClassEditorView.saveCurrentClass(false);
+          }
+          if (window.NotebookEditor && typeof window.NotebookEditor.saveCurrentNotebookContent === 'function') {
+            window.NotebookEditor.saveCurrentNotebookContent(false);
+          }
+          if (typeof ClassRepository !== 'undefined' && typeof ClassRepository.flushPersist === 'function') {
+            ClassRepository.flushPersist();
+          }
+          if (typeof PlanRepository !== 'undefined' && typeof PlanRepository.flushPersist === 'function') {
+            PlanRepository.flushPersist();
+          }
+          if (typeof StorageService !== 'undefined' && typeof StorageService.executeAutoSaveProtocol === 'function') {
+            StorageService.executeAutoSaveProtocol(false);
+          }
+        } catch (eFlush) {
+          console.warn('[App] Error en salvaguarda flushAllOnUnload:', eFlush);
         }
-      });
-      window.addEventListener('pagehide', () => {
-        if (this.activeView === 'planner' && window.Planner) {
-          window.Planner.saveCurrentPlan(false);
-        }
-      });
+      };
+
+      window.addEventListener('beforeunload', flushAllOnUnload);
+      window.addEventListener('pagehide', flushAllOnUnload);
 
       // Manejador global de la tecla Escape para cerrar cualquier ventana o modal abierto
       window.addEventListener('keydown', (e) => {

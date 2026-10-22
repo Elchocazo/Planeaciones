@@ -4104,9 +4104,10 @@ body.printing-notebook .notebook-resizer-overlay {
     box-sizing: border-box !important;
   }
 
-  /* Salto de página para el espaciador de hoja del PaginationEngine */
+  /* Salto de página para el espaciador de hoja del PaginationEngine:
+     EN IMPRESIÓN SE OCULTA COMPLETAMENTE para evitar saltos dobles y páginas en blanco */
   body.printing-notebook .nb-page-break-spacer {
-    display: block !important;
+    display: none !important;
     position: static !important;
     height: 0 !important;
     min-height: 0 !important;
@@ -4114,8 +4115,10 @@ body.printing-notebook .notebook-resizer-overlay {
     margin: 0 !important;
     padding: 0 !important;
     border: none !important;
-    page-break-before: always !important;
-    break-before: page !important;
+    page-break-before: auto !important;
+    break-before: auto !important;
+    page-break-after: auto !important;
+    break-after: auto !important;
     visibility: hidden !important;
   }
 
@@ -4126,8 +4129,8 @@ body.printing-notebook .notebook-resizer-overlay {
   /* Salto de página para el bloque que inicia una nueva hoja */
   body.printing-notebook .nb-page-break-target {
     margin-top: 0 !important;
-    page-break-before: always !important;
-    break-before: page !important;
+    page-break-before: auto !important;
+    break-before: auto !important;
   }
 
   /* Editor de texto en bloque puro */
@@ -4178,21 +4181,60 @@ body.printing-notebook .notebook-resizer-overlay {
     background: transparent !important;
   }
 
-  /* --- PASO 6: SALTOS DE PÁGINA MANUALES (insertados por el usuario con Ctrl+Enter) --- */
-  .notebook-page-break {
-    page-break-after: always !important;
-    break-after: page !important;
+  /* --- PASO 6: SALTOS DE PÁGINA MANUALES (insertados por el usuario con Ctrl+Enter o por taller independiente) --- */
+  body.printing-notebook .notebook-page-break {
+    display: block !important;
+    page-break-before: always !important;
+    break-before: page !important;
+    page-break-after: avoid !important;
+    break-after: avoid !important;
     height: 0 !important;
+    min-height: 0 !important;
+    max-height: 0 !important;
     margin: 0 !important;
     padding: 0 !important;
     border: none !important;
-    background: none !important;
+    background: transparent !important;
+    visibility: hidden !important;
   }
 
-  .notebook-page-break .page-break-line,
-  .notebook-page-break .page-break-label {
+  body.printing-notebook .notebook-page-break * {
+    display: none !important;
+  }
+
+  body.printing-notebook .notebook-page-break .page-break-line,
+  body.printing-notebook .notebook-page-break .page-break-label {
     display: none !important;
     visibility: hidden !important;
+  }
+
+  /* Evitar saltos de página dobles si hay dos saltos contiguos o un salto al inicio */
+  body.printing-notebook .notebook-page-break + .notebook-page-break,
+  body.printing-notebook .notebook-page-break:first-child {
+    display: none !important;
+    page-break-before: avoid !important;
+    break-before: avoid !important;
+  }
+
+  /* Opciones de cuestionario / evaluación */
+  body.printing-notebook .notebook-quiz-options,
+  body.printing-notebook .notebook-quiz-single-option {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  body.printing-notebook .notebook-quiz-options li {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    margin-bottom: 0.15rem !important;
+  }
+
+  /* Ficha de taller estudiantil */
+  body.printing-notebook .notebook-student-worksheet-header {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    margin-top: 0 !important;
+    margin-bottom: 0.8rem !important;
   }
 
   /* --- PASO 7: PAGINACIÓN INTELIGENTE — EVITAR CORTES MALOS --- */

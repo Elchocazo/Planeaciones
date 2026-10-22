@@ -416,6 +416,9 @@ const StorageService = {
             if (!PlanRepository._cache[currentUserId]) PlanRepository._cache[currentUserId] = {};
             PlanRepository._cache[currentUserId][dateStr] = plan;
           }
+          if (typeof PlanRepository.savePlan === 'function') {
+            PlanRepository.savePlan(currentUserId, dateStr, plan, { isClassSync: true });
+          }
         }
       }
     }
@@ -1251,6 +1254,14 @@ const StorageService = {
         ? UserService.getCurrentUserId()
         : 'usr_manuel';
 
+      // Asegurar volcado inmediato y síncrono de repositorios principales (Regla 10)
+      if (typeof ClassRepository !== 'undefined' && typeof ClassRepository.flushPersist === 'function') {
+        ClassRepository.flushPersist();
+      }
+      if (typeof PlanRepository !== 'undefined' && typeof PlanRepository.flushPersist === 'function') {
+        PlanRepository.flushPersist();
+      }
+
       // 4. Guardar snapshot histórico en IndexedDB y disco en tiempo inactivo (no bloqueante)
       if (isDirty || showFeedback) {
         this.markClean();
@@ -1317,20 +1328,29 @@ const StorageService = {
 
     // Salvaguardas ante cierre de pestaña o cambio de visibilidad solo si hay cambios sucios
     if (typeof window !== 'undefined') {
-      window.addEventListener('beforeunload', () => {
+      const flushOnUnload = () => {
+        if (typeof ClassRepository !== 'undefined' && typeof ClassRepository.flushPersist === 'function') {
+          ClassRepository.flushPersist();
+        }
+        if (typeof PlanRepository !== 'undefined' && typeof PlanRepository.flushPersist === 'function') {
+          PlanRepository.flushPersist();
+        }
         if (this._isDirty || (typeof AppState !== 'undefined' && AppState.get('isDirty'))) {
           this.executeAutoSaveProtocol(false);
         }
-      });
-      window.addEventListener('pagehide', () => {
-        if (this._isDirty || (typeof AppState !== 'undefined' && AppState.get('isDirty'))) {
-          this.executeAutoSaveProtocol(false);
-        }
-      });
+      };
+      window.addEventListener('beforeunload', flushOnUnload);
+      window.addEventListener('pagehide', flushOnUnload);
     }
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'hidden') {
+          if (typeof ClassRepository !== 'undefined' && typeof ClassRepository.flushPersist === 'function') {
+            ClassRepository.flushPersist();
+          }
+          if (typeof PlanRepository !== 'undefined' && typeof PlanRepository.flushPersist === 'function') {
+            PlanRepository.flushPersist();
+          }
           if (this._isDirty || (typeof AppState !== 'undefined' && AppState.get('isDirty'))) {
             this.executeAutoSaveProtocol(false);
           }

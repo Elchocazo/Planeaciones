@@ -23,6 +23,7 @@ class AppRouterClass {
       dashboard: document.getElementById('dashboard-view'),
       calendar: document.getElementById('calendar-view'),
       editor: document.getElementById('class-editor-view'),
+      planner: document.getElementById('planner-view'),
       sequences: document.getElementById('sequences-view'),
       history: document.getElementById('history-view'),
       recovery: document.getElementById('recovery-view'),
@@ -68,6 +69,7 @@ class AppRouterClass {
             try {
               const params = new URLSearchParams(queryPart);
               if (params.get('id')) initialOpts.classId = params.get('id');
+              if (params.get('date')) initialOpts.date = params.get('date');
             } catch (e) {}
           }
         }
@@ -79,7 +81,7 @@ class AppRouterClass {
       // Estado base inicial en el navegador (replaceState para no crear entrada extra vacía)
       if (window.history && window.history.replaceState) {
         try {
-          const hashUrl = '#' + initialView + (initialOpts.classId ? `?id=${encodeURIComponent(initialOpts.classId)}` : '');
+          const hashUrl = '#' + initialView + (initialOpts.classId ? `?id=${encodeURIComponent(initialOpts.classId)}` : (initialOpts.date ? `?date=${encodeURIComponent(initialOpts.date)}` : ''));
           window.history.replaceState({
             view: initialView,
             options: initialOpts,
@@ -246,7 +248,7 @@ class AppRouterClass {
         // Actualizar historial del navegador con pushState / replaceState
         if (typeof window !== 'undefined' && window.history) {
           try {
-            const hashUrl = '#' + canonical + (options.classId ? `?id=${encodeURIComponent(options.classId)}` : '');
+            const hashUrl = '#' + canonical + (options.classId ? `?id=${encodeURIComponent(options.classId)}` : (options.date ? `?date=${encodeURIComponent(options.date)}` : ''));
             if (options.replace) {
               if (window.history.replaceState) {
                 window.history.replaceState({
@@ -267,7 +269,7 @@ class AppRouterClass {
             }
           } catch (e) {
             try {
-              const hashUrl = '#' + canonical + (options.classId ? `?id=${encodeURIComponent(options.classId)}` : '');
+              const hashUrl = '#' + canonical + (options.classId ? `?id=${encodeURIComponent(options.classId)}` : (options.date ? `?date=${encodeURIComponent(options.date)}` : ''));
               window.location.hash = hashUrl;
             } catch (err2) {}
           }
@@ -400,6 +402,11 @@ class AppRouterClass {
       } else if (viewName === 'calendar') {
         if (typeof Calendar !== 'undefined' && Calendar.render) {
           Calendar.render();
+        }
+      } else if (viewName === 'planner') {
+        const pDate = options.date || (window.Planner && window.Planner.currentDateStr) || new Date().toISOString().slice(0, 10);
+        if (typeof window !== 'undefined' && window.Planner && typeof window.Planner.loadDate === 'function') {
+          window.Planner.loadDate(pDate);
         }
       } else if (viewName === 'sequences') {
         if (typeof SequenceView !== 'undefined' && SequenceView.render) {

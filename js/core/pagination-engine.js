@@ -747,7 +747,13 @@ const PaginationEngine = {
       .replace(/(?:^|\n)\s*(?:•\s*)?[\*•\-\–—_]{1,3}\s*(?=\n|$)/g, '\n')
       .replace(/(?<=[^\*\s])\*{1,3}(?=[^\*]|$)/g, '')
       .replace(/\*{1,3}/g, '')
-      .replace(/\s*\*{1,2}\)\s*(?=\n|•|$)/g, '');
+      .replace(/\s*\*{1,2}\)\s*(?=\n|•|$)/g, '')
+      .replace(/\bPDF\s*\+\s*\d+\b/gi, '')
+      .replace(/\bPDF\+\b/gi, '')
+      .replace(/(?<=[0-9a-zA-Z\)\.\,\-])\s+PDF\b/gi, '')
+      .replace(/\bPDF\s*$/gmi, '')
+      .replace(/(?:^|\n)\s*#{1,6}\s*(?=\n|$)/g, '\n')
+      .replace(/(?:^|\n)\s*📌\s*(\(?[a-dA-D][\.\)])/g, '\n$1');
   }
 };
 

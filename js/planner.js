@@ -43,6 +43,8 @@ class PlannerComponent {
       this.collectDataFromDOM(this.currentDateStr);
       StorageService.savePlan(this.currentDateStr, this.currentPlan);
       this._hasUnsavedChanges = false;
+      if (typeof PlanRepository !== 'undefined' && PlanRepository.flushPersist) PlanRepository.flushPersist();
+      if (typeof ClassRepository !== 'undefined' && ClassRepository.flushPersist) ClassRepository.flushPersist();
     }
   }
 
@@ -1995,6 +1997,8 @@ class PlannerComponent {
     const success = StorageService.savePlan(saveDate, this.currentPlan);
     if (success) {
       this._hasUnsavedChanges = false;
+      if (typeof PlanRepository !== 'undefined' && PlanRepository.flushPersist) PlanRepository.flushPersist();
+      if (typeof ClassRepository !== 'undefined' && ClassRepository.flushPersist) ClassRepository.flushPersist();
     }
     this.updateSaveIndicator(success ? 'saved' : 'saving');
 
@@ -2687,16 +2691,25 @@ window.PlannerComponent = PlannerComponent;
 
 // Auto-guardado de seguridad inmediato antes de cerrar la ventana o cambiar de pestaña
 if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
-  window.addEventListener('beforeunload', () => {
+  const onUnloadPlanner = () => {
     if (window.Planner && typeof window.Planner.saveCurrentPlan === 'function') {
       window.Planner.saveCurrentPlan(false);
     }
-  });
+    if (typeof PlanRepository !== 'undefined' && typeof PlanRepository.flushPersist === 'function') {
+      PlanRepository.flushPersist();
+    }
+    if (typeof ClassRepository !== 'undefined' && typeof ClassRepository.flushPersist === 'function') {
+      ClassRepository.flushPersist();
+    }
+  };
+
+  window.addEventListener('beforeunload', onUnloadPlanner);
+  window.addEventListener('pagehide', onUnloadPlanner);
 
   if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden' && window.Planner && typeof window.Planner.saveCurrentPlan === 'function') {
-        window.Planner.saveCurrentPlan(false);
+      if (document.visibilityState === 'hidden') {
+        onUnloadPlanner();
       }
     });
   }

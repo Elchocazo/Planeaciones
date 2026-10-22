@@ -50,6 +50,19 @@ class ClassRepositoryClass {
           }
         } catch (e) {}
       }
+      if (typeof sessionStorage !== 'undefined') {
+        try {
+          const rawSes = sessionStorage.getItem('school_deleted_classes_' + tid);
+          if (rawSes) {
+            const listSes = JSON.parse(rawSes);
+            if (Array.isArray(listSes)) {
+              listSes.forEach(id => {
+                if (id) this._deletedClassSets[tid].add(String(id));
+              });
+            }
+          }
+        } catch (eSes) {}
+      }
     }
     return this._deletedClassSets[tid];
   }
@@ -66,10 +79,19 @@ class ClassRepositoryClass {
     const tid = teacherId || this._getCurrentTeacherId();
     const set = this._getDeletedClassIds(tid);
     set.add(String(classId));
+    const jsonStr = JSON.stringify(Array.from(set));
     if (typeof localStorage !== 'undefined') {
       try {
-        localStorage.setItem('school_deleted_classes_' + tid, JSON.stringify(Array.from(set)));
+        localStorage.setItem('school_deleted_classes_' + tid, jsonStr);
       } catch (e) {}
+    }
+    if (typeof sessionStorage !== 'undefined') {
+      try {
+        sessionStorage.setItem('school_deleted_classes_' + tid, jsonStr);
+      } catch (e) {}
+    }
+    if (typeof IDBStorage !== 'undefined' && IDBStorage.set) {
+      IDBStorage.set('school_deleted_classes_' + tid, Array.from(set)).catch(() => {});
     }
   }
 
@@ -164,6 +186,7 @@ class ClassRepositoryClass {
       } catch (e) {}
     }
     this._seedInitialClassesIfMissing(tid);
+    this.cleanMismatchedGrade7Classes(tid);
     this.realignSequenceNumbersToSchedule(tid);
   }
 
@@ -205,28 +228,7 @@ class ClassRepositoryClass {
           }
         }
 
-        // 3. Si aún no existe, buscar si ya existe una clase equivalente por materia, grado y secuencia con fecha desalineada
-        if (!existing) {
-          for (const cId in this._cache[tid]) {
-            const c = this._cache[tid][cId];
-            if (!c || this.isDeletedClass(cId, tid)) continue;
-            if (this._norm(c.subjectName || c.subject) === sNorm &&
-                this._normGrade(c.gradeName || c.grade) === gNorm &&
-                parseInt(c.sequenceNumber, 10) === seq) {
-              existing = c;
-              if (seedCls.date && c.date !== seedCls.date) {
-                console.log(`[ClassRepository] Realineando fecha de ${c.id} (#${seq} ${c.subjectName} ${c.gradeName}) de ${c.date} -> ${seedCls.date}`);
-                c.date = seedCls.date;
-                c.dayOfWeek = seedCls.dayOfWeek || c.dayOfWeek;
-                if (!c.scheduleSlotId && seedCls.scheduleSlotId) c.scheduleSlotId = seedCls.scheduleSlotId;
-                if (!c.time && seedCls.time) c.time = seedCls.time;
-                seedAdded = true;
-              }
-              break;
-            }
-          }
-        }
-
+        // Regla 10: NUNCA alterar la fecha ni sobreescribir una clase que el docente ya creó con su propia fecha
         if (!existing) {
           this._cache[tid][seedCls.id] = this._cleanClassText(JSON.parse(JSON.stringify(seedCls)));
           seedAdded = true;
@@ -376,6 +378,7 @@ class ClassRepositoryClass {
               }
             }
             if (updated) {
+              this.cleanMismatchedGrade7Classes(tid);
               this.realignSequenceNumbersToSchedule(tid);
               if (typeof window !== 'undefined' && window.dispatchEvent) {
                 window.dispatchEvent(new CustomEvent('class_session_cache_hydrated', { detail: { teacherId: tid } }));
@@ -413,6 +416,30 @@ class ClassRepositoryClass {
       }
 
       // 2. Cargar desde LocalStorage (clave activa y claves históricas - Regla 10)
+      const shouldPreferIncoming = (inc, exist) => {
+        if (!exist) return true;
+        if (!inc) return false;
+        const incHasContent = Boolean(
+          (inc.curriculum?.topic && String(inc.curriculum.topic).trim().length > 0 && String(inc.curriculum.topic).trim() !== 'Sin tema planeado todavía') ||
+          (inc.topic && String(inc.topic).trim().length > 0 && String(inc.topic).trim() !== 'Sin tema planeado todavía') ||
+          (inc.didacticSequence?.desarrollo && String(inc.didacticSequence.desarrollo).trim().length > 0) ||
+          (inc.description && String(inc.description).trim().length > 0) ||
+          (inc.notebookContent && String(inc.notebookContent).trim().length > 0)
+        );
+        const existHasContent = Boolean(
+          (exist.curriculum?.topic && String(exist.curriculum.topic).trim().length > 0 && String(exist.curriculum.topic).trim() !== 'Sin tema planeado todavía') ||
+          (exist.topic && String(exist.topic).trim().length > 0 && String(exist.topic).trim() !== 'Sin tema planeado todavía') ||
+          (exist.didacticSequence?.desarrollo && String(exist.didacticSequence.desarrollo).trim().length > 0) ||
+          (exist.description && String(exist.description).trim().length > 0) ||
+          (exist.notebookContent && String(exist.notebookContent).trim().length > 0)
+        );
+        if (incHasContent && !existHasContent) return true;
+        if (!incHasContent && existHasContent) return false;
+        if ((inc.version || 0) > (exist.version || 0)) return true;
+        if (inc.updatedAt && exist.updatedAt && inc.updatedAt > exist.updatedAt) return true;
+        return false;
+      };
+
       if (typeof localStorage !== 'undefined') {
         try {
           const raw = localStorage.getItem(this.getStorageKey(tid));
@@ -421,7 +448,8 @@ class ClassRepositoryClass {
             if (parsed && typeof parsed === 'object') {
               if (!sessionsMap) sessionsMap = {};
               for (const id in parsed) {
-                if (!sessionsMap[id] && !this.isDeletedClass(id, tid)) {
+                if (this.isDeletedClass(id, tid)) continue;
+                if (!sessionsMap[id] || shouldPreferIncoming(parsed[id], sessionsMap[id])) {
                   sessionsMap[id] = parsed[id];
                 }
               }
@@ -436,7 +464,8 @@ class ClassRepositoryClass {
                 if (legParsed && typeof legParsed === 'object') {
                   if (!sessionsMap) sessionsMap = {};
                   for (const id in legParsed) {
-                    if (!sessionsMap[id] && !this.isDeletedClass(id, tid)) {
+                    if (this.isDeletedClass(id, tid)) continue;
+                    if (!sessionsMap[id] || shouldPreferIncoming(legParsed[id], sessionsMap[id])) {
                       sessionsMap[id] = legParsed[id];
                     }
                   }
@@ -461,6 +490,7 @@ class ClassRepositoryClass {
 
       this._cache[tid] = sessionsMap;
       this._seedInitialClassesIfMissing(tid);
+      this.cleanMismatchedGrade7Classes(tid);
       this.realignSequenceNumbersToSchedule(tid);
       this._isInitialized = true;
       return this._cache[tid];
@@ -475,6 +505,22 @@ class ClassRepositoryClass {
    */
   isBackupClass(cls) {
     if (!cls || typeof cls !== 'object') return false;
+
+    // Regla 10: Si la clase tiene fecha válida y contenido real (tema, desarrollo o cuaderno),
+    // NUNCA debe ser excluida ni ocultada como respaldo
+    const hasValidDate = Boolean(cls.date && /^\d{4}-\d{2}-\d{2}$/.test(cls.date));
+    const hasContent = Boolean(
+      (cls.curriculum?.topic && String(cls.curriculum.topic).trim().length > 0 && String(cls.curriculum.topic).trim() !== 'Sin tema planeado todavía') ||
+      (cls.topic && String(cls.topic).trim().length > 0 && String(cls.topic).trim() !== 'Sin tema planeado todavía') ||
+      (cls.didacticSequence?.desarrollo && String(cls.didacticSequence.desarrollo).trim().length > 0) ||
+      (cls.description && String(cls.description).trim().length > 0) ||
+      (cls.notebookContent && String(cls.notebookContent).trim().length > 0)
+    );
+    if (hasValidDate && hasContent) {
+      if (cls.status === 'orphaned') cls.status = 'planned';
+      if (cls.isOrphaned) cls.isOrphaned = false;
+      return false;
+    }
 
     // 1. Estado o tipo explícito de respaldo o huérfana
     const statusLower = String(cls.status || '').toLowerCase().trim();
@@ -1081,6 +1127,139 @@ class ClassRepositoryClass {
   }
 
   /**
+   * Saneamiento definitivo de clases intrusas en 7° (Regla 10):
+   * - Elimina o reubica clases de Sistemas / Ofimática que se hayan colado erróneamente en Matemáticas 7°.
+   * - Elimina clases de Matemáticas 7° asignadas a días Lunes (donde el docente tiene Sistemas 7° y Dir. Grupo).
+   * - Registra sus IDs permanentemente en school_deleted_classes_ para blindaje anti-resurrección absoluto.
+   */
+  cleanMismatchedGrade7Classes(teacherId) {
+    const tid = teacherId || this._getCurrentTeacherId();
+    const map = this._getAllMap(tid);
+    if (!map || typeof map !== 'object') return 0;
+
+    let changed = false;
+    let purgedCount = 0;
+
+    const sistemasKeywords = [
+      'procesadores de texto',
+      'hojas de calculo',
+      'presentaciones interactivas',
+      'ofimatica',
+      'word / docs',
+      'sistema operativo windows',
+      'partes del computador',
+      'herramientas ofimaticas',
+      'creacion y edicion de contenido digital',
+      'reportaje en procesador de texto',
+      'diseno editorial'
+    ];
+
+    const isSistemasTopic = (text) => {
+      if (!text) return false;
+      const norm = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      return sistemasKeywords.some(kw => norm.includes(kw));
+    };
+
+    Object.keys(map).forEach(id => {
+      const c = map[id];
+      if (!c) return;
+
+      const sNorm = this._norm(c.subjectName || c.subject || '');
+      const gNorm = this._normGrade(c.gradeName || c.grade || c.group || '');
+
+      // Solo evaluamos grado 7°
+      if (gNorm !== '7') return;
+
+      const topicText = `${c.curriculum?.topic || ''} ${c.topic || ''} ${c.curriculum?.dba || ''} ${c.achievement || ''} ${c.didacticSequence?.desarrollo || ''}`;
+
+      // CASO 1: Clase registrada como Matemáticas 7° pero con tema claro de Sistemas / Ofimática
+      if (sNorm === 'matematicas' && isSistemasTopic(topicText)) {
+        console.warn(`[ClassRepository] Detectada clase intrusa de Sistemas en Matemáticas 7°: ${c.id} (${c.date})`);
+
+        // Comprobar si ya existe una clase legítima de Sistemas 7° en esa fecha o con ese tema
+        const existingSistemas = Object.values(map).find(sc =>
+          sc && sc.id !== c.id &&
+          this._norm(sc.subjectName || sc.subject || '') === 'sistemas' &&
+          this._normGrade(sc.gradeName || sc.grade || '') === '7' &&
+          (sc.date === c.date || (sc.curriculum?.topic && c.curriculum?.topic && this._norm(sc.curriculum.topic) === this._norm(c.curriculum.topic)))
+        );
+
+        if (existingSistemas) {
+          // Ya existe su contraparte legítima en Sistemas -> Purgar y tombstone en Matemáticas
+          this.markClassDeleted(c.id, tid);
+          delete map[id];
+          purgedCount++;
+          changed = true;
+          if (c.date && typeof PlanRepository !== 'undefined' && PlanRepository.deleteClass) {
+            PlanRepository.deleteClass(tid, c.date, c.id);
+          }
+        } else {
+          // Reasignar la clase para que pertenezca limpiamente a Sistemas 7°
+          c.subjectName = 'Sistemas';
+          c.subject = 'Sistemas';
+          c.subjectId = 'sistemas';
+          c.time = '7:50 - 8:40';
+          c.scheduleSlotId = 'slot_mu6xbshs_flstw6';
+          changed = true;
+        }
+      }
+
+      // CASO 2: Clases de Matemáticas 7° registradas en día Lunes
+      // Manuel nunca dicta Matemáticas 7° los lunes (su horario los lunes es Dir. Grupo 7:00-7:50 y Sistemas 7:50-8:40)
+      if (sNorm === 'matematicas' && c.date) {
+        const parts = c.date.split('-').map(Number);
+        if (parts.length === 3) {
+          const dObj = new Date(parts[0], parts[1] - 1, parts[2]);
+          if (dObj.getDay() === 1) { // 1 = Lunes
+            console.warn(`[ClassRepository] Eliminando clase errónea de Matemáticas 7° en día Lunes: ${c.id} (${c.date})`);
+            this.markClassDeleted(c.id, tid);
+            delete map[id];
+            purgedCount++;
+            changed = true;
+            if (typeof PlanRepository !== 'undefined' && PlanRepository.deleteClass) {
+              PlanRepository.deleteClass(tid, c.date, c.id);
+            }
+          }
+        }
+      }
+
+      // CASO 3: Duplicados idénticos en Sistemas 7° para la misma fecha y tema
+      if (sNorm === 'sistemas' && c.date) {
+        const duplicates = Object.values(map).filter(sc =>
+          sc && sc.id !== c.id &&
+          this._norm(sc.subjectName || sc.subject || '') === 'sistemas' &&
+          this._normGrade(sc.gradeName || sc.grade || '') === '7' &&
+          sc.date === c.date
+        );
+        if (duplicates.length > 0) {
+          duplicates.forEach(dup => {
+            const isOfficialSeed = dup.id === 'cls_mu6xgnn9_d1wm71p';
+            const cIsOfficialSeed = c.id === 'cls_mu6xgnn9_d1wm71p';
+            if (!cIsOfficialSeed && isOfficialSeed) {
+              this.markClassDeleted(c.id, tid);
+              delete map[id];
+              purgedCount++;
+              changed = true;
+            } else if (!isOfficialSeed && cIsOfficialSeed) {
+              this.markClassDeleted(dup.id, tid);
+              delete map[dup.id];
+              purgedCount++;
+              changed = true;
+            }
+          });
+        }
+      }
+    });
+
+    if (changed) {
+      this._persist(map, tid);
+      console.log(`[ClassRepository] cleanMismatchedGrade7Classes: Saneadas ${purgedCount} clases erróneas de 7°.`);
+    }
+
+    return purgedCount;
+  }
+
+  /**
    * Determina el siguiente número consecutivo para una nueva clase.
    * Si se proporciona fecha (scope.date) y corresponde al horario escolar, retorna el número exacto por horario.
    */
@@ -1557,12 +1736,14 @@ class ClassRepositoryClass {
 
     const normalized = this._normalizeClassSession(classData, existing);
 
-    // Salvaguarda canónica: Si el ID codifica una fecha oficial (ej: cls_20261014_...), la fecha es inmutable
+    // Salvaguarda canónica: Si el ID codificaba una fecha antigua pero la clase se está guardando para otra fecha,
+    // respetar la fecha solicitada por el docente y desacoplar del ID viejo para no alterar la fecha
     const matchDateInId = normalized.id && normalized.id.match(/^cls_(\d{4})(\d{2})(\d{2})_/);
     if (matchDateInId) {
       const canonicalDate = `${matchDateInId[1]}-${matchDateInId[2]}-${matchDateInId[3]}`;
-      if (normalized.date !== canonicalDate) {
-        normalized.date = canonicalDate;
+      if (normalized.date && normalized.date !== canonicalDate) {
+        const newId = this.generateClassId('cls');
+        normalized.id = newId;
       }
     }
 
@@ -1654,7 +1835,7 @@ class ClassRepositoryClass {
         topic: normalized.curriculum?.topic || normalized.topic || '',
         dba: normalized.curriculum?.dba || normalized.dba || '',
         achievement: normalized.curriculum?.achievement || normalized.achievement || '',
-        description: normalized.didacticSequence?.desarrollo || normalized.pedagogy?.desarrollo || normalized.description || '',
+        description: normalized.didacticSequence?.desarrollo || normalized.pedagogy?.desarrollo || (normalized.didacticSequence?.inicio ? `Inicio: ${normalized.didacticSequence.inicio}\n\nDesarrollo: ${normalized.didacticSequence.desarrollo || ''}\n\nCierre: ${normalized.didacticSequence.cierre || ''}` : (normalized.description || '')),
         observations: normalized.observations || normalized.didacticSequence?.observaciones || '',
         notebookContent: normalized.notebookContent || normalized.teacherNotebook?.studentNotebookContent || '',
         attachments: Array.isArray(normalized.attachments) ? normalized.attachments : [],
@@ -2437,11 +2618,17 @@ class ClassRepositoryClass {
     // La caché en memoria se actualiza de inmediato (lecturas siempre frescas).
     this._cache[tid] = sessionsMap;
 
-    // Escritura agrupada: varias llamadas a _persist dentro de la misma tarea síncrona
-    // (guardar un plan con N clases, sincronizar espejos, realinear consecutivos, importar)
-    // producen UNA sola serialización del mapa completo en lugar de N.
-    // Se usa una microtarea: se ejecuta antes de que el navegador pueda pintar, cambiar de
-    // página o cerrar la pestaña, por lo que no existe ventana de pérdida de datos.
+    // Regla 10: Escritura síncrona inmediata en LocalStorage para inmunidad ante recargas F5 o cierres intempestivos
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const key = this.getStorageKey(tid);
+        localStorage.setItem(key, JSON.stringify(sessionsMap));
+      }
+    } catch (eLS) {
+      console.warn('[ClassRepository] LocalStorage lleno o error al guardar síncrono. Se prioriza IndexedDB.', eLS);
+    }
+
+    // Escritura agrupada para IndexedDB y tareas complementarias
     if (!this._pendingPersist) this._pendingPersist = new Set();
     this._pendingPersist.add(tid);
     if (!this._persistScheduled) {

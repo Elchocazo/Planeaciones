@@ -107,6 +107,20 @@ class ImportParserClass {
       }
     }
 
+    // 8. Limpiar artefactos de visores PDF (ej. "PDF+ 1", "PDF+ 4", "PDF+", "50 PDF")
+    if (/PDF/i.test(str)) {
+      str = str.replace(/\bPDF\s*\+\s*\d+\b/gi, '');
+      str = str.replace(/\bPDF\+\b/gi, '');
+      str = str.replace(/(?<=[0-9a-zA-Z\)\.\,\-])\s+PDF\b/gi, '');
+      str = str.replace(/\bPDF\s*$/gmi, '');
+    }
+
+    // 9. Limpiar encabezados Markdown vacíos o huérfanos (ej. "##", "###")
+    str = str.replace(/(?:^|\n)\s*#{1,6}\s*(?=\n|$)/g, '\n');
+
+    // 10. Limpiar chinchetas o pines pegados en opciones múltiples (ej. "📌 C) ", "📌 A)")
+    str = str.replace(/(?:^|\n)\s*📌\s*(\(?[a-dA-D][\.\)])/g, '\n$1');
+
     if (imagePlaceholders && imagePlaceholders.length > 0) {
       imagePlaceholders.forEach((imgTag, idx) => {
         str = str.replace(`___IMG_SHIELD_${idx}___`, imgTag);
@@ -820,6 +834,11 @@ class ImportParserClass {
     // Asegurar que fórmulas matemáticas ($$formula$$) queden aisladas en su propio bloque
     text = text.replace(/(?:\s*)(\$\$[^\$\n]+\$\$)(?:\s*)/g, '\n\n$1\n\n');
 
+    // Colapsar saltos dobles entre opciones alfabéticas consecutivas (A) B) C) D) o a) b) c) d)) para mantenerlas en un solo bloque
+    while (/((?:^|\n)[ \t]*\(?[a-dA-D][\.\)][^\n]*)\n{2,}(?=[ \t]*\(?[a-dA-D][\.\)])/.test(text)) {
+      text = text.replace(/((?:^|\n)[ \t]*\(?[a-dA-D][\.\)][^\n]*)\n{2,}(?=[ \t]*\(?[a-dA-D][\.\)])/g, '$1\n');
+    }
+
     // Dividir en bloques por dobles saltos de línea
     const blocks = text.split(/\n{2,}/);
     const htmlBlocks = [];
@@ -873,12 +892,15 @@ class ImportParserClass {
         continue;
       }
 
+      // Detectar si el bloque es una opción de pregunta (A, B, C, D o a, b, c, d)
+      const isOptionLine = /^\(?[a-zA-Z][\.\)]\s+/.test(block);
+
       // 1b. Títulos y Encabezados mayores numerados, con ## o en MAYÚSCULAS o Títulos pedagógicos
       const isMdHeading = block.match(/^(?:#{1,3}\s+)(.+)$/);
       const isBoldHeading = block.match(/^\*{2}([^*]+?)\*{2}$/);
       const isNumberedHeading = block.match(/^(?:\*{2})(\d+[\.\)]\s+[A-ZÁÉÍÓÚÑ¿¡][^\n*]+?)\*{2}$/) && !block.includes('\n');
-      const isAllCapsHeading = !block.includes('\n') && block.length >= 4 && block.length <= 80 && /^[\p{Lu}0-9\s\/\-:\(\)]+$/u.test(block) && /[A-ZÁÉÍÓÚÑ]{3,}/.test(block);
-      const isStandaloneHeading = !block.includes('\n') && block.length >= 3 && block.length <= 75 &&
+      const isAllCapsHeading = !isOptionLine && !block.includes('\n') && block.length >= 4 && block.length <= 80 && /^[\p{Lu}0-9\s\/\-:\(\)]+$/u.test(block) && /[A-ZÁÉÍÓÚÑ]{3,}/.test(block);
+      const isStandaloneHeading = !isOptionLine && !block.includes('\n') && block.length >= 3 && block.length <= 75 &&
         /^[A-ZÁÉÍÓÚÑ\p{Emoji}]/u.test(block) &&
         !/[.,;?!]$/.test(block) &&
         !/^(?:En|Por|Con|Sin|Hacia|Desde|Durante|Sobre|Bajo|Entre|Ante|Tras)\s+(?:la|el|los|las|un|una|unos|unas|mi|tu|su)\b/i.test(block) &&
@@ -894,11 +916,12 @@ class ImportParserClass {
         // Detección especial de TALLER / EJERCICIO PRÁCTICO: independizar en una hoja con ficha estudiantil
         const isTallerHeading = /^(?:TALLER\s*[\/:\-]\s*(?:ACTIVIDAD(?:ES)?|EJERCICIO(?:S)?|GU[IÍ]A)\s*PR[AÁ]CTIC[OA]S?(?:\s+DE\s+LA\s+CLASE)?|TALLER\s+PR[AÁ]CTIC[OA]\s+DE\s+LA\s+CLASE|TALLER\s+PR[AÁ]CTICO\s+FORMATIVO|TALLER\s+DE\s+APLICACI[OÓ]N\s+(?:EN\s+CLASE|DE\s+LA\s+CLASE)|ACTIVIDAD(?:ES)?\s+PR[AÁ]CTIC[OA]S?\s+DE\s+LA\s+CLASE|EJERCICIO(?:S)?\s+PR[AÁ]CTIC[OA]S?\s+DE\s+LA\s+CLASE|TALLER\s+PR[AÁ]CTICO(?:\s+EN\s+CLASE)?\s*$|TALLER\s*[\/:\-]\s*(?:ACTIVIDAD|EJERCICIO)\s*$)/i.test(title) && !/^TALLER\s+PR[AÁ]CTICO\s*:\s*[A-ZÁÉÍÓÚÑ]/i.test(title);
         if (isTallerHeading) {
+          const hasAlreadyWorksheetHeader = htmlBlocks.some(h => h.includes('notebook-student-worksheet-header'));
           const lastHtml = htmlBlocks[htmlBlocks.length - 1] || '';
-          if (htmlBlocks.length > 0 && !lastHtml.includes('notebook-page-break')) {
+          if (htmlBlocks.length > 0 && !lastHtml.includes('notebook-page-break') && !hasAlreadyWorksheetHeader) {
             htmlBlocks.push('<div class="notebook-page-break" contenteditable="false" data-page-break="true"><div class="page-break-line"></div><span class="page-break-label">📄 Hoja Independiente: Taller / Ejercicio Práctico</span></div>');
           }
-          if (!lastHtml.includes('notebook-student-worksheet-header')) {
+          if (!hasAlreadyWorksheetHeader) {
             htmlBlocks.push(`
 <div class="notebook-student-worksheet-header" style="border:2px solid #1e3a8a; border-radius:6px; padding:10px 14px; margin:0.8rem 0; background:#f8fafc; page-break-inside:avoid; break-inside:avoid;">
   <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1.5px solid #cbd5e1; padding-bottom:4px; margin-bottom:6px;">
@@ -931,6 +954,15 @@ class ImportParserClass {
         continue;
       }
 
+      // Si el bloque es una opción de pregunta individual que quedó aislada
+      if (isOptionLine) {
+        const m = block.match(/^\(?([a-zA-Z][\.\)])\s*(.*)$/);
+        if (m) {
+          htmlBlocks.push(`<p class="notebook-quiz-single-option" style="margin:0.15rem 0 0.15rem 1.25rem; line-height:1.4; color:#1e293b; page-break-inside:avoid; break-inside:avoid;"><strong style="color:#1d4ed8;">${this._escape(m[1])}</strong> ${this._formatInlineMarkdown(m[2])}</p>`);
+          continue;
+        }
+      }
+
       // 2. Títulos de nivel H3 (ej. "### Subtítulo")
       const subHeadingMatch = block.match(/^#{3,4}\s+(.+)$/);
       if (subHeadingMatch) {
@@ -949,18 +981,18 @@ class ImportParserClass {
         continue;
       }
 
-      // 4a. Bloques de lista alfabética (a) b) c) o a. b. c.)
+      // 4a. Bloques de lista alfabética (a) b) c) o a. b. c. o (A) (B) (C))
       const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
       const validLines = lines.filter(l => !/^[\s\*•\-\–—_]{1,3}$/.test(l));
-      const isLetteredList = validLines.length > 0 && validLines.every(l => /^[a-zA-Z][\.\)]\s+/.test(l));
+      const isLetteredList = validLines.length > 0 && validLines.every(l => /^\(?[a-zA-Z][\.\)]\s+/.test(l));
       if (isLetteredList) {
         const listItemsHtml = validLines.map(l => {
-          const m = l.match(/^([a-zA-Z][\.\)])\s*(.*)$/);
+          const m = l.match(/^\(?([a-zA-Z][\.\)])\s*(.*)$/);
           if (!m) return '';
-          return `<li style="margin-bottom:0.25rem;"><strong style="color:#1d4ed8;">${this._escape(m[1])}</strong> ${this._formatInlineMarkdown(m[2])}</li>`;
+          return `<li style="margin-bottom:0.2rem;"><strong style="color:#1d4ed8;">${this._escape(m[1])}</strong> ${this._formatInlineMarkdown(m[2])}</li>`;
         }).filter(Boolean).join('');
         if (listItemsHtml) {
-          htmlBlocks.push(`<ul style="margin:0.25rem 0 0.5rem 1.25rem; list-style-type:none; padding-left:0.5rem; line-height:1.45; color:#1e293b;">${listItemsHtml}</ul>`);
+          htmlBlocks.push(`<ul class="notebook-quiz-options" style="margin:0.25rem 0 0.5rem 1.25rem; list-style-type:none; padding-left:0.5rem; line-height:1.45; color:#1e293b; page-break-inside:avoid; break-inside:avoid;">${listItemsHtml}</ul>`);
         }
         continue;
       }

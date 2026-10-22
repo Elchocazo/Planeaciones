@@ -47,16 +47,19 @@ class ClassEditorViewClass {
       });
 
       // Salvaguarda obligatoria contra pérdida de datos al cerrar o recargar
-      window.addEventListener('beforeunload', () => {
-        if (this.container && this.container.offsetParent !== null && this.currentClass) {
+      const onUnloadClassEditor = () => {
+        if (this.currentClass) {
           this.saveCurrentClass(false);
         }
-      });
-      window.addEventListener('pagehide', () => {
-        if (this.container && this.container.offsetParent !== null && this.currentClass) {
-          this.saveCurrentClass(false);
+        if (typeof ClassRepository !== 'undefined' && typeof ClassRepository.flushPersist === 'function') {
+          ClassRepository.flushPersist();
         }
-      });
+        if (typeof PlanRepository !== 'undefined' && typeof PlanRepository.flushPersist === 'function') {
+          PlanRepository.flushPersist();
+        }
+      };
+      window.addEventListener('beforeunload', onUnloadClassEditor);
+      window.addEventListener('pagehide', onUnloadClassEditor);
     }
   }
 
@@ -725,6 +728,12 @@ class ClassEditorViewClass {
       saved = data;
     }
     if (saved) {
+      if (typeof ClassRepository !== 'undefined' && typeof ClassRepository.flushPersist === 'function') {
+        ClassRepository.flushPersist();
+      }
+      if (typeof PlanRepository !== 'undefined' && typeof PlanRepository.flushPersist === 'function') {
+        PlanRepository.flushPersist();
+      }
       this.currentClass = saved;
       if (typeof AppState !== 'undefined') {
         AppState.set('currentClassId', saved.id);
