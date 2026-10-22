@@ -989,14 +989,22 @@ const PlanRepository = {
     else Promise.resolve().then(run);
   },
 
-  flushPersist() {
+  /**
+   * Vuelca de forma inmediata y asíncrona a LocalStorage + IndexedDB los planes pendientes.
+   * Retorna una Promesa que resuelve cuando se ha confirmado la persistencia en ambas capas.
+   */
+  async flushPersist(teacherId = null) {
     this._persistScheduled = false;
     const pending = this._pendingPersist ? Array.from(this._pendingPersist) : [];
+    if (teacherId && !pending.includes(teacherId)) pending.push(teacherId);
     if (this._pendingPersist) this._pendingPersist.clear();
-    pending.forEach(tid => {
+
+    const results = await Promise.all(pending.map(async (tid) => {
       let data = this._cache[tid];
-      if (!data) return;
+      if (!data) return true;
       const key = this.getStorageKey(tid);
+      let lsOk = false;
+
       try {
         if (typeof localStorage !== 'undefined') {
           // Regla 10: Fusión aditiva y conservativa. Preservar cualquier fecha preexistente en disco
@@ -1014,16 +1022,26 @@ const PlanRepository = {
             } catch (e) {}
           }
           localStorage.setItem(key, JSON.stringify(data));
+          lsOk = true;
         }
       } catch (eLS) {
         console.warn('[PlanRepository] LocalStorage lleno o error al guardar. Se prioriza IndexedDB.');
       }
+
+      let idbOk = false;
       if (typeof IDBStorage !== 'undefined' && IDBStorage.set) {
-        IDBStorage.set(key, data).catch(err => {
+        try {
+          idbOk = await IDBStorage.set(key, data);
+        } catch (err) {
           console.warn('[PlanRepository] Error al escribir en IndexedDB:', err);
-        });
+          idbOk = false;
+        }
       }
-    });
+
+      return lsOk || idbOk;
+    }));
+
+    return results.every(Boolean);
   },
 
   /**

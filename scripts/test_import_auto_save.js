@@ -174,7 +174,7 @@ async function runTests() {
 
   // 3. Simular la aplicación de la importación a la clase existente a través de ImportService
   console.log('Paso 1: Aplicando importación sobre la clase...');
-  const updatedClass = ImportService.applyToExistingClass(targetClass, parsedData, {
+  const updatedClass = await ImportService.applyToExistingClass(targetClass, parsedData, {
     sequenceNumber: 'target',
     grade: 'target',
     date: 'target',

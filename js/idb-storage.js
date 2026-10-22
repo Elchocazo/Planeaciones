@@ -88,7 +88,7 @@ const IDBStorage = {
   },
 
   /**
-   * Guarda o actualiza un registro por su clave
+   * Guarda o actualiza un registro por su clave de forma confirmada en disco
    */
   async set(key, value) {
     if (!this.isSupported()) return false;
@@ -101,9 +101,25 @@ const IDBStorage = {
           const tx = db.transaction(this.storeName, 'readwrite');
           const store = tx.objectStore(this.storeName);
           const req = store.put(value, key);
-          req.onsuccess = () => resolve(true);
+          let reqOk = false;
+
+          req.onsuccess = () => {
+            reqOk = true;
+          };
           req.onerror = (err) => {
             console.warn('[IDBStorage] Error al guardar registro:', err);
+            resolve(false);
+          };
+
+          tx.oncomplete = () => {
+            resolve(reqOk);
+          };
+          tx.onerror = (err) => {
+            console.warn('[IDBStorage] Transacción fallida en set:', err);
+            resolve(false);
+          };
+          tx.onabort = (err) => {
+            console.warn('[IDBStorage] Transacción abortada en set:', err);
             resolve(false);
           };
         } catch (e) {
@@ -130,8 +146,18 @@ const IDBStorage = {
           const tx = db.transaction(this.storeName, 'readwrite');
           const store = tx.objectStore(this.storeName);
           const req = store.delete(key);
-          req.onsuccess = () => resolve(true);
+          let reqOk = false;
+
+          req.onsuccess = () => {
+            reqOk = true;
+          };
           req.onerror = () => resolve(false);
+
+          tx.oncomplete = () => {
+            resolve(reqOk);
+          };
+          tx.onerror = () => resolve(false);
+          tx.onabort = () => resolve(false);
         } catch (e) {
           resolve(false);
         }

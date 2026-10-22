@@ -3,9 +3,19 @@
  */
 
 const assert = require('assert');
+// Mock de almacenamiento para pruebas en Node
+const lsStore = {};
+global.localStorage = {
+  getItem: (k) => lsStore[k] || null,
+  setItem: (k, v) => { lsStore[k] = String(v); },
+  removeItem: (k) => { delete lsStore[k]; },
+  clear: () => { Object.keys(lsStore).forEach(k => delete lsStore[k]); }
+};
+
 const ImportParser = require('../js/services/import-parser.js');
 const ImportService = require('../js/services/import-service.js');
 
+(async () => {
 console.log('================================================================');
 console.log('TEST SUITE: IMPORTADOR INTELIGENTE (REQ. 124)');
 console.log('================================================================\n');
@@ -246,7 +256,7 @@ const existingClass = {
   teacherNotebook: {}
 };
 
-const applied = ImportService.applyToExistingClass(existingClass, res5);
+const applied = await ImportService.applyToExistingClass(existingClass, res5);
 assert.strictEqual(applied.curriculum.topic, 'Ecosistemas Terrestres'); // Actualizado
 assert.strictEqual(applied.curriculum.dba, 'DBA 4 - Explica la estructura de los ecosistemas.'); // PRESERVADO
 console.log('  ✅ [PASS] TEST 5: Merge inteligente preserva DBA preexistente.\n');
@@ -356,7 +366,7 @@ assert.ok(prep.conflicts.some(c => c.type === 'sequenceNumber'));
 assert.ok(prep.conflicts.some(c => c.type === 'grade'));
 
 // Aplicar sin decisiones explicitas -> Debe conservar la identidad por defecto (Clase #7 y Tercero)
-const appliedDefault = ImportService.applyToExistingClass(targetCls7, parsedCls2);
+const appliedDefault = await ImportService.applyToExistingClass(targetCls7, parsedCls2);
 assert.strictEqual(appliedDefault.sequenceNumber, 7); // Conservó #7
 assert.strictEqual(appliedDefault.gradeName, 'Tercero'); // Conservó Tercero
 assert.strictEqual(appliedDefault.curriculum.topic, 'Nuevo Tema'); // Incorporó contenido
@@ -384,3 +394,5 @@ console.log('  ✅ [PASS] TEST 12: Cuaderno estructurado correctamente con h2, l
 console.log('================================================================');
 console.log('TODAS LAS 12 PRUEBAS DEL IMPORTADOR SUPERADAS AL 100% (PASS)');
 console.log('================================================================');
+
+})();

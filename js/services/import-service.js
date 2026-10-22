@@ -133,7 +133,7 @@ class ImportServiceClass {
   /**
    * Aplica los datos analizados sobre una clase existente con merge inteligente
    */
-  applyToExistingClass(targetClass, parsedData, decisions = {}) {
+  async applyToExistingClass(targetClass, parsedData, decisions = {}) {
     if (!targetClass || !parsedData) return null;
 
     // Respaldar estado previo para permitir Deshacer
@@ -268,19 +268,36 @@ class ImportServiceClass {
     merged.status = 'planned';
     merged.updatedAt = new Date().toISOString();
 
-    // Guardar atómicamente a través de ClassRepository
+    // Guardar atómicamente a través de ClassRepository con persistencia confirmada
     const repo = this._getClassRepository();
-    if (repo && repo.saveClass) {
-      return repo.saveClass(merged, merged.teacherId);
+    if (!repo) throw new Error('ClassRepository no está disponible para persistir la clase importada.');
+
+    let saved = null;
+    if (typeof repo.saveClassPersisted === 'function') {
+      saved = await repo.saveClassPersisted(merged, merged.teacherId);
+    } else if (typeof repo.saveClass === 'function') {
+      saved = repo.saveClass(merged, merged.teacherId);
+      if (typeof repo.flushPersist === 'function') {
+        await repo.flushPersist(merged.teacherId);
+      }
+    } else {
+      throw new Error('El repositorio no implementa saveClass.');
     }
 
-    return merged;
+    if (typeof repo.verifyPersistence === 'function') {
+      const v = await repo.verifyPersistence(saved.id, merged.teacherId);
+      if (!v.isVerified) {
+        throw new Error(`Persistencia no confirmada para la clase #${saved.sequenceNumber} (${saved.id}).`);
+      }
+    }
+
+    return saved;
   }
 
   /**
    * Crea una NUEVA clase a partir del texto analizado con ID y consecutivo independientes (Req. 40, 41)
    */
-  importAsNewClass(parsedData, options = {}, teacherId = null) {
+  async importAsNewClass(parsedData, options = {}, teacherId = null) {
     if (!parsedData) return null;
     const tid = teacherId || (typeof UserService !== 'undefined' && UserService.getCurrentUserId ? UserService.getCurrentUserId() : 'usr_manuel');
 
@@ -387,11 +404,26 @@ class ImportServiceClass {
       newClassData.notebookContent = nbEditor._prepareInitialHtml(newClassData);
     }
 
-    if (repo && repo.createClass) {
-      return repo.createClass(newClassData, tid);
+    let created = null;
+    if (typeof repo.createClassPersisted === 'function') {
+      created = await repo.createClassPersisted(newClassData, tid);
+    } else if (typeof repo.createClass === 'function') {
+      created = repo.createClass(newClassData, tid);
+      if (typeof repo.flushPersist === 'function') {
+        await repo.flushPersist(tid);
+      }
+    } else {
+      throw new Error('El repositorio no implementa createClass.');
     }
 
-    return newClassData;
+    if (typeof repo.verifyPersistence === 'function') {
+      const v = await repo.verifyPersistence(created.id, tid);
+      if (!v.isVerified) {
+        throw new Error(`Persistencia no confirmada para la nueva clase #${created.sequenceNumber} (${created.id}).`);
+      }
+    }
+
+    return created;
   }
 
   /**

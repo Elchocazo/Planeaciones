@@ -358,10 +358,17 @@ class ImportModalClass {
   /**
    * Aplica a la clase actual en edición
    */
-  applyToCurrentClass() {
+  async applyToCurrentClass() {
     if (!this.targetClass) {
-      this.importAsNewClass();
+      await this.importAsNewClass();
       return;
+    }
+
+    const btnApply = document.getElementById('btn-apply-to-target');
+    const prevBtnText = btnApply ? btnApply.innerHTML : '';
+    if (btnApply) {
+      btnApply.disabled = true;
+      btnApply.innerHTML = '⏳ Guardando y verificando...';
     }
 
     const adjustedData = this._getAdjustedParsedData();
@@ -369,7 +376,11 @@ class ImportModalClass {
     const identityAction = actionRadio ? actionRadio.value : 'keep';
 
     if (identityAction === 'new') {
-      this.importAsNewClass();
+      if (btnApply) {
+        btnApply.disabled = false;
+        btnApply.innerHTML = prevBtnText;
+      }
+      await this.importAsNewClass();
       return;
     }
 
@@ -387,7 +398,8 @@ class ImportModalClass {
     }
 
     try {
-      const updated = ImportService.applyToExistingClass(this.targetClass, adjustedData, decisions);
+      // Regla Principal: Guardar al importar y verificar persistencia antes de mostrar éxito
+      const updated = await ImportService.applyToExistingClass(this.targetClass, adjustedData, decisions);
       this.close();
 
       if (typeof App !== 'undefined' && App.showToast) {
@@ -400,22 +412,30 @@ class ImportModalClass {
         this.onSuccessCallback(updated);
       } else if (typeof ClassEditorView !== 'undefined' && ClassEditorView.loadClass) {
         ClassEditorView.loadClass(updated.id);
-        if (typeof ClassEditorView.saveCurrentClass === 'function') {
-          ClassEditorView.saveCurrentClass(false);
-        }
       } else if (typeof DashboardView !== 'undefined' && DashboardView.render) {
         DashboardView.render();
       }
     } catch (err) {
       console.error('[ImportModal] Error al aplicar planeación:', err);
       alert('Error al guardar planeación: ' + err.message);
+      if (btnApply) {
+        btnApply.disabled = false;
+        btnApply.innerHTML = prevBtnText;
+      }
     }
   }
 
   /**
-   * Importa como una nueva clase independiente (max + 1)
+   * Importa como una nueva clase independiente (max + 1) con persistencia confirmada
    */
-  importAsNewClass() {
+  async importAsNewClass() {
+    const btnNew = document.getElementById('btn-import-as-new');
+    const prevBtnText = btnNew ? btnNew.innerHTML : '';
+    if (btnNew) {
+      btnNew.disabled = true;
+      btnNew.innerHTML = '⏳ Creando y verificando...';
+    }
+
     const adjustedData = this._getAdjustedParsedData();
     const tid = typeof ClassRepository !== 'undefined' && ClassRepository._getCurrentTeacherId ? ClassRepository._getCurrentTeacherId() : 'usr_manuel';
     const options = this.targetClass ? {
@@ -427,7 +447,8 @@ class ImportModalClass {
     } : {};
 
     try {
-      const created = ImportService.importAsNewClass(adjustedData, options, tid);
+      // Regla Principal: Guardar al importar y verificar persistencia
+      const created = await ImportService.importAsNewClass(adjustedData, options, tid);
       this.close();
 
       if (typeof App !== 'undefined' && App.showToast) {
@@ -438,10 +459,16 @@ class ImportModalClass {
         this.onSuccessCallback(created);
       } else if (typeof AppRouter !== 'undefined') {
         AppRouter.navigateTo('class-editor', { classId: created.id });
+      } else if (typeof DashboardView !== 'undefined' && DashboardView.render) {
+        DashboardView.render();
       }
     } catch (err) {
       console.error('[ImportModal] Error al crear nueva clase:', err);
       alert('Error al crear clase: ' + err.message);
+      if (btnNew) {
+        btnNew.disabled = false;
+        btnNew.innerHTML = prevBtnText;
+      }
     }
   }
 

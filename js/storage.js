@@ -1128,10 +1128,10 @@ const StorageService = {
   /**
    * Importa datos desde un archivo JSON
    */
-  importBackup(jsonString) {
+  async importBackup(jsonString) {
     try {
       if (typeof BackupService !== 'undefined' && BackupService.restoreBackup) {
-        BackupService.restoreBackup(jsonString).catch(e => console.error(e));
+        await BackupService.restoreBackup(jsonString);
       }
       const parsed = typeof jsonString === 'string' ? JSON.parse(jsonString) : jsonString;
       if (parsed.profile) {
@@ -1146,7 +1146,13 @@ const StorageService = {
         }
         localStorage.setItem(STORAGE_KEYS.PLANS, JSON.stringify(parsed.plans));
       }
-      this.executeAutoSaveProtocol(false);
+      if (typeof ClassRepository !== 'undefined' && typeof ClassRepository.flushPersist === 'function') {
+        await ClassRepository.flushPersist();
+      }
+      if (typeof PlanRepository !== 'undefined' && typeof PlanRepository.flushPersist === 'function') {
+        await PlanRepository.flushPersist();
+      }
+      await this.executeAutoSaveProtocol(false);
       return true;
     } catch (e) {
       console.error('Error al importar copia de seguridad:', e);
@@ -1256,10 +1262,10 @@ const StorageService = {
 
       // Asegurar volcado inmediato y síncrono de repositorios principales (Regla 10)
       if (typeof ClassRepository !== 'undefined' && typeof ClassRepository.flushPersist === 'function') {
-        ClassRepository.flushPersist();
+        await ClassRepository.flushPersist();
       }
       if (typeof PlanRepository !== 'undefined' && typeof PlanRepository.flushPersist === 'function') {
-        PlanRepository.flushPersist();
+        await PlanRepository.flushPersist();
       }
 
       // 4. Guardar snapshot histórico en IndexedDB y disco en tiempo inactivo (no bloqueante)

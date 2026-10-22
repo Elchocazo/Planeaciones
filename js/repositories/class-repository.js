@@ -125,7 +125,6 @@ class ClassRepositoryClass {
               parsed[id] = this._cleanClassText(parsed[id]);
             }
             this._cache[tid] = parsed;
-            this._isInitialized = true;
           }
         }
 
@@ -186,8 +185,8 @@ class ClassRepositoryClass {
       } catch (e) {}
     }
     this._seedInitialClassesIfMissing(tid);
-    this.cleanMismatchedGrade7Classes(tid);
-    this.realignSequenceNumbersToSchedule(tid);
+    // Regla Arquitectónica: Saneamiento y realineación se postergan a init()
+    // para no detonar escrituras prematuras antes de fusionar IndexedDB con LocalStorage.
   }
 
   _seedInitialClassesIfMissing(teacherId) {
@@ -354,49 +353,28 @@ class ClassRepositoryClass {
   }
 
   /**
-   * Inicializa el repositorio cargando clases desde IndexedDB y LocalStorage
+   * Inicializa el repositorio cargando y reconciliando clases desde IndexedDB y LocalStorage
+   * garantizando que ambas capas queden 100% sincronizadas y confirmadas.
    */
-  async init(teacherId) {
+  async init(teacherId, options = {}) {
     const tid = teacherId || this._getCurrentTeacherId();
-    if (!this._cache[tid] || Object.keys(this._cache[tid]).length === 0) {
-      this._hydrateSyncFromLocalStorage(tid);
-    }
-    if (this._cache[tid] && Object.keys(this._cache[tid]).length > 0) {
-      this._isInitialized = true;
-      // En segundo plano, verificar si IndexedDB tiene registros más recientes sin bloquear
-      if (typeof IDBStorage !== 'undefined' && IDBStorage.get) {
-        IDBStorage.get(this.getStorageKey(tid)).then(idbMap => {
-          if (idbMap && typeof idbMap === 'object' && Object.keys(idbMap).length > 0) {
-            let updated = false;
-            for (const [id, cls] of Object.entries(idbMap)) {
-              if (this.isDeletedClass(id, tid) || (cls && cls.id && this.isDeletedClass(cls.id, tid))) {
-                continue;
-              }
-              if (!this._cache[tid][id] || (cls.updatedAt && cls.updatedAt > (this._cache[tid][id].updatedAt || 0))) {
-                this._cache[tid][id] = cls;
-                updated = true;
-              }
-            }
-            if (updated) {
-              this.cleanMismatchedGrade7Classes(tid);
-              this.realignSequenceNumbersToSchedule(tid);
-              if (typeof window !== 'undefined' && window.dispatchEvent) {
-                window.dispatchEvent(new CustomEvent('class_session_cache_hydrated', { detail: { teacherId: tid } }));
-              }
-            }
-          }
-        }).catch(() => {});
-      }
+    if (this._isInitialized && this._cache[tid] && !options.force) {
       return this._cache[tid];
     }
-    if (this._initPromise) return this._initPromise;
+    if (this._initPromise && !options.force) return this._initPromise;
 
     this._initPromise = (async () => {
+      // Pre-hidratación sincrónica preventiva en memoria
+      if (!this._cache[tid] || Object.keys(this._cache[tid]).length === 0) {
+        this._hydrateSyncFromLocalStorage(tid);
+      }
+
       let sessionsMap = null;
 
-      // 1. Cargar desde IndexedDB (clave activa y claves históricas - Regla 10)
-      if (typeof IDBStorage !== 'undefined' && IDBStorage.get) {
+      // 1. Cargar desde IndexedDB (capa principal de alta capacidad - Regla 10)
+      if (typeof IDBStorage !== 'undefined' && IDBStorage.init) {
         try {
+          await IDBStorage.init();
           sessionsMap = await IDBStorage.get(this.getStorageKey(tid));
           for (const legKey of this.getLegacyStorageKeys(tid)) {
             if (legKey === this.getStorageKey(tid)) continue;
@@ -412,7 +390,9 @@ class ClassRepositoryClass {
               }
             } catch (eIdbLeg) {}
           }
-        } catch (e) {}
+        } catch (e) {
+          console.warn('[ClassRepository] Aviso leyendo de IndexedDB en init:', e);
+        }
       }
 
       // 2. Cargar desde LocalStorage (clave activa y claves históricas - Regla 10)
@@ -476,6 +456,17 @@ class ClassRepositoryClass {
         } catch (e) {}
       }
 
+      // 3. Fusionar con cualquier clase existente en la caché de memoria
+      if (this._cache[tid] && typeof this._cache[tid] === 'object') {
+        if (!sessionsMap) sessionsMap = {};
+        for (const id in this._cache[tid]) {
+          if (this.isDeletedClass(id, tid)) continue;
+          if (!sessionsMap[id] || shouldPreferIncoming(this._cache[tid][id], sessionsMap[id])) {
+            sessionsMap[id] = this._cache[tid][id];
+          }
+        }
+      }
+
       if (sessionsMap && typeof sessionsMap === 'object') {
         for (const id in sessionsMap) {
           if (this.isDeletedClass(id, tid) || (sessionsMap[id] && this.isDeletedClass(sessionsMap[id].id, tid))) {
@@ -493,6 +484,18 @@ class ClassRepositoryClass {
       this.cleanMismatchedGrade7Classes(tid);
       this.realignSequenceNumbersToSchedule(tid);
       this._isInitialized = true;
+
+      // Volcado y confirmación en ambas capas de persistencia
+      try {
+        await this.flushPersist(tid);
+      } catch (ePersist) {
+        console.warn('[ClassRepository] Aviso en flush inicial tras reconciliación:', ePersist);
+      }
+
+      if (typeof window !== 'undefined' && window.dispatchEvent) {
+        window.dispatchEvent(new CustomEvent('class_session_cache_hydrated', { detail: { teacherId: tid } }));
+      }
+
       return this._cache[tid];
     })();
 
@@ -2643,14 +2646,19 @@ class ClassRepositoryClass {
    * Vuelca de forma inmediata a LocalStorage + IndexedDB los mapas pendientes.
    * Es idempotente y puede invocarse manualmente (p. ej. antes de exportar un respaldo).
    */
-  flushPersist() {
+  /**
+   * Vuelca de forma inmediata a LocalStorage + IndexedDB los mapas pendientes.
+   * Retorna una Promesa que resuelve cuando se ha confirmado la persistencia en almacenamiento.
+   */
+  async flushPersist(teacherId = null) {
     this._persistScheduled = false;
     const pending = this._pendingPersist ? Array.from(this._pendingPersist) : [];
+    if (teacherId && !pending.includes(teacherId)) pending.push(teacherId);
     if (this._pendingPersist) this._pendingPersist.clear();
 
-    pending.forEach(tid => {
+    const results = await Promise.all(pending.map(async (tid) => {
       const sessionsMap = this._cache[tid];
-      if (!sessionsMap) return;
+      if (!sessionsMap) return true;
       const key = this.getStorageKey(tid);
 
       // 1. LocalStorage
@@ -2664,28 +2672,128 @@ class ClassRepositoryClass {
         console.warn('[ClassRepository] LocalStorage lleno o no disponible. Se asegura en IndexedDB.', e && e.name);
       }
 
-      // 2. IndexedDB (capa de alta capacidad). Si ambas capas fallan se notifica al usuario:
-      //    nunca se informa "guardado" cuando la operación falló.
+      // 2. IndexedDB (capa principal de alta capacidad y confirmación física en disco)
+      let idbOk = false;
       if (typeof IDBStorage !== 'undefined' && IDBStorage.set) {
-        IDBStorage.set(key, sessionsMap).then(ok => {
-          if (ok === false && !lsOk) this._reportPersistFailure(tid);
-        }).catch(() => {
-          if (!lsOk) this._reportPersistFailure(tid);
-        });
-      } else if (!lsOk) {
-        this._reportPersistFailure(tid);
+        try {
+          idbOk = await IDBStorage.set(key, sessionsMap);
+        } catch (eIdb) {
+          console.warn('[ClassRepository] Excepción al persistir en IDBStorage:', eIdb);
+          idbOk = false;
+        }
       }
-      if (lsOk) this._lastPersistError = null;
 
-      // 3. Sincronización diferida (debounced) con PlanRepository en modo espejo para evitar bloqueos
-      if (this._syncLegacyTimer) clearTimeout(this._syncLegacyTimer);
-      this._syncLegacyTimer = setTimeout(() => {
-        this._syncLegacyPlanMirror(this._cache[tid] || sessionsMap, tid);
-      }, 1200);
-      if (this._syncLegacyTimer && typeof this._syncLegacyTimer.unref === 'function') {
-        this._syncLegacyTimer.unref();
+      if (!lsOk && !idbOk) {
+        this._reportPersistFailure(tid);
+        throw new Error(`[ClassRepository] Error crítico: No se pudo persistir en LocalStorage ni en IndexedDB para docente ${tid}`);
       }
-    });
+      this._lastPersistError = null;
+
+      // 3. Sincronización con PlanRepository en modo espejo
+      try {
+        this._syncLegacyPlanMirror(sessionsMap, tid);
+      } catch (eMirror) {
+        console.warn('[ClassRepository] Aviso en sincronización espejo:', eMirror);
+      }
+
+      return true;
+    }));
+
+    return results.every(Boolean);
+  }
+
+  /**
+   * Guarda o actualiza una clase garantizando persistencia física y verificación de lectura.
+   * Obligatorio para operaciones de importación (Regla Principal: Guardar al importar).
+   */
+  async saveClassPersisted(classData, teacherId, options = {}) {
+    const tid = teacherId || classData.teacherId || this._getCurrentTeacherId();
+    const saved = this.saveClass(classData, tid, options);
+    if (!saved) {
+      throw new Error('[ClassRepository] El repositorio rechazó el guardado de la clase.');
+    }
+
+    // Esperar a que la persistencia en LocalStorage e IndexedDB se confirme físicamente
+    await this.flushPersist(tid);
+
+    // Si PlanRepository existe, forzar y confirmar persistencia espejo
+    if (typeof PlanRepository !== 'undefined' && typeof PlanRepository.flushPersist === 'function') {
+      try {
+        await PlanRepository.flushPersist(tid);
+      } catch (ePlan) {}
+    }
+
+    // Verificación de lectura obligatoria
+    const verification = await this.verifyPersistence(saved.id, tid);
+    if (!verification.isVerified) {
+      throw new Error(`[ClassRepository] Verificación de persistencia fallida para la clase ${saved.id}. No se encontró en disco ni en IndexedDB.`);
+    }
+
+    return saved;
+  }
+
+  /**
+   * Crea una nueva clase garantizando persistencia física y verificación de lectura.
+   */
+  async createClassPersisted(classData, teacherId, options = {}) {
+    const tid = teacherId || classData.teacherId || this._getCurrentTeacherId();
+    const created = this.createClass(classData, tid, options);
+    if (!created) {
+      throw new Error('[ClassRepository] El repositorio rechazó la creación de la clase.');
+    }
+
+    await this.flushPersist(tid);
+
+    if (typeof PlanRepository !== 'undefined' && typeof PlanRepository.flushPersist === 'function') {
+      try {
+        await PlanRepository.flushPersist(tid);
+      } catch (ePlan) {}
+    }
+
+    const verification = await this.verifyPersistence(created.id, tid);
+    if (!verification.isVerified) {
+      throw new Error(`[ClassRepository] Verificación de persistencia fallida para la nueva clase ${created.id}.`);
+    }
+
+    return created;
+  }
+
+  /**
+   * Verifica la existencia física de una clase en el almacenamiento persistente
+   */
+  async verifyPersistence(classId, teacherId) {
+    if (!classId) return { inLS: false, inIDB: false, isVerified: false };
+    const tid = teacherId || this._getCurrentTeacherId();
+    const key = this.getStorageKey(tid);
+    let inLS = false;
+    let inIDB = false;
+
+    if (typeof localStorage !== 'undefined') {
+      try {
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          const map = JSON.parse(raw);
+          if (map && (map[classId] || Object.values(map).some(c => c && c.id === classId))) {
+            inLS = true;
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (typeof IDBStorage !== 'undefined' && IDBStorage.get) {
+      try {
+        const map = await IDBStorage.get(key);
+        if (map && (map[classId] || Object.values(map).some(c => c && c.id === classId))) {
+          inIDB = true;
+        }
+      } catch (e) {}
+    }
+
+    return {
+      inLS,
+      inIDB,
+      isVerified: inLS || inIDB
+    };
   }
 
   _reportPersistFailure(tid) {

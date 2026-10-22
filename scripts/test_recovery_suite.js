@@ -160,7 +160,7 @@ Contenido para el estudiante: Un algoritmo es una secuencia lógica y finita de 
   assert.strictEqual(prep.hasConflicts, true, 'Detectó conflicto de identidad (Clase #2 vs Clase #7)');
   
   // Decisión por defecto: PRESERVAR IDENTIDAD (target)
-  const mergedDefault = ImportService.applyToExistingClass(existingCls7, prep.parsed);
+  const mergedDefault = await ImportService.applyToExistingClass(existingCls7, prep.parsed);
   assert.strictEqual(mergedDefault.sequenceNumber, 7, 'Preservó estrictamente Clase #7');
   assert.strictEqual(mergedDefault.gradeName, 'Tercero', 'Preservó estrictamente Grado Tercero');
   assert.strictEqual(mergedDefault.curriculum.topic, 'Algoritmos y Diagramas de Flujo', 'Incorporó nuevo tema');
@@ -173,7 +173,7 @@ Contenido para el estudiante: Un algoritmo es una secuencia lógica y finita de 
   // TEST 6: Importar como nueva clase independiente (max + 1)
   // -------------------------------------------------------------------
   console.log('--- TEST 6: Importar como nueva clase independiente ---');
-  const newImported = ImportService.importAsNewClass(prep.parsed, { targetClass: existingCls7 }, TEACHER_ID);
+  const newImported = await ImportService.importAsNewClass(prep.parsed, { targetClass: existingCls7 }, TEACHER_ID);
   assert.ok(newImported, 'Nueva clase creada');
   assert.ok(newImported.id !== existingCls7.id, 'ID completamente nuevo e independiente');
   assert.ok(newImported.sequenceNumber > existingCls7.sequenceNumber, 'Asignó consecutivo siguiente superior');

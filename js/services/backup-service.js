@@ -73,6 +73,9 @@ class BackupServiceClass {
         if (typeof ClassRepository !== 'undefined') {
           if (ClassRepository._persist) {
             ClassRepository._persist(classesMap, tid);
+            if (typeof ClassRepository.flushPersist === 'function') {
+              await ClassRepository.flushPersist(tid);
+            }
           } else {
             const classKey = ClassRepository.getStorageKey(tid);
             if (typeof localStorage !== 'undefined') localStorage.setItem(classKey, JSON.stringify(classesMap));
@@ -92,6 +95,9 @@ class BackupServiceClass {
             const p = data.plans[d];
             if (p) PlanRepository.savePlan(tid, d, p, { skipBroadcast: true });
           });
+          if (typeof PlanRepository.flushPersist === 'function') {
+            await PlanRepository.flushPersist(tid);
+          }
         }
       }
 

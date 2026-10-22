@@ -26,13 +26,12 @@ const App = {
       ScheduleRepository.getAllSlots(tid);
     }
 
-    // Renderizado sincrónico e inmediato de la vista principal Dashboard (0ms)
-    if (typeof DashboardView !== 'undefined') {
+    // 0. Inicialización confirmada del motor de almacenamiento de alta capacidad (IndexedDB)
+    if (typeof IDBStorage !== 'undefined' && IDBStorage.init) {
       try {
-        DashboardView.init();
-        DashboardView.render();
-      } catch (eDash) {
-        console.warn('[App] Aviso en render sincrónico inmediato de Dashboard:', eDash);
+        await IDBStorage.init();
+      } catch (eIdb) {
+        console.warn('[App] Aviso inicializando IDBStorage:', eIdb);
       }
     }
 
@@ -966,13 +965,18 @@ const App = {
         const file = e.target.files && e.target.files[0];
         if (!file) return;
         const reader = new FileReader();
-        reader.onload = (evt) => {
-          const success = StorageService.importBackup(evt.target.result);
-          if (success) {
-            this.showToast('Copia de seguridad restaurada con éxito', 'success');
-            setTimeout(() => window.location.reload(), 1000);
-          } else {
-            alert('Error al leer el archivo de respaldo. Asegúrate de que sea un JSON válido.');
+        reader.onload = async (evt) => {
+          try {
+            const success = await StorageService.importBackup(evt.target.result);
+            if (success) {
+              this.showToast('Copia de seguridad restaurada y verificada con éxito', 'success');
+              setTimeout(() => window.location.reload(), 800);
+            } else {
+              alert('Error al leer o persistir el archivo de respaldo. Asegúrate de que sea un JSON válido.');
+            }
+          } catch (errBackup) {
+            console.error('Error restaurando copia de seguridad:', errBackup);
+            alert('Error al restaurar la copia de seguridad: ' + errBackup.message);
           }
         };
         reader.readAsText(file);
