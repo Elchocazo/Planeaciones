@@ -1080,16 +1080,25 @@ class RecoveryServiceClass {
       const dump = {};
 
       if (typeof localStorage !== 'undefined') {
+        // Purgar respaldos antiguos de pre_execution para prevenir acumulación y sobrecarga de cuota
+        const existingPreBackups = [];
         for (let i = 0; i < localStorage.length; i++) {
           const k = localStorage.key(i);
-          if (k) dump[k] = localStorage.getItem(k);
+          if (k && k.startsWith(`backup_recovery_pre_execution_${teacherId}_`)) {
+            existingPreBackups.push(k);
+          }
         }
-        localStorage.setItem(backupKey, JSON.stringify({
-          timestamp: new Date().toISOString(),
-          teacherId,
-          description: 'Copia de seguridad antes de la recuperación universal de planeaciones',
-          data: dump
-        }));
+        existingPreBackups.forEach(k => {
+          try { localStorage.removeItem(k); } catch (e) {}
+        });
+
+        // Solo incluir datos operativos reales en el respaldo, NUNCA incluir otros respaldos ni snapshots
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && !k.startsWith('backup_') && !k.startsWith('snapshot_') && !k.startsWith('migration_backup_')) {
+            dump[k] = localStorage.getItem(k);
+          }
+        }
       }
 
       if (typeof IDBStorage !== 'undefined' && IDBStorage.set) {

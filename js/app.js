@@ -112,21 +112,38 @@ const App = {
       }
     }
 
-    // Auto-recuperación preventiva: escanear y rescatar cualquier planeación existente en snapshots,
-    // IndexedDB, LocalStorage o PlanRepository que no esté vinculada (Regla 10)
-    if (typeof RecoveryService !== 'undefined') {
-      try {
-        if (typeof RecoveryService.executeSafeRecovery === 'function') {
-          await RecoveryService.executeSafeRecovery(tid);
+    // Saneamiento preventivo de respaldos temporales acumulados en localStorage para prevenir saturación de memoria
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const bloatedKeys = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('backup_recovery_pre_execution_')) {
+            bloatedKeys.push(k);
+          }
         }
-        if (typeof RecoveryService.rescueDisplacedOctoberClasses === 'function') {
+        if (bloatedKeys.length > 0) {
+          bloatedKeys.forEach(k => {
+            try { localStorage.removeItem(k); } catch (e) {}
+          });
+          console.log(`🧹 [App] Purgadas ${bloatedKeys.length} copias temporales redundantes de pre-ejecución en LocalStorage.`);
+        }
+      }
+    } catch (ePurge) {}
+
+    // Rescate único de clases de octubre (si aún no se ha ejecutado)
+    if (typeof RecoveryService !== 'undefined' && typeof RecoveryService.rescueDisplacedOctoberClasses === 'function') {
+      try {
+        const flagKey = `october_classes_rescued_flag_${tid}_v2`;
+        if (typeof localStorage !== 'undefined' && !localStorage.getItem(flagKey)) {
           const res = RecoveryService.rescueDisplacedOctoberClasses(tid);
           if (res && res.rescued > 0) {
             console.log(`🎉 [App] Rescatadas ${res.rescued} clases del 21 y 22 de octubre.`);
           }
+          localStorage.setItem(flagKey, 'true');
         }
       } catch (errRecov) {
-        console.warn('[App] Aviso en auto-recuperación preventiva:', errRecov);
+        console.warn('[App] Aviso en rescate preventivo de clases de octubre:', errRecov);
       }
     }
 
@@ -167,21 +184,21 @@ const App = {
       console.warn('[App] Aviso inicializando componentes Calendar/Planner:', eComp);
     }
 
-    // 5. Vincular eventos globales y verificar perfil de usuario
-    try {
-      this.bindEvents();
-      this.checkProfileOrOnboarding();
-    } catch (eBind) {
-      console.warn('[App] Aviso vinculando eventos o verificando perfil:', eBind);
-    }
-
-    // 6. Inicializar enrutador (con los datos locales 100% listos en memoria, renderizado inmediato y sin parpadeos)
+    // 5. Inicializar enrutador primero (con los datos locales 100% listos en memoria, vinculando contenedores y respetando hash activo)
     try {
       if (typeof AppRouter !== 'undefined') {
         AppRouter.init();
       }
     } catch (eRouter) {
       console.error('[App] Error inicializando AppRouter:', eRouter);
+    }
+
+    // 6. Vincular eventos globales y verificar perfil de usuario (respetando la vista activa del Router)
+    try {
+      this.bindEvents();
+      this.checkProfileOrOnboarding();
+    } catch (eBind) {
+      console.warn('[App] Aviso vinculando eventos o verificando perfil:', eBind);
     }
 
     // 7. Sincronización en la nube (Firestore) en SEGUNDO PLANO DESACOPLADO (Regla 13)
@@ -233,25 +250,14 @@ const App = {
       this.openSettingsModal('profile', true); // Primer ingreso
     } else {
       this.renderHeaderProfile();
-      if (typeof AppRouter !== 'undefined') {
-        const hash = (typeof window !== 'undefined' && window.location && window.location.hash) 
-          ? window.location.hash.replace(/^#/, '').split('?')[0] 
-          : '';
-        const canonicalHash = (hash === 'class-editor') ? 'editor' : hash;
-        const hasSpecificHash = canonicalHash && canonicalHash !== 'dashboard' && 
-          (AppRouter.viewContainers && (AppRouter.viewContainers[canonicalHash] || canonicalHash === 'editor'));
-
-        if (!hasSpecificHash && AppRouter.currentView !== 'dashboard') {
-          AppRouter.navigateTo('dashboard', { replace: true });
-        } else if (AppRouter.currentView === 'dashboard') {
-          // Si ya estamos en el dashboard, verificar si el contenedor tiene contenido
-          const dashEl = document.getElementById('dashboard-view');
-          if (!dashEl || !dashEl.innerHTML || dashEl.innerHTML.trim() === '') {
+      // Si la aplicación se encuentra en el dashboard pero el contenedor está vacío, renderizarlo
+      if (typeof AppRouter !== 'undefined' && AppRouter.currentView === 'dashboard') {
+        const dashEl = document.getElementById('dashboard-view');
+        if (!dashEl || !dashEl.innerHTML || dashEl.innerHTML.trim() === '') {
+          if (typeof DashboardView !== 'undefined' && DashboardView.render) {
             DashboardView.render();
           }
         }
-      } else {
-        this.showCalendarView();
       }
     }
   },

@@ -592,6 +592,7 @@ const FirestoreService = {
         .where('teacherId', '==', tid)
         .get();
 
+      const initClasses = [];
       classSnap.forEach(doc => {
         const cloudCls = doc.data();
         if (cloudCls && cloudCls.id && typeof ClassRepository !== 'undefined') {
@@ -602,9 +603,16 @@ const FirestoreService = {
           }
           const docPath = `${this.CLASSES_COLLECTION_PATH}/${doc.id}`;
           this._knownHashes[docPath] = this._computeHash(cloudCls);
-          ClassRepository.saveClass(cloudCls, tid, { skipCloud: true });
+          initClasses.push(cloudCls);
         }
       });
+      if (initClasses.length > 0) {
+        if (typeof ClassRepository.saveClassesBatch === 'function') {
+          await ClassRepository.saveClassesBatch(initClasses, tid, { skipCloud: true, isPlanSync: true });
+        } else {
+          initClasses.forEach(c => ClassRepository.saveClass(c, tid, { skipCloud: true, isPlanSync: true }));
+        }
+      }
     } catch (e) {
       console.warn('[FirestoreService] Aviso al descargar datos para sincronización inicial:', e.message);
     }
@@ -1093,7 +1101,8 @@ const FirestoreService = {
       }
 
       // También guardar en ClassRepository de forma aditiva y conservativa con skipCloud: true
-      if (Array.isArray(cloudPlan.classes) && typeof ClassRepository !== 'undefined' && typeof ClassRepository.saveClass === 'function') {
+      if (Array.isArray(cloudPlan.classes) && typeof ClassRepository !== 'undefined') {
+        const classesToSave = [];
         cloudPlan.classes.forEach(c => {
           if (c && (c.id || c.topic)) {
             if (c.id && ClassRepository.isDeletedClass && ClassRepository.isDeletedClass(c.id, tid)) return;
@@ -1112,9 +1121,16 @@ const FirestoreService = {
                 c.dayNumber = String(schedSeq);
               }
             }
-            ClassRepository.saveClass(c, tid, { skipCloud: true });
+            classesToSave.push(c);
           }
         });
+        if (classesToSave.length > 0) {
+          if (typeof ClassRepository.saveClassesBatch === 'function') {
+            ClassRepository.saveClassesBatch(classesToSave, tid, { skipCloud: true, isPlanSync: true });
+          } else {
+            classesToSave.forEach(c => ClassRepository.saveClass(c, tid, { skipCloud: true, isPlanSync: true }));
+          }
+        }
       }
     } catch (e) {
       console.warn('[FirestoreService] Error al fusionar datos de nube a local:', e);
@@ -1184,6 +1200,7 @@ const FirestoreService = {
         .where('teacherId', '==', tid)
         .get();
 
+      const downloadedClasses = [];
       classSnap.forEach(doc => {
         const cloudCls = doc.data();
         if (cloudCls && cloudCls.id && typeof ClassRepository !== 'undefined') {
@@ -1196,7 +1213,7 @@ const FirestoreService = {
           const docPath = `${this.CLASSES_COLLECTION_PATH}/${doc.id}`;
           this._knownHashes[docPath] = this._computeHash(cloudCls);
 
-                    // Regla 14: Preservar fecha e ID establecidos. Solo usar matchDateInId como respaldo si date está vacío
+          // Regla 14: Preservar fecha e ID establecidos. Solo usar matchDateInId como respaldo si date está vacío
           if (!cloudCls.date && cloudCls.id) {
             const matchDateInId = cloudCls.id.match(/^cls_(\d{4})(\d{2})(\d{2})_/);
             if (matchDateInId) {
@@ -1210,10 +1227,17 @@ const FirestoreService = {
               cloudCls.dayNumber = String(schedSeq);
             }
           }
-          ClassRepository.saveClass(cloudCls, tid, { skipCloud: true });
-          restoredClassesCount++;
+          downloadedClasses.push(cloudCls);
         }
       });
+      if (downloadedClasses.length > 0) {
+        if (typeof ClassRepository.saveClassesBatch === 'function') {
+          await ClassRepository.saveClassesBatch(downloadedClasses, tid, { skipCloud: true, isPlanSync: true });
+        } else {
+          downloadedClasses.forEach(c => ClassRepository.saveClass(c, tid, { skipCloud: true, isPlanSync: true }));
+        }
+        restoredClassesCount = downloadedClasses.length;
+      }
 
       // Regla 14: Preservar numeración estable de clases descargadas sin auto-renumerar en segundo plano
 
