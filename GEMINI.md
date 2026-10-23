@@ -88,3 +88,23 @@ Todo el procesamiento de texto, manejo de imágenes, sincronización de estado y
 - **Prioridad Absoluta de Componentes e Interactividad**: Los componentes (`window.Calendar`, `window.Planner`), modales, el enrutador (`AppRouter`) y los escuchadores de navegación (`bindEvents`) deben registrarse y quedar 100% operativos antes de cualquier operación de red.
 - **Mutex y Protección de Concurrencia en Conexión**: `FirestoreService.init()` debe implementar un singleton / mutex (`_initPromise`) para prevenir ejecuciones concurrentes múltiples, evitar carreras de bloqueo en `enablePersistence` y rechazar suscripciones duplicadas a `onSnapshot`.
 - **Transparencia en Indicadores de Estado**: El indicador visual de la cabecera debe reflejar de forma fidedigna y no intrusiva el estado de la nube sin simular bloqueos ni congelar el hilo principal de la aplicación.
+
+
+### 14. Edición Explícita de Fechas, Numeración Estable e Integridad de las Clases
+«La fecha y el consecutivo de una clase son atributos sagrados e inmutables definidos por el docente. Ninguna operación de eliminación, guardado, renderizado o sincronización puede alterar las fechas o números de otras clases de forma automática».
+
+- **Inmutabilidad Absoluta de Fechas al Eliminar o Editar Clases**:
+  - Al eliminar una clase o planeación, se purga única y exclusivamente la entidad seleccionada. Prohibido bajo cualquier circunstancia desplazar, reubicar o reasignar las fechas de las demás clases (ni del mismo día ni de días adyacentes).
+  - Los servicios de vista y armado de cronograma (`ScheduleService.buildDayView`) son estrictamente de solo lectura: jamás deben reasignar fechas, robar clases de otros días ni mutar clases existentes para rellenar huecos vacíos. Los slots sin clase deben permanecer como pendientes (`isPending: true, isPlanned: false`).
+- **Identidad e ID Estables ante Cambios de Fecha**:
+  - Si el docente cambia la fecha de una clase, el identificador (`id`) de la clase DEBE preservarse inalterable. Queda terminantemente prohibido regenerar un nuevo ID aleatorio al cambiar la fecha.
+  - Al mover una clase a una nueva fecha, se limpia su presencia en la fecha antigua dentro de `PlanRepository` y `StorageService` (`skipTombstone: true`), evitando clases fantasma o duplicadas, y se conserva el 100% de su contenido pedagógico.
+- **Numeración Estable y No Intercurrente**:
+  - El número de secuencia asignado a una clase (`sequenceNumber` / `dayNumber`) es inmutable una vez establecido, salvo que el usuario lo edite explícitamente o presione el botón de renumerar.
+  - Prohibido renumerar automáticamente al eliminar, editar fechas, importar, guardar o sincronizar con Firebase.
+  - La función `realignSequenceNumbersToSchedule` solo asigna número si la clase carece de numeración (`!sequenceNumber || sequenceNumber <= 0`). Clases con numeración manual (`manualSequence: true`) o ya numeradas jamás deben ser sobreescritas en segundo plano ni al arrancar la app (`App.init()`, `ClassRepository.init()`) ni al descargar de Firestore.
+- **Renumeración Explícita Estrictamente Correlativa**:
+  - Al pulsar «Renumerar por fecha» o reordenar secuencias en `SequenceView`, la numeración del grupo seleccionado debe ser estrictamente correlativa y consecutiva (`1, 2, 3, 4, 5...`), ordenada cronológicamente por fecha y hora sin saltos arbitrarios.
+- **Persistencia en Lote (`saveClassesBatch`) y Cero Congelamiento de UI**:
+  - Toda modificación masiva o propagación de secuencias numéricas debe ejecutarse a través de `ClassRepository.saveClassesBatch`, realizando una única serialización y persistencia física a `LocalStorage` e `IndexedDB`.
+  - Queda prohibido iterar llamadas individuales sincrónicas a `saveClass` en bucles de más de 2 clases, garantizando tiempos de respuesta inferiores a 50 ms y cero lag en el hilo principal.

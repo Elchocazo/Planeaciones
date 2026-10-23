@@ -101,14 +101,7 @@ const App = {
       }
     }
 
-    // Sincronizar y realinear numeración oficial en ClassRepository y PlanRepository
-    if (typeof ClassRepository !== 'undefined' && typeof ClassRepository.realignSequenceNumbersToSchedule === 'function') {
-      try {
-        ClassRepository.realignSequenceNumbersToSchedule(tid);
-      } catch (eAlign) {
-        console.warn('[App] Error realineando numeración a horario oficial:', eAlign);
-      }
-    }
+    // Regla 14: La numeración se mantiene estable e inalterable en el arranque.
 
     // 2. Protocolo de migración segura y auto-recuperación integral (Regla 10: Inviolabilidad de Planeaciones)
     if (typeof MigrationManager !== 'undefined' && MigrationManager.needsMigration()) {

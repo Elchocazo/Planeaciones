@@ -1027,10 +1027,12 @@ const FirestoreService = {
         cloudPlan.classes.forEach(c => {
           if (!c) return;
           const d = c.date || date;
-          const schedSeq = ClassRepository.getScheduleSequenceNumber(d, c.subjectName || c.subject, c.gradeName || c.grade, tid, { requireScheduledWeekday: true });
-          if (schedSeq !== null && schedSeq > 0) {
-            c.sequenceNumber = schedSeq;
-            c.dayNumber = String(schedSeq);
+          if (!c.sequenceNumber || c.sequenceNumber <= 0) {
+            const schedSeq = ClassRepository.getScheduleSequenceNumber(d, c.subjectName || c.subject, c.gradeName || c.grade, tid, { requireScheduledWeekday: true });
+            if (schedSeq !== null && schedSeq > 0) {
+              c.sequenceNumber = schedSeq;
+              c.dayNumber = String(schedSeq);
+            }
           }
         });
       }
@@ -1194,14 +1196,14 @@ const FirestoreService = {
           const docPath = `${this.CLASSES_COLLECTION_PATH}/${doc.id}`;
           this._knownHashes[docPath] = this._computeHash(cloudCls);
 
-          const matchDateInId = cloudCls.id.match(/^cls_(\d{4})(\d{2})(\d{2})_/);
-          if (matchDateInId) {
-            const canonicalDate = `${matchDateInId[1]}-${matchDateInId[2]}-${matchDateInId[3]}`;
-            if (cloudCls.date !== canonicalDate) {
-              cloudCls.date = canonicalDate;
+                    // Regla 14: Preservar fecha e ID establecidos. Solo usar matchDateInId como respaldo si date está vacío
+          if (!cloudCls.date && cloudCls.id) {
+            const matchDateInId = cloudCls.id.match(/^cls_(\d{4})(\d{2})(\d{2})_/);
+            if (matchDateInId) {
+              cloudCls.date = matchDateInId[1] + "-" + matchDateInId[2] + "-" + matchDateInId[3];
             }
           }
-          if (typeof ClassRepository.getScheduleSequenceNumber === 'function' && cloudCls.date) {
+          if ((!cloudCls.sequenceNumber || cloudCls.sequenceNumber <= 0) && typeof ClassRepository.getScheduleSequenceNumber === 'function' && cloudCls.date) {
             const schedSeq = ClassRepository.getScheduleSequenceNumber(cloudCls.date, cloudCls.subjectName || cloudCls.subject, cloudCls.gradeName || cloudCls.grade, tid, { requireScheduledWeekday: true });
             if (schedSeq !== null && schedSeq > 0) {
               cloudCls.sequenceNumber = schedSeq;
@@ -1213,9 +1215,7 @@ const FirestoreService = {
         }
       });
 
-      if (typeof ClassRepository !== 'undefined' && typeof ClassRepository.realignSequenceNumbersToSchedule === 'function') {
-        ClassRepository.realignSequenceNumbersToSchedule(tid);
-      }
+      // Regla 14: Preservar numeración estable de clases descargadas sin auto-renumerar en segundo plano
 
       this._saveKnownHashes(tid);
       this.setInitialSyncDone(tid, true);

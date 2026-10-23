@@ -54,65 +54,8 @@ class ScheduleServiceClass {
         );
       }
 
-      // 4. Auto-rescate SOLO para clases genuinamente desalineadas y NUNCA en días de receso escolar o festivos
-      if (!matchedClass && !dayRecessInfo.isRecess) {
-        if (!misalignedCandidates) {
-          const allClasses = ClassRepository.getAllClasses(tid);
-          misalignedCandidates = allClasses.filter(c => {
-            if (!c || ClassRepository.isDeletedClass(c.id, tid)) return false;
-            if (c.date === dateStr) return false;
-            // Salvaguarda 1: Si el ID de la clase codifica su fecha original (ej. cls_20261014_...), JAMÁS robarla
-            if (c.id && c.date && c.id.includes(c.date.replace(/-/g, ''))) return false;
-            const hasContent = Boolean(
-              (c.curriculum?.topic && String(c.curriculum.topic).trim().length > 0 && String(c.curriculum.topic).trim() !== 'Sin tema planeado todavía') ||
-              (c.topic && String(c.topic).trim().length > 0 && String(c.topic).trim() !== 'Sin tema planeado todavía') ||
-              (c.didacticSequence?.inicio && String(c.didacticSequence.inicio).trim().length > 0)
-            );
-            if (!hasContent) return false;
-            // Salvaguarda 2: Si la clase ya está en uno de sus días programados oficiales, JAMÁS robarla
-            if (typeof ClassRepository._getScheduledWeekdays === 'function') {
-              const schedDays = ClassRepository._getScheduledWeekdays(c.subjectName || c.subject, c.gradeName || c.grade, tid);
-              if (schedDays && c.date) {
-                const currentDayOfWeek = new Date(c.date + 'T12:00:00Z').getUTCDay();
-                const isScheduledOnCurrentDate = (schedDays instanceof Set)
-                  ? schedDays.has(currentDayOfWeek)
-                  : (Array.isArray(schedDays) && schedDays.includes(currentDayOfWeek));
-                if (isScheduledOnCurrentDate) {
-                  return false;
-                }
-              }
-            }
-            return true;
-          });
-        }
-
-        matchedClass = misalignedCandidates.find(c => {
-          if (usedClassIds.has(c.id)) return false;
-          const slotMatches = (c.scheduleSlotId && c.scheduleSlotId === slot.id) || this._matchesSlot(c, slot);
-          if (!slotMatches) return false;
-
-          // Solo rescatar si el día destino SÍ es un día programado oficial para esta asignatura
-          if (typeof ClassRepository._getScheduledWeekdays === 'function') {
-            const targetSchedDays = ClassRepository._getScheduledWeekdays(c.subjectName || c.subject, c.gradeName || c.grade, tid);
-            if (targetSchedDays) {
-              const isScheduledOnTarget = (targetSchedDays instanceof Set)
-                ? targetSchedDays.has(targetDayOfWeek)
-                : (Array.isArray(targetSchedDays) && targetSchedDays.includes(targetDayOfWeek));
-              if (!isScheduledOnTarget) return false;
-            }
-          }
-          return true;
-        });
-
-        if (matchedClass) {
-          matchedClass.date = dateStr;
-          matchedClass.dayOfWeek = typeof ExportService !== 'undefined' ? ExportService.getDayOfWeekName(dateStr) : 'Jueves';
-          matchedClass.scheduleSlotId = slot.id;
-          matchedClass.time = slot.time;
-          ClassRepository.saveClass(matchedClass, tid);
-          savedClasses.push(matchedClass);
-        }
-      }
+      // Regla Arquitectónica 14: buildDayView es una función de solo lectura para la vista.
+      // Jamás debe reasignar fechas, robar clases de otros días ni alterar clases existentes tras eliminaciones o vacíos.
 
       if (matchedClass) {
         usedClassIds.add(matchedClass.id);

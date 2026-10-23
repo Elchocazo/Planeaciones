@@ -112,13 +112,14 @@ const misalignedClass = {
 };
 ClassRepository.saveClass(misalignedClass, 'usr_manuel');
 
-// Calling buildDayView on 2026-10-15 should rescue this Sistemas 6° class!
+// Regla 14: buildDayView es de estricta lectura. NUNCA debe alterar la fecha de clases de otros días.
 const dayViewWithHeal = ScheduleService.buildDayView('2026-10-15', 'usr_manuel');
 const sis6Item = dayViewWithHeal.scheduledItems.find(i => (i.slot.gradeName === '6°' || i.slot.grade === '6'));
 assert(sis6Item, 'Sistemas 6° slot must exist');
-assert.strictEqual(sis6Item.isPlanned, true, 'Sistemas 6° must be rescued and marked as planned');
-assert.strictEqual(sis6Item.classSession.date, '2026-10-15', 'Date must be auto-healed to 2026-10-15');
-console.log('✓ TEST 2 PASSED: Auto-healing successfully migrated misaligned date class to 2026-10-15!');
+assert.strictEqual(sis6Item.isPlanned, false, 'Sistemas 6° slot is pending because class is on 2026-10-14');
+const savedSis6 = ClassRepository.getClass('custom_sis6_user_created', 'usr_manuel');
+assert.strictEqual(savedSis6.date, '2026-10-14', 'Class on 2026-10-14 must retain its date inalterable (0 auto-rescate de fechas)');
+console.log('✓ TEST 2 PASSED: buildDayView preserves strict date immutability (Rule 14)!');
 
 // 3. Test Calendar month initialization
 console.log('\n[TEST 3] Calendar month initialization:');

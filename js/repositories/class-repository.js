@@ -482,7 +482,8 @@ class ClassRepositoryClass {
       this._cache[tid] = sessionsMap;
       this._seedInitialClassesIfMissing(tid);
       this.cleanMismatchedGrade7Classes(tid);
-      this.realignSequenceNumbersToSchedule(tid);
+      // Regla 14: No alterar numeración de fondo en el arranque (realignSequenceNumbersToSchedule solo bajo petición explícita)
+      // this.realignSequenceNumbersToSchedule(tid);
       this._isInitialized = true;
 
       // Volcado y confirmación en ambas capas de persistencia
@@ -1066,7 +1067,7 @@ class ClassRepositoryClass {
    * acorde estrictamente al horario del docente y al calendario escolar (1 de sept para Matemáticas 7°,
    * 7 de sept para todas las demás clases, descontando festivos y receso), preservando intacto todo el contenido.
    */
-  realignSequenceNumbersToSchedule(teacherId) {
+  realignSequenceNumbersToSchedule(teacherId, options = {}) {
     const tid = teacherId || this._getCurrentTeacherId();
     const map = this._cache[tid];
     if (!map || typeof map !== 'object') return 0;
@@ -1077,6 +1078,8 @@ class ClassRepositoryClass {
     for (const cId in map) {
       const c = map[cId];
       if (!c || this.isDeletedClass(cId, tid) || this.isBackupClass(c)) continue;
+      // Regla 14: Preservar intacta la numeración manual o modificada por el docente
+      if (c.manualSequence && !options.forceAll) continue;
 
       // Si la fecha cae en receso escolar o festivo y la clase está completamente vacía (sin tema ni contenido),
       // purgarla para evitar clases pendientes fantasma en días no lectivos
@@ -1702,6 +1705,111 @@ class ClassRepositoryClass {
   }
 
   /**
+   * Guarda o actualiza un lote de clases en una única transacción física (Regla 14).
+   * - Elimina los bloqueos del hilo principal / freeze al renumerar o propagar cambios.
+   * - Serializa y persiste a LocalStorage, IndexedDB y el espejo v3 una única vez.
+   * - Limpia automáticamente fechas anteriores si alguna clase cambió de día.
+   */
+  saveClassesBatch(classesList, teacherId, options = {}) {
+    if (!Array.isArray(classesList) || classesList.length === 0) return [];
+
+    if (typeof UserService !== 'undefined' && UserService.isCoordinatorActive && UserService.isCoordinatorActive()) {
+      return [];
+    }
+
+    const tid = teacherId || this._getCurrentTeacherId();
+    const map = this._getAllMap(tid);
+    const normalizedList = [];
+    const oldDatesToClean = [];
+    const syncedMirrors = [];
+
+    for (const classData of classesList) {
+      if (!classData) continue;
+      const classId = classData.id || classData.classId;
+      const existing = classId ? map[classId] : null;
+
+      if (!classId && !classData.subject && !classData.subjectName) {
+        continue;
+      }
+
+      const normalized = this._normalizeClassSession(classData, existing);
+      if (classData.manualSequence !== undefined) {
+        normalized.manualSequence = classData.manualSequence;
+      }
+
+      if (existing && existing.date && normalized.date && existing.date !== normalized.date) {
+        oldDatesToClean.push({ oldDate: existing.date, classId: normalized.id });
+      }
+
+      if (existing) {
+        this._saveSnapshot(tid, 'class_' + normalized.id + '_v' + existing.version, existing);
+        const SNAPSHOT_HISTORY = 15;
+        const staleVersion = Number(existing.version) - SNAPSHOT_HISTORY;
+        if (staleVersion > 0 && typeof IDBStorage !== 'undefined' && typeof IDBStorage.delete === 'function') {
+          IDBStorage.delete('snapshot_' + tid + '_class_' + normalized.id + '_v' + staleVersion).catch(() => {});
+        }
+      }
+
+      map[normalized.id] = normalized;
+      normalizedList.push(normalized);
+
+      if (!options.isMirrorSync) {
+        try {
+          const syncedMirror = this.syncMirrorClass(normalized, tid, { skipPersist: true, skipCloud: !!options.skipCloud });
+          if (syncedMirror) syncedMirrors.push(syncedMirror);
+        } catch (e) {}
+      }
+
+      if (!options.skipCloud && typeof FirestoreService !== 'undefined') {
+        if (typeof FirestoreService.enqueueChange === 'function') {
+          FirestoreService.enqueueChange(tid, {
+            entityType: 'class',
+            entityId: normalized.id,
+            docPath: 'school_classes_v1/' + tid + '_' + normalized.id,
+            action: 'upsert',
+            data: normalized
+          });
+        }
+      }
+    }
+
+    this._persist(map, tid);
+    this._sequenceIndex = {};
+
+    oldDatesToClean.forEach(({ oldDate, classId }) => {
+      if (typeof PlanRepository !== 'undefined' && typeof PlanRepository.deleteClass === 'function') {
+        try { PlanRepository.deleteClass(tid, oldDate, classId, { skipTombstone: true }); } catch (e) {}
+      }
+      if (typeof StorageService !== 'undefined' && typeof StorageService.getPlan === 'function') {
+        try {
+          const oldPlan = StorageService.getPlan(oldDate);
+          if (oldPlan && Array.isArray(oldPlan.classes)) {
+            oldPlan.classes = oldPlan.classes.filter(c => c && c.id !== classId && c.classId !== classId);
+            StorageService.savePlan(oldDate, oldPlan, true);
+          }
+        } catch (e) {}
+      }
+    });
+
+    if (!options.isPlanSync && !options.isClassSync) {
+      normalizedList.forEach(norm => {
+        try { this._syncToPlanRepository(norm, tid, options); } catch (e) {}
+      });
+      syncedMirrors.forEach(mirror => {
+        try { this._syncToPlanRepository(mirror, tid, options); } catch (e) {}
+      });
+    }
+
+    if (typeof window !== 'undefined' && window.dispatchEvent) {
+      window.dispatchEvent(new CustomEvent('classes_batch_saved', {
+        detail: { count: normalizedList.length, teacherId: tid }
+      }));
+    }
+
+    return normalizedList.map(item => JSON.parse(JSON.stringify(item)));
+  }
+
+  /**
    * Guarda o actualiza atómicamente una clase. Afecta ÚNICAMENTE a esa clase.
    */
   saveClass(classData, teacherId, options = {}) {
@@ -1739,18 +1847,24 @@ class ClassRepositoryClass {
 
     const normalized = this._normalizeClassSession(classData, existing);
 
-    // Salvaguarda canónica: Si el ID codificaba una fecha antigua pero la clase se está guardando para otra fecha,
-    // respetar la fecha solicitada por el docente y desacoplar del ID viejo para no alterar la fecha
-    const matchDateInId = normalized.id && normalized.id.match(/^cls_(\d{4})(\d{2})(\d{2})_/);
-    if (matchDateInId) {
-      const canonicalDate = `${matchDateInId[1]}-${matchDateInId[2]}-${matchDateInId[3]}`;
-      if (normalized.date && normalized.date !== canonicalDate) {
-        const newId = this.generateClassId('cls');
-        normalized.id = newId;
+        // Regla Arquitectónica 14: Los IDs son inmutables para garantizar estabilidad de identidad y evitar clases fantasma.
+    // Si la fecha de la clase cambió, limpiar su presencia en la fecha previa de PlanRepository y StorageService.
+    if (existing && existing.date && normalized.date && existing.date !== normalized.date) {
+      if (typeof PlanRepository !== 'undefined' && typeof PlanRepository.deleteClass === 'function') {
+        try { PlanRepository.deleteClass(tid, existing.date, normalized.id, { skipTombstone: true }); } catch (e) {}
+      }
+      if (typeof StorageService !== 'undefined' && typeof StorageService.getPlan === 'function') {
+        try {
+          const oldPlan = StorageService.getPlan(existing.date);
+          if (oldPlan && Array.isArray(oldPlan.classes)) {
+            oldPlan.classes = oldPlan.classes.filter(c => c && c.id !== normalized.id && c.classId !== normalized.id);
+            StorageService.savePlan(existing.date, oldPlan, true);
+          }
+        } catch (e) {}
       }
     }
 
-    // Guardar snapshot previo de seguridad (historial acotado: se conservan las últimas
+// Guardar snapshot previo de seguridad (historial acotado: se conservan las últimas
     // SNAPSHOT_HISTORY versiones por clase para no crecer indefinidamente en IndexedDB)
     if (existing) {
       this._saveSnapshot(tid, `class_${normalized.id}_v${existing.version}`, existing);
@@ -2423,35 +2537,17 @@ class ClassRepositoryClass {
       somethingDeleted = true;
     }
 
-    // También limpiar cualquier duplicado fantasma del mismo día, materia, grado y secuencia o tema
-    if (existing && existing.date) {
-      const eDate = existing.date;
-      const eSub = this._norm(existing.subjectName || existing.subject || '');
-      const eGrd = this._norm(existing.gradeName || existing.grade || existing.group || '');
-      const eSeq = parseInt(existing.sequenceNumber, 10);
-      const eTime = String(existing.time || existing.startTime || '').trim();
-
-      Object.entries(map).forEach(([k, v]) => {
-        if (!v || v.date !== eDate) return;
-        const vSub = this._norm(v.subjectName || v.subject || '');
-        const vGrd = this._norm(v.gradeName || v.grade || v.group || '');
-        if (eSub && vSub && eSub !== vSub) return;
-        if (eGrd && vGrd && eGrd !== vGrd) return;
-
-        const vSeq = parseInt(v.sequenceNumber, 10);
-        const vTime = String(v.time || v.startTime || '').trim();
-
-        const sameSeq = !isNaN(eSeq) && !isNaN(vSeq) && eSeq === vSeq;
-        const sameTime = eTime && vTime && eTime === vTime;
-
-        if (sameSeq || (sameTime && sameSeq)) {
-          this.markClassDeleted(k, tid);
-          if (v.id) this.markClassDeleted(v.id, tid);
-          delete map[k];
-          somethingDeleted = true;
-        }
-      });
-    }
+        // Regla Arquitectónica 14: Eliminación quirúrgica exclusiva.
+    // Solo purgar alias directos con el mismo ID exacto. NUNCA eliminar otras clases que compartan fecha, secuencia o materia.
+    Object.entries(map).forEach(([k, v]) => {
+      if (!v) return;
+      if (k === classId || k === actualKey || v.id === classId || v.id === existing?.id || (v.classId && (v.classId === classId || v.classId === existing?.id))) {
+        this.markClassDeleted(k, tid);
+        if (v.id) this.markClassDeleted(v.id, tid);
+        delete map[k];
+        somethingDeleted = true;
+      }
+    });
 
     this._persist(map, tid);
     this._sequenceIndex = {};
@@ -2864,6 +2960,21 @@ class ClassRepositoryClass {
           }
         }
       } catch (e) {}
+
+      // Regla Arquitectónica 14: Purgar clases eliminadas o que cambiaron de fecha del espejo
+      Object.keys(plansByDate).forEach(d => {
+        if (plansByDate[d] && Array.isArray(plansByDate[d].classes)) {
+          plansByDate[d].classes = plansByDate[d].classes.filter(c => {
+            if (!c) return false;
+            const cid = c.id || c.classId;
+            if (!cid) return false;
+            if (this.isDeletedClass(cid, teacherId)) return false;
+            const activeCls = sessionsMap[cid];
+            if (activeCls && activeCls.date && activeCls.date !== d) return false;
+            return true;
+          });
+        }
+      });
 
       Object.values(sessionsMap).forEach(cls => {
         const d = cls.date;

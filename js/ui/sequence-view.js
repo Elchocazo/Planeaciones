@@ -992,18 +992,17 @@ class SequenceViewClass {
       return timeA.localeCompare(timeB);
     });
 
-    let currentNum = 1;
-    validGroupClasses.forEach(c => {
-      const schedNum = (typeof ClassRepository !== 'undefined' && ClassRepository.getScheduleSequenceNumber)
-        ? ClassRepository.getScheduleSequenceNumber(c.date, subjectName, gradeName, tid, { requireScheduledWeekday: true })
-        : null;
-      const assignedNum = (schedNum !== null && schedNum > 0) ? schedNum : currentNum;
+    validGroupClasses.forEach((c, idx) => {
+      const assignedNum = idx + 1;
       c.sequenceNumber = assignedNum;
       c.dayNumber = String(assignedNum);
-      currentNum = assignedNum + 1;
-      // Pasar isMirrorSync: true para evitar cascadas o resurrección de clases eliminadas en paralelos
-      ClassRepository.saveClass(c, tid, { isMirrorSync: true });
+      c.manualSequence = true;
     });
+    if (typeof ClassRepository.saveClassesBatch === 'function') {
+      ClassRepository.saveClassesBatch(validGroupClasses, tid, { isMirrorSync: true });
+    } else {
+      validGroupClasses.forEach(c => ClassRepository.saveClass(c, tid, { isMirrorSync: true }));
+    }
 
     if (typeof App !== 'undefined' && App.showToast) {
       App.showToast(`✓ ${validGroupClasses.length} clases numeradas según horario y calendario escolar`, 'success');
@@ -1035,7 +1034,7 @@ class SequenceViewClass {
 
     cls.sequenceNumber = newNum;
     cls.dayNumber = String(newNum);
-    ClassRepository.saveClass(cls, tid, { isMirrorSync: true });
+    cls.manualSequence = true;
 
     if (shouldPropagate) {
       const targetSub = String(cls.subjectName || cls.subject || '').toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
@@ -1061,9 +1060,15 @@ class SequenceViewClass {
       futureClasses.forEach(fc => {
         fc.sequenceNumber = nextSeq;
         fc.dayNumber = String(nextSeq);
+        fc.manualSequence = true;
         nextSeq++;
-        ClassRepository.saveClass(fc, tid, { isMirrorSync: true });
       });
+      const toSave = [cls, ...futureClasses];
+      if (typeof ClassRepository.saveClassesBatch === 'function') {
+        ClassRepository.saveClassesBatch(toSave, tid, { isMirrorSync: true });
+      } else {
+        toSave.forEach(fc => ClassRepository.saveClass(fc, tid, { isMirrorSync: true }));
+      }
     }
 
     if (typeof App !== 'undefined' && App.showToast) {

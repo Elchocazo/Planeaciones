@@ -1201,6 +1201,7 @@ class ClassEditorViewClass {
 
     this.currentClass.sequenceNumber = newNum;
     this.currentClass.dayNumber = String(newNum);
+    this.currentClass.manualSequence = true;
 
     if (typeof ClassRepository !== 'undefined' && ClassRepository.saveClass) {
       const saved = ClassRepository.saveClass(this.currentClass, tid);
@@ -1246,10 +1247,15 @@ class ClassEditorViewClass {
           futureClasses.forEach(fc => {
             fc.sequenceNumber = nextNum;
             fc.dayNumber = String(nextNum);
+            fc.manualSequence = true;
             nextNum++;
             propagatedCount++;
-            ClassRepository.saveClass(fc, tid, { isMirrorSync: true });
           });
+          if (typeof ClassRepository.saveClassesBatch === 'function') {
+            ClassRepository.saveClassesBatch(futureClasses, tid, { isMirrorSync: true });
+          } else {
+            futureClasses.forEach(fc => ClassRepository.saveClass(fc, tid, { isMirrorSync: true }));
+          }
         }
 
         if (typeof StorageService !== 'undefined') {

@@ -731,9 +731,9 @@ const PlanRepository = {
   /**
    * Elimina una clase específica de un día (con snapshot de seguridad)
    */
-  deleteClass(teacherId, date, classId) {
+  deleteClass(teacherId, date, classId, options = {}) {
     const tid = teacherId || this._getCurrentTeacherId();
-    if (typeof ClassRepository !== 'undefined' && typeof ClassRepository.markClassDeleted === 'function') {
+    if (!options.skipTombstone && typeof ClassRepository !== 'undefined' && typeof ClassRepository.markClassDeleted === 'function') {
       ClassRepository.markClassDeleted(classId, tid);
     }
     const currentPlan = this.getPlan(tid, date);
