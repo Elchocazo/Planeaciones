@@ -17,6 +17,7 @@ const FirestoreService = {
   _syncDebounceTimers: {},
   _isSyncing: false,
   _isPaused: false,
+  _initPromise: null,
   _knownHashes: {},
   _syncQueue: {},
 
@@ -290,93 +291,112 @@ const FirestoreService = {
   /**
    * Inicializa la conexión con Firebase Firestore
    */
-  async init() {
+  init() {
     if (this.isInitialized && this.db) {
-      return true;
+      return Promise.resolve(true);
+    }
+    if (this._initPromise) {
+      return this._initPromise;
     }
 
-    if (typeof firebase === 'undefined') {
-      console.info('[FirestoreService] Firebase SDK no cargado en este entorno. Operando en modo local.');
-      this._updateStatus('offline', 'Modo local (SDK no disponible)');
-      return false;
-    }
-
-    const config = (typeof FirebaseConfigManager !== 'undefined')
-      ? FirebaseConfigManager.getConfig()
-      : null;
-
-    if (!config || !config.projectId || config.projectId.trim() === '') {
-      console.info('[FirestoreService] Sin credenciales de Firebase configuradas. Operando en modo local.');
-      this._updateStatus('offline', 'Modo local (Sin credenciales de nube)');
-      return false;
-    }
-
-    try {
-      this._updateStatus('connecting', 'Conectando con Firestore...');
-
-      // Evitar duplicar apps de Firebase
-      if (!firebase.apps || firebase.apps.length === 0) {
-        this.app = firebase.initializeApp(config);
-      } else {
-        this.app = firebase.app();
+    this._initPromise = (async () => {
+      if (typeof firebase === 'undefined') {
+        console.info('[FirestoreService] Firebase SDK no cargado en este entorno. Operando en modo local.');
+        this._updateStatus('offline', 'Modo local (SDK no disponible)');
+        return false;
       }
 
-      this.db = firebase.firestore();
-      
-      // Ajuste de conexión óptimo para compatibilidad total con file:/// y web
+      const config = (typeof FirebaseConfigManager !== 'undefined')
+        ? FirebaseConfigManager.getConfig()
+        : null;
+
+      if (!config || !config.projectId || config.projectId.trim() === '') {
+        console.info('[FirestoreService] Sin credenciales de Firebase configuradas. Operando en modo local.');
+        this._updateStatus('offline', 'Modo local (Sin credenciales de nube)');
+        return false;
+      }
+
       try {
-        this.db.settings({
-          experimentalAutoDetectLongPolling: true,
-          merge: true
-        });
-      } catch (eSettings) {}
+        this._updateStatus('connecting', 'Conectando con Firestore...');
 
-      // Habilitar persistencia offline SOLO si no es protocolo file:
-      const isFileProtocol = (typeof window !== 'undefined' && window.location.protocol === 'file:');
-      if (!isFileProtocol) {
-        try {
-          await this.db.enablePersistence({ synchronizeTabs: true });
-        } catch (persErr) {
-          try {
-            await this.db.enablePersistence();
-          } catch (p2) {}
-        }
-      }
-
-      this.isInitialized = true;
-      console.log('✅ [FirestoreService] Conectado exitosamente a Firebase Firestore:', config.projectId);
-
-      // Iniciar escucha en tiempo real para el docente actual o Manuel Muñoz
-      const currentTeacherId = (typeof UserService !== 'undefined') ? UserService.getCurrentUserId() : 'usr_manuel';
-      const targetTeacherId = (currentTeacherId === 'usr_coordinacion') ? 'usr_manuel' : currentTeacherId;
-      
-      this._loadKnownHashes(targetTeacherId);
-      this.startRealtimeSync(targetTeacherId);
-
-      // Verificación de sincronización inicial vs incremental
-      const initialDone = this.isInitialSyncDone(targetTeacherId);
-      const pendingCount = this.getPendingQueueCount(targetTeacherId);
-
-      if (!initialDone) {
-        console.log(`☁️ [FirestoreService] Primera conexión para ${targetTeacherId}. Se requiere sincronización inicial.`);
-        this._updateStatus('connected', 'Conectado a Firestore (Pendiente sincronización inicial)');
-      } else {
-        if (pendingCount > 0) {
-          console.log(`☁️ [FirestoreService] Sincronización incremental para ${targetTeacherId} (${pendingCount} cambios pendientes).`);
-          this._updateStatus('connected', `Conectado a Firestore (${pendingCount} pendientes)`);
-          this.processSyncQueue(targetTeacherId).catch(e => console.warn('[FirestoreService] Aviso en sync incremental:', e));
+        // Evitar duplicar apps de Firebase
+        if (!firebase.apps || firebase.apps.length === 0) {
+          this.app = firebase.initializeApp(config);
         } else {
-          console.log(`☁️ [FirestoreService] Todo al día para ${targetTeacherId}. 0 cambios pendientes.`);
-          this._updateStatus('connected', 'Todo sincronizado');
+          this.app = firebase.app();
         }
-      }
 
-      return true;
-    } catch (err) {
-      console.warn('[FirestoreService] Error al conectar con Firestore:', err);
-      this._updateStatus('error', 'Error al conectar con Firestore: ' + (err.message || 'Error de red'));
-      return false;
-    }
+        this.db = firebase.firestore();
+        
+        // Ajuste de conexión óptimo para compatibilidad total con file:/// y web
+        try {
+          this.db.settings({
+            experimentalAutoDetectLongPolling: true,
+            merge: true
+          });
+        } catch (eSettings) {}
+
+        // Habilitar persistencia offline con tiempo límite estricto para nunca bloquear el arranque
+        const isFileProtocol = (typeof window !== 'undefined' && window.location.protocol === 'file:');
+        if (!isFileProtocol) {
+          try {
+            await Promise.race([
+              this.db.enablePersistence({ synchronizeTabs: true }),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('Persistence timeout')), 1500))
+            ]);
+          } catch (persErr) {
+            try {
+              await Promise.race([
+                this.db.enablePersistence(),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Persistence timeout')), 1000))
+              ]);
+            } catch (p2) {}
+          }
+        }
+
+        this.isInitialized = true;
+        console.log('✅ [FirestoreService] Conectado exitosamente a Firebase Firestore:', config.projectId);
+
+        // Desacoplar escucha en tiempo real y procesamiento de cola para que se ejecuten en segundo plano
+        // sin bloquear el arranque ni retrasar el renderizado de la UI local (Regla 13)
+        setTimeout(() => {
+          try {
+            const currentTeacherId = (typeof UserService !== 'undefined') ? UserService.getCurrentUserId() : 'usr_manuel';
+            const targetTeacherId = (currentTeacherId === 'usr_coordinacion') ? 'usr_manuel' : currentTeacherId;
+            
+            this._loadKnownHashes(targetTeacherId);
+            this.startRealtimeSync(targetTeacherId);
+
+            const initialDone = this.isInitialSyncDone(targetTeacherId);
+            const pendingCount = this.getPendingQueueCount(targetTeacherId);
+
+            if (!initialDone) {
+              console.log(`☁️ [FirestoreService] Primera conexión para ${targetTeacherId}. Se requiere sincronización inicial.`);
+              this._updateStatus('connected', 'Conectado a Firestore (Pendiente sincronización inicial)');
+            } else {
+              if (pendingCount > 0) {
+                console.log(`☁️ [FirestoreService] Sincronización incremental para ${targetTeacherId} (${pendingCount} cambios pendientes).`);
+                this._updateStatus('connected', `Conectado a Firestore (${pendingCount} pendientes)`);
+                this.processSyncQueue(targetTeacherId).catch(e => console.warn('[FirestoreService] Aviso en sync incremental:', e));
+              } else {
+                console.log(`☁️ [FirestoreService] Todo al día para ${targetTeacherId}. 0 cambios pendientes.`);
+                this._updateStatus('connected', 'Todo sincronizado');
+              }
+            }
+          } catch (eBg) {
+            console.warn('[FirestoreService] Aviso en tareas de segundo plano de conexión:', eBg);
+          }
+        }, 30);
+
+        return true;
+      } catch (err) {
+        console.warn('[FirestoreService] Error al conectar con Firestore:', err);
+        this._updateStatus('error', 'Error al conectar con Firestore: ' + (err.message || 'Error de red'));
+        return false;
+      }
+    })();
+
+    return this._initPromise;
   },
 
   /**
@@ -1280,14 +1300,6 @@ const FirestoreService = {
 
 if (typeof window !== 'undefined') {
   window.FirestoreService = FirestoreService;
-
-  if (typeof document !== 'undefined') {
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => FirestoreService.init());
-    } else {
-      FirestoreService.init();
-    }
-  }
 }
 
 if (typeof module !== 'undefined' && module.exports) {

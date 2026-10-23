@@ -219,10 +219,13 @@ class AppRouterClass {
     if (this._isNavigating) return false;
     this._isNavigating = true;
     try {
-      const canonical = (viewName === 'class-editor') ? 'editor' : viewName;
+            const canonical = (viewName === 'class-editor') ? 'editor' : viewName;
+      if (!this.viewContainers || Object.keys(this.viewContainers).length === 0 || !this.viewContainers[canonical]) {
+        this._bindContainers();
+      }
       const isSameView = this.currentView === canonical;
       const isSameClass = !options.classId || options.classId === this.currentOptions?.classId;
-      const targetContainer = this.viewContainers ? this.viewContainers[canonical] : document.getElementById(`${canonical}-view`);
+      const targetContainer = (this.viewContainers && this.viewContainers[canonical]) || (typeof document !== 'undefined' ? document.getElementById(`${canonical}-view`) : null);
       const isContainerEmpty = targetContainer && !targetContainer.innerHTML.trim();
 
       if (isSameView && isSameClass && !options.force && !isContainerEmpty) return false;

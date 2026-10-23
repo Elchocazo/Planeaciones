@@ -78,3 +78,13 @@ Todo el procesamiento de texto, manejo de imágenes, sincronización de estado y
   - La eliminación de una clase o planeación encola una acción destructiva atómica (`action: 'delete'`) que purga el documento en `school_classes_v1` y actualiza `school_plans_v1`.
   - Las clases registradas en la lista negra local de eliminadas (`ClassRepository.isDeletedClass`) tienen prioridad absoluta y jamás pueden ser reinsertadas o resucitadas por descargas o snapshots entrantes de la nube.
 - **Control de Concurrencia y Detención Limpia**: El procesador de sincronización implementa mutex (`_isSyncing`) para evitar subidas concurrentes del mismo registro, soporte para pausa/detención inmediata (`pauseSync`) sin corrupción de estado, y reintentos con límite (máximo 3) para garantizar estabilidad del hilo principal.
+
+
+### 13. Desacoplamiento Total de la Sincronización en la Nube y Cero Bloqueo de UI
+«La sincronización con Firebase nunca debe bloquear el arranque, el renderizado ni la navegación que puedan funcionar con datos locales. Toda modificación de la inicialización debe preservar las reglas de persistencia, sincronización incremental y recuperación existentes, y debe incluir pruebas de regresión».
+
+- **Arranque Inmediato sin Espera de Red**: La aplicación debe mostrar inmediatamente los datos locales pre-hidratados en memoria (0 ms de espera) y permitir la navegación fluida e instantánea entre vistas («Inicio / Hoy», «Calendario», «Materias & Clases», «Historial», «Recuperadas», «Configuración») sin depender de la conectividad o respuesta de Firebase Firestore.
+- **Desacoplamiento Asíncrono de Firestore**: La inicialización de la conexión con Google Cloud Firestore y los ciclos de sincronización (inicial o incremental) deben ejecutarse en segundo plano (asíncrono desacoplado mediante `setTimeout` / microtarea), jamás interponiéndose en la secuencia crítica de renderizado local.
+- **Prioridad Absoluta de Componentes e Interactividad**: Los componentes (`window.Calendar`, `window.Planner`), modales, el enrutador (`AppRouter`) y los escuchadores de navegación (`bindEvents`) deben registrarse y quedar 100% operativos antes de cualquier operación de red.
+- **Mutex y Protección de Concurrencia en Conexión**: `FirestoreService.init()` debe implementar un singleton / mutex (`_initPromise`) para prevenir ejecuciones concurrentes múltiples, evitar carreras de bloqueo en `enablePersistence` y rechazar suscripciones duplicadas a `onSnapshot`.
+- **Transparencia en Indicadores de Estado**: El indicador visual de la cabecera debe reflejar de forma fidedigna y no intrusiva el estado de la nube sin simular bloqueos ni congelar el hilo principal de la aplicación.

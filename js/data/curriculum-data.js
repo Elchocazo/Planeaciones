@@ -15,9 +15,9 @@
  * de compatibilidad retroactiva con window.DEFAULT_CURRICULUM y module.exports.
  */
 
-const STORAGE_CURRICULUM_KEY = 'teacher_curriculum_bank_v13';
+var STORAGE_CURRICULUM_KEY = 'teacher_curriculum_bank_v13';
 
-let DEFAULT_CURRICULUM = {
+var DEFAULT_CURRICULUM = {
   "1°": {},
   "2°": {},
   "3°": {},

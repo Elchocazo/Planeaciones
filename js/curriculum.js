@@ -7,9 +7,9 @@
  * evitando duplicación de 750KB en memoria y en disco.
  */
 
-const STORAGE_CURRICULUM_KEY = 'teacher_curriculum_bank_v13';
+var STORAGE_CURRICULUM_KEY = (typeof STORAGE_CURRICULUM_KEY !== 'undefined') ? STORAGE_CURRICULUM_KEY : 'teacher_curriculum_bank_v13';
 
-const DEFAULT_CURRICULUM = (typeof window !== 'undefined' && window.DEFAULT_CURRICULUM)
+var DEFAULT_CURRICULUM = (typeof DEFAULT_CURRICULUM !== 'undefined') ? DEFAULT_CURRICULUM : (typeof window !== 'undefined' && window.DEFAULT_CURRICULUM)
   ? window.DEFAULT_CURRICULUM
   : (typeof global !== 'undefined' && global.DEFAULT_CURRICULUM
       ? global.DEFAULT_CURRICULUM

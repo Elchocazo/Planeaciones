@@ -146,37 +146,17 @@ const App = {
       }
     }
 
-    // Inicializar sincronización en la nube si está disponible
-    if (typeof FirestoreService !== 'undefined' && !FirestoreService.isReady()) {
-      FirestoreService.init().catch(e => console.warn('[App] Firestore init notice:', e));
-    }
-
     // 3. Inicializar vistas y modales ANTES del Router para que sus mount points y listeners existan
-    if (typeof DashboardView !== 'undefined') {
-      DashboardView.init();
-    }
-    if (typeof ClassEditorView !== 'undefined') {
-      ClassEditorView.init();
-    }
-    if (typeof SequenceView !== 'undefined') {
-      SequenceView.init();
-    }
-    if (typeof HistoryView !== 'undefined') {
-      HistoryView.init();
-    }
-    if (typeof RecoveryView !== 'undefined') {
-      RecoveryView.init();
-    }
-    if (typeof ImportModal !== 'undefined') {
-      ImportModal.init();
-    }
-    if (typeof CurriculumSelectorModal !== 'undefined') {
-      CurriculumSelectorModal.init();
-    }
-
-    // 4. Inicializar enrutador (con los datos ya 100% listos en memoria, el primer render es definitivo y sin parpadeos)
-    if (typeof AppRouter !== 'undefined') {
-      AppRouter.init();
+    try {
+      if (typeof DashboardView !== 'undefined') DashboardView.init();
+      if (typeof ClassEditorView !== 'undefined') ClassEditorView.init();
+      if (typeof SequenceView !== 'undefined') SequenceView.init();
+      if (typeof HistoryView !== 'undefined') HistoryView.init();
+      if (typeof RecoveryView !== 'undefined') RecoveryView.init();
+      if (typeof ImportModal !== 'undefined') ImportModal.init();
+      if (typeof CurriculumSelectorModal !== 'undefined') CurriculumSelectorModal.init();
+    } catch (eViews) {
+      console.warn('[App] Aviso inicializando vistas y modales:', eViews);
     }
 
     // Marcar banderas de versiones anteriores para prevenir ejecuciones destructivas
@@ -186,12 +166,38 @@ const App = {
     localStorage.setItem('schedule_merge_consecutive_v2', 'true');
     localStorage.setItem('schedule_official_calibrated_v4', 'true');
 
-    // Inicializar componentes
-    window.Calendar = new CalendarComponent('calendar-mount-point');
-    window.Planner = new PlannerComponent('planner-mount-point');
+    // 4. Inicializar componentes ANTES de AppRouter para que estén disponibles al renderizar la vista inicial
+    try {
+      window.Calendar = new CalendarComponent('calendar-mount-point');
+      window.Planner = new PlannerComponent('planner-mount-point');
+    } catch (eComp) {
+      console.warn('[App] Aviso inicializando componentes Calendar/Planner:', eComp);
+    }
 
-    this.bindEvents();
-    this.checkProfileOrOnboarding();
+    // 5. Vincular eventos globales y verificar perfil de usuario
+    try {
+      this.bindEvents();
+      this.checkProfileOrOnboarding();
+    } catch (eBind) {
+      console.warn('[App] Aviso vinculando eventos o verificando perfil:', eBind);
+    }
+
+    // 6. Inicializar enrutador (con los datos locales 100% listos en memoria, renderizado inmediato y sin parpadeos)
+    try {
+      if (typeof AppRouter !== 'undefined') {
+        AppRouter.init();
+      }
+    } catch (eRouter) {
+      console.error('[App] Error inicializando AppRouter:', eRouter);
+    }
+
+    // 7. Sincronización en la nube (Firestore) en SEGUNDO PLANO DESACOPLADO (Regla 13)
+    // La conexión de red y la sincronización con la nube nunca deben bloquear el arranque ni la navegación local
+    if (typeof FirestoreService !== 'undefined' && !FirestoreService.isReady()) {
+      setTimeout(() => {
+        FirestoreService.init().catch(e => console.warn('[App] Firestore init notice:', e));
+      }, 50);
+    }
   },
 
   checkProfileOrOnboarding() {
