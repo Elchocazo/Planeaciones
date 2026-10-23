@@ -1074,7 +1074,10 @@ const FirestoreService = {
             if (Array.isArray(cloudPlan.classes)) {
               cloudPlan.classes.forEach(cloudCls => {
                 if (!cloudCls) return;
-                const locIdx = localPlan.classes.findIndex(lc => lc.id === cloudCls.id || (lc.subject === cloudCls.subject && lc.grade === cloudCls.grade));
+                const locIdx = localPlan.classes.findIndex(lc =>
+                  (cloudCls.id && (lc.id === cloudCls.id || lc.classId === cloudCls.id)) ||
+                  (!cloudCls.id && lc.subject === cloudCls.subject && lc.grade === cloudCls.grade && (cloudCls.time ? lc.time === cloudCls.time : true))
+                );
                 if (locIdx >= 0) {
                   const locCls = localPlan.classes[locIdx];
                   if (cloudVersion > localVersion) {
@@ -1115,10 +1118,12 @@ const FirestoreService = {
             if (!c.date) c.date = date;
             if (!c.teacherId) c.teacherId = tid;
             if (typeof ClassRepository.getScheduleSequenceNumber === 'function') {
-              const schedSeq = ClassRepository.getScheduleSequenceNumber(c.date, c.subjectName || c.subject, c.gradeName || c.grade, tid, { requireScheduledWeekday: true });
-              if (schedSeq !== null && schedSeq > 0) {
-                c.sequenceNumber = schedSeq;
-                c.dayNumber = String(schedSeq);
+              if (!c.sequenceNumber || c.sequenceNumber <= 0) {
+                const schedSeq = ClassRepository.getScheduleSequenceNumber(c.date, c.subjectName || c.subject, c.gradeName || c.grade, tid, { requireScheduledWeekday: true });
+                if (schedSeq !== null && schedSeq > 0) {
+                  c.sequenceNumber = schedSeq;
+                  c.dayNumber = String(schedSeq);
+                }
               }
             }
             classesToSave.push(c);

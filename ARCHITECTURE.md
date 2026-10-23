@@ -10,7 +10,7 @@ La aplicación fue rediseñada integralmente para transformar un planeador tradi
 
 ### Principios Fundamentales
 1. **Desacoplamiento Absoluto:** El horario escolar, la secuencia curricular y la planeación de cada clase son entidades independientes con su propio ciclo de vida.
-2. **Consecutivo Permanente e Inmutable (`sequenceNumber`):** El número de clase de una asignatura y curso jamás se calcula a partir de índices de un array ni de la posición en el día. Una vez asignado, permanece inmutable. El siguiente consecutivo siempre se calcula como `max(existentes) + 1`.
+2. **Identidad Estable (`id`) y Consecutivo Permanente (`sequenceNumber`):** El identificador (`id`) de cada clase es permanente e inmutable. La fecha y el consecutivo son estables y jamás se alteran por borrar o navegar otras clases; sin embargo, son editables de forma explícita por el docente desde la interfaz mediante acciones conscientes ("Modificar día / fecha", "Editar # de clase" o "Renumerar"). El siguiente consecutivo siempre se calcula como `max(existentes) + 1`.
 3. **Independencia Total de Paralelos:** `4°A` y `4°B` son grupos completamente independientes. Nunca comparten contador de clase ni se sincronizan entre sí.
 4. **Navegación de Solo Lectura:** Cambiar de día, mes o vista en el calendario jamás guarda, renumera ni crea registros ficticios. Navegar es 100% lectura pura.
 5. **Guardado Atómico:** Guardar una sesión de clase afecta **únicamente** a esa sesión de clase en su propio registro.

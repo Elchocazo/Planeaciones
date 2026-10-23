@@ -1109,7 +1109,12 @@ class ClassRepositoryClass {
       );
 
       if (expected !== null && expected > 0) {
-        if (parseInt(c.sequenceNumber, 10) !== expected || String(c.dayNumber) !== String(expected)) {
+        const currentSeq = parseInt(c.sequenceNumber, 10);
+        const hasValidSeq = !isNaN(currentSeq) && currentSeq > 0;
+        // Si se solicita exclusivamente clases no asignadas (arranque/segundo plano), omitir clases con número válido
+        if (options.onlyUnassigned && hasValidSeq && !options.forceAll) continue;
+
+        if (currentSeq !== expected || String(c.dayNumber) !== String(expected)) {
           c.sequenceNumber = expected;
           c.dayNumber = String(expected);
           realignedCount++;
@@ -1179,7 +1184,7 @@ class ClassRepositoryClass {
       const topicText = `${c.curriculum?.topic || ''} ${c.topic || ''} ${c.curriculum?.dba || ''} ${c.achievement || ''} ${c.didacticSequence?.desarrollo || ''}`;
 
       // CASO 1: Clase registrada como Matemáticas 7° pero con tema claro de Sistemas / Ofimática
-      if (sNorm === 'matematicas' && isSistemasTopic(topicText)) {
+      if (tid === 'usr_manuel' && sNorm === 'matematicas' && isSistemasTopic(topicText)) {
         console.warn(`[ClassRepository] Detectada clase intrusa de Sistemas en Matemáticas 7°: ${c.id} (${c.date})`);
 
         // Comprobar si ya existe una clase legítima de Sistemas 7° en esa fecha o con ese tema
@@ -1212,18 +1217,28 @@ class ClassRepositoryClass {
 
       // CASO 2: Clases de Matemáticas 7° registradas en día Lunes
       // Manuel nunca dicta Matemáticas 7° los lunes (su horario los lunes es Dir. Grupo 7:00-7:50 y Sistemas 7:50-8:40)
-      if (sNorm === 'matematicas' && c.date) {
+      if (tid === 'usr_manuel' && sNorm === 'matematicas' && c.date) {
         const parts = c.date.split('-').map(Number);
         if (parts.length === 3) {
           const dObj = new Date(parts[0], parts[1] - 1, parts[2]);
           if (dObj.getDay() === 1) { // 1 = Lunes
-            console.warn(`[ClassRepository] Eliminando clase errónea de Matemáticas 7° en día Lunes: ${c.id} (${c.date})`);
-            this.markClassDeleted(c.id, tid);
-            delete map[id];
-            purgedCount++;
-            changed = true;
-            if (typeof PlanRepository !== 'undefined' && PlanRepository.deleteClass) {
-              PlanRepository.deleteClass(tid, c.date, c.id);
+            // Salvaguarda (Regla 10): NUNCA eliminar si la clase tiene contenido pedagógico real escrito por el docente
+            const hasPedagogy = this._hasRealContent(c.curriculum?.topic) ||
+                                this._hasRealContent(c.topic) ||
+                                this._hasRealContent(c.didacticSequence?.desarrollo) ||
+                                this._hasRealContent(c.description) ||
+                                this._hasRealContent(c.notebookContent);
+            if (!hasPedagogy) {
+              console.warn(`[ClassRepository] Eliminando clase vacía errónea de Matemáticas 7° en día Lunes: ${c.id} (${c.date})`);
+              this.markClassDeleted(c.id, tid);
+              delete map[id];
+              purgedCount++;
+              changed = true;
+              if (typeof PlanRepository !== 'undefined' && PlanRepository.deleteClass) {
+                PlanRepository.deleteClass(tid, c.date, c.id);
+              }
+            } else {
+              console.log(`[ClassRepository] Preservando clase de Matemáticas 7° en día Lunes por contener trabajo pedagógico: ${c.id} (${c.date})`);
             }
           }
         }
@@ -1330,10 +1345,38 @@ class ClassRepositoryClass {
     // Snapshot Curricular: inmutable ante modificaciones futuras de la malla
     const incomingCur = incoming.curriculum || {};
     const existingCur = existing?.curriculum || {};
+
+    let resolvedTopic;
+    if (incomingCur.topic !== undefined && incomingCur.topic !== existingCur.topic) {
+      resolvedTopic = incomingCur.topic;
+    } else if (incoming.topic !== undefined && incoming.topic !== existing?.topic) {
+      resolvedTopic = incoming.topic;
+    } else {
+      resolvedTopic = incomingCur.topic ?? incoming.topic ?? existingCur.topic ?? existing?.topic ?? '';
+    }
+
+    let resolvedDba;
+    if (incomingCur.dba !== undefined && incomingCur.dba !== existingCur.dba) {
+      resolvedDba = incomingCur.dba;
+    } else if (incoming.dba !== undefined && incoming.dba !== existing?.dba) {
+      resolvedDba = incoming.dba;
+    } else {
+      resolvedDba = incomingCur.dba ?? incoming.dba ?? existingCur.dba ?? existing?.dba ?? '';
+    }
+
+    let resolvedAchievement;
+    if (incomingCur.achievement !== undefined && incomingCur.achievement !== existingCur.achievement) {
+      resolvedAchievement = incomingCur.achievement;
+    } else if (incoming.achievement !== undefined && incoming.achievement !== existing?.achievement) {
+      resolvedAchievement = incoming.achievement;
+    } else {
+      resolvedAchievement = incomingCur.achievement ?? incoming.achievement ?? incoming.performance ?? existingCur.achievement ?? existing?.achievement ?? existing?.performance ?? '';
+    }
+
     const curriculum = {
-      topic: incomingCur.topic ?? (incoming.topic ?? existingCur.topic ?? existing?.topic ?? ''),
-      dba: incomingCur.dba ?? (incoming.dba ?? existingCur.dba ?? existing?.dba ?? ''),
-      achievement: incomingCur.achievement ?? (incoming.achievement ?? incoming.performance ?? existingCur.achievement ?? existing?.achievement ?? existing?.performance ?? ''),
+      topic: resolvedTopic,
+      dba: resolvedDba,
+      achievement: resolvedAchievement,
       periodTopics: Array.isArray(incomingCur.periodTopics) ? incomingCur.periodTopics : (Array.isArray(existingCur.periodTopics) ? existingCur.periodTopics : []),
       periodPerformances: Array.isArray(incomingCur.periodPerformances) ? incomingCur.periodPerformances : (Array.isArray(existingCur.periodPerformances) ? existingCur.periodPerformances : [])
     };
@@ -2772,7 +2815,12 @@ class ClassRepositoryClass {
     this._pendingPersist.add(tid);
     if (!this._persistScheduled) {
       this._persistScheduled = true;
-      const run = () => this.flushPersist();
+      const run = () => {
+        this.flushPersist().catch(err => {
+          // Captura el error en segundo plano para evitar rechazos no controlados en Node/navegador
+          console.warn('[ClassRepository] Persistencia en segundo plano no completada:', err && err.message);
+        });
+      };
       if (typeof queueMicrotask === 'function') queueMicrotask(run);
       else Promise.resolve().then(run);
     }
@@ -2789,7 +2837,8 @@ class ClassRepositoryClass {
   async flushPersist(teacherId = null) {
     this._persistScheduled = false;
     const pending = this._pendingPersist ? Array.from(this._pendingPersist) : [];
-    if (teacherId && !pending.includes(teacherId)) pending.push(teacherId);
+    const targetTid = teacherId || this._getCurrentTeacherId();
+    if (!pending.includes(targetTid)) pending.push(targetTid);
     if (this._pendingPersist) this._pendingPersist.clear();
 
     const results = await Promise.all(pending.map(async (tid) => {

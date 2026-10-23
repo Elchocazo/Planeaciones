@@ -215,6 +215,28 @@ const UserService = {
       let users = null;
       if (!data) {
         users = JSON.parse(JSON.stringify(DEFAULT_SYSTEM_USERS));
+        // Migración no destructiva: Si existe un perfil previo en teacher_planner_profile_v1, incorporarlo al usuario principal
+        try {
+          const profData = localStorage.getItem('teacher_planner_profile_v1');
+          if (profData) {
+            const parsedProf = JSON.parse(profData);
+            if (parsedProf && typeof parsedProf === 'object') {
+              const mainIdx = users.findIndex(u => u.id === 'usr_manuel');
+              if (mainIdx >= 0) {
+                users[mainIdx] = {
+                  ...users[mainIdx],
+                  ...parsedProf,
+                  name: (parsedProf.name && parsedProf.name.trim()) ? parsedProf.name : users[mainIdx].name,
+                  institution: (parsedProf.institution && parsedProf.institution.trim()) ? parsedProf.institution : users[mainIdx].institution,
+                  homeroom: (parsedProf.homeroom && parsedProf.homeroom.trim()) ? parsedProf.homeroom : users[mainIdx].homeroom,
+                  period: (parsedProf.period && parsedProf.period.trim()) ? parsedProf.period : users[mainIdx].period,
+                  subjects: (Array.isArray(parsedProf.subjects) && parsedProf.subjects.length > 0) ? parsedProf.subjects : users[mainIdx].subjects,
+                  weeklySchedule: (parsedProf.weeklySchedule && Object.keys(parsedProf.weeklySchedule).length > 0) ? parsedProf.weeklySchedule : users[mainIdx].weeklySchedule
+                };
+              }
+            }
+          }
+        } catch (eProf) {}
         this.saveAllUsers(users);
         return users;
       }
@@ -222,6 +244,26 @@ const UserService = {
 
       // Auto-migración y verificación: Asegurar que Marisol Ruiz esté configurada correctamente
       let modified = false;
+
+      // Preservar coherencia con teacher_planner_profile_v1 si contiene personalizaciones del docente
+      try {
+        const profData = localStorage.getItem('teacher_planner_profile_v1');
+        if (profData) {
+          const parsedProf = JSON.parse(profData);
+          if (parsedProf && parsedProf.name && parsedProf.name.trim()) {
+            const mainUser = users.find(u => u.id === 'usr_manuel');
+            if (mainUser && mainUser.name !== parsedProf.name && parsedProf.name !== 'Manuel Muñoz') {
+              mainUser.name = parsedProf.name;
+              if (parsedProf.institution) mainUser.institution = parsedProf.institution;
+              if (parsedProf.period) mainUser.period = parsedProf.period;
+              if (parsedProf.homeroom) mainUser.homeroom = parsedProf.homeroom;
+              if (Array.isArray(parsedProf.subjects) && parsedProf.subjects.length > 0) mainUser.subjects = parsedProf.subjects;
+              if (parsedProf.weeklySchedule && Object.keys(parsedProf.weeklySchedule).length > 0) mainUser.weeklySchedule = parsedProf.weeklySchedule;
+              modified = true;
+            }
+          }
+        }
+      } catch (eSyncProf) {}
       const coordIndex = users.findIndex(u => u.role === 'coordinator' || u.id === 'usr_coordinacion');
       if (coordIndex >= 0) {
         if (users[coordIndex].name !== 'Marisol Ruiz' || users[coordIndex].password !== 'CHMD2026') {

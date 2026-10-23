@@ -170,12 +170,15 @@ class ImportServiceClass {
     if (!merged.curriculum) merged.curriculum = {};
     if (parsedData.curriculum.topic && parsedData.curriculum.topic.trim()) {
       merged.curriculum.topic = parsedData.curriculum.topic.trim();
+      merged.topic = merged.curriculum.topic;
     }
     if (parsedData.curriculum.dba && parsedData.curriculum.dba.trim()) {
       merged.curriculum.dba = parsedData.curriculum.dba.trim();
+      merged.dba = merged.curriculum.dba;
     }
     if (parsedData.curriculum.achievement && parsedData.curriculum.achievement.trim()) {
       merged.curriculum.achievement = parsedData.curriculum.achievement.trim();
+      merged.achievement = merged.curriculum.achievement;
     }
     if (Array.isArray(parsedData.curriculum.periodTopics) && parsedData.curriculum.periodTopics.length > 0) {
       merged.curriculum.periodTopics = parsedData.curriculum.periodTopics;

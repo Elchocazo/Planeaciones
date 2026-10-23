@@ -9,9 +9,20 @@ const App = {
   activeSettingsTab: 'matrix', // 'matrix' | 'profile' | 'grades'
   tempSubjectsList: [],
   tempGradesList: [],
+  _isInitialized: false,
+  _initPromise: null,
+  _eventsBound: false,
 
   async init() {
-    this.currentProfile = StorageService.getProfile();
+    if (this._isInitialized) {
+      return Promise.resolve();
+    }
+    if (this._initPromise) {
+      return this._initPromise;
+    }
+
+    this._initPromise = (async () => {
+      this.currentProfile = StorageService.getProfile();
     // Renderizado sincrónico e inmediato del perfil para evitar cualquier dato provisional
     this.renderHeaderProfile();
 
@@ -35,43 +46,87 @@ const App = {
       }
     }
 
-    // Limpieza y actualización al nuevo horario semanal oficial, 1° Periodo y mallas curriculares
+    // Inicialización no destructiva del horario, materias y perfil por defecto solo si faltan datos (Regla FASE 2)
     if (!localStorage.getItem('schedule_official_updated_v5')) {
       if (typeof UserService !== 'undefined') {
         const u = UserService.getUserById('usr_manuel');
         if (u) {
-          u.period = '1°';
-          u.weeklySchedule = JSON.parse(JSON.stringify(DEFAULT_WEEKLY_SCHEDULE));
-          u.subjects = [
-            { name: 'Matemáticas', grades: ['2°', '3°', '7°'] },
-            { name: 'Sistemas', grades: ['1°', '2°', '3°', '4°A', '4°B', '5°', '6°', '7°', '8°'] },
-            { name: 'Lógica', grades: ['6°'] },
-            { name: 'Robótica', grades: ['9°', '10°', '11°'] },
-            { name: 'Dirección de grupo', grades: ['7°'] }
-          ];
+          if (!u.period) u.period = '1°';
+          if (!u.weeklySchedule || Object.keys(u.weeklySchedule).length === 0) {
+            u.weeklySchedule = JSON.parse(JSON.stringify(DEFAULT_WEEKLY_SCHEDULE));
+          }
+          if (!Array.isArray(u.subjects) || u.subjects.length === 0) {
+            u.subjects = [
+              { name: 'Matemáticas', grades: ['2°', '3°', '7°'] },
+              { name: 'Sistemas', grades: ['1°', '2°', '3°', '4°A', '4°B', '5°', '6°', '7°', '8°'] },
+              { name: 'Lógica', grades: ['6°'] },
+              { name: 'Robótica', grades: ['9°', '10°', '11°'] },
+              { name: 'Dirección de grupo', grades: ['7°'] }
+            ];
+          }
           UserService.saveUser(u);
         }
       }
-      StorageService.saveProfile(DEFAULT_PROFILE);
+      const existingProfRaw = localStorage.getItem('teacher_planner_profile_v1');
+      if (!existingProfRaw) {
+        StorageService.saveProfile(DEFAULT_PROFILE);
+      } else {
+        try {
+          const parsedP = JSON.parse(existingProfRaw);
+          const mergedP = {
+            ...DEFAULT_PROFILE,
+            ...parsedP,
+            name: (parsedP.name && parsedP.name.trim()) ? parsedP.name : DEFAULT_PROFILE.name,
+            homeroom: (parsedP.homeroom && parsedP.homeroom.trim()) ? parsedP.homeroom : DEFAULT_PROFILE.homeroom,
+            grades: Array.isArray(parsedP.grades) && parsedP.grades.length > 0 ? parsedP.grades : [...DEFAULT_GRADES],
+            subjects: Array.isArray(parsedP.subjects) && parsedP.subjects.length > 0 ? parsedP.subjects : DEFAULT_PROFILE.subjects,
+            weeklySchedule: (parsedP.weeklySchedule && Object.keys(parsedP.weeklySchedule).length > 0) ? parsedP.weeklySchedule : DEFAULT_PROFILE.weeklySchedule,
+            academicStartDate: parsedP.academicStartDate || DEFAULT_PROFILE.academicStartDate
+          };
+          StorageService.saveProfile(mergedP);
+        } catch (eProf) {}
+      }
       localStorage.setItem('schedule_official_updated_v5', 'true');
     }
 
-    // Actualización oficial inmediata de la Malla Curricular de Robótica 10° (Pinza con Joystick)
+    // Actualización oficial de Malla Curricular de Robótica 10° solo si no está definida
     if (!localStorage.getItem('robotics_10_curriculum_updated_v1')) {
       if (typeof CurriculumService !== 'undefined') {
         const all = CurriculumService.getAllCurriculum();
         if (!all["1°"]) all["1°"] = {};
         if (!all["1°"]["Robótica"]) all["1°"]["Robótica"] = {};
-        all["1°"]["Robótica"]["10°"] = JSON.parse(JSON.stringify(DEFAULT_CURRICULUM["1°"]["Robótica"]["10°"]));
-        CurriculumService.saveAllCurriculum(all);
+        if (!all["1°"]["Robótica"]["10°"] || Object.keys(all["1°"]["Robótica"]["10°"]).length === 0) {
+          all["1°"]["Robótica"]["10°"] = JSON.parse(JSON.stringify(DEFAULT_CURRICULUM["1°"]["Robótica"]["10°"]));
+          CurriculumService.saveAllCurriculum(all);
+        }
       }
       localStorage.setItem('robotics_10_curriculum_updated_v1', 'true');
     }
 
-    // Sincronización oficial de las mallas curriculares completas de todas las materias y periodos (1° a 4°)
+    // Sincronización aditiva no destructiva de mallas curriculares (1° a 4°)
     if (!localStorage.getItem('mallas_official_folder_synced_v14')) {
       if (typeof CurriculumService !== 'undefined') {
-        CurriculumService.saveAllCurriculum(JSON.parse(JSON.stringify(DEFAULT_CURRICULUM)));
+        const existingCurr = CurriculumService.getAllCurriculum();
+        if (!existingCurr || Object.keys(existingCurr).length === 0) {
+          CurriculumService.saveAllCurriculum(JSON.parse(JSON.stringify(DEFAULT_CURRICULUM)));
+        } else {
+          const mergedCurr = JSON.parse(JSON.stringify(DEFAULT_CURRICULUM));
+          Object.keys(existingCurr).forEach(per => {
+            if (!mergedCurr[per]) mergedCurr[per] = {};
+            Object.keys(existingCurr[per] || {}).forEach(sub => {
+              if (!mergedCurr[per][sub]) {
+                mergedCurr[per][sub] = existingCurr[per][sub];
+              } else {
+                Object.keys(existingCurr[per][sub] || {}).forEach(grd => {
+                  if (existingCurr[per][sub][grd]) {
+                    mergedCurr[per][sub][grd] = existingCurr[per][sub][grd];
+                  }
+                });
+              }
+            });
+          });
+          CurriculumService.saveAllCurriculum(mergedCurr);
+        }
       }
       localStorage.setItem('mallas_official_folder_synced_v14', 'true');
     }
@@ -208,6 +263,11 @@ const App = {
         FirestoreService.init().catch(e => console.warn('[App] Firestore init notice:', e));
       }, 50);
     }
+
+    this._isInitialized = true;
+    })();
+
+    return this._initPromise;
   },
 
   checkProfileOrOnboarding() {
@@ -964,6 +1024,9 @@ const App = {
   },
 
   bindEvents() {
+    if (this._eventsBound) return;
+    this._eventsBound = true;
+
     const importInput = document.getElementById('import-backup-file');
     if (importInput && typeof importInput.addEventListener === 'function') {
       importInput.addEventListener('change', (e) => {

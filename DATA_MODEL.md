@@ -100,11 +100,11 @@ Entidad fundamental de planeación. Modificar o guardar esta entidad no altera a
 
 ```typescript
 interface ClassSession {
-  id: string;               // ID permanente (ej. "cls_mu4sbg2b_e1kjhqp")
+  id: string;               // ID permanente e inmutable (ej. "cls_mu4sbg2b_e1kjhqp")
   teacherId: string;        // ID del docente propietario
   sequenceId: string | null;// Vínculo opcional a CurriculumSequence
   scheduleSlotId: string | null; // Vínculo al slot de horario
-  date: string;             // Fecha inmutable en formato YYYY-MM-DD (ej. "2026-09-15")
+  date: string;             // Fecha en formato YYYY-MM-DD (estable; editable explícitamente por el docente)
   dayOfWeek: string;        // Nombre del día (ej. "Martes")
   startTime: string;        // Hora inicio (ej. "07:00")
   endTime: string;          // Hora fin (ej. "08:00")
@@ -115,7 +115,7 @@ interface ClassSession {
   gradeName: string;        // Nombre de grado (ej. "4°A")
   group: string;            // Paralelo/grupo (ej. "4°A")
   period: string;           // Período académico ("1°" | "2°" | "3°" | "4°")
-  sequenceNumber: number;   // Consecutivo permanente de clase (1, 2, 3...)
+  sequenceNumber: number;   // Consecutivo permanente de clase (estable; editable explícitamente por el docente)
   status: 'planned' | 'pending'; // Estado de la planeación
   subjectType: 'academic' | 'homeroom' | 'special';
 

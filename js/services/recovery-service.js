@@ -816,9 +816,29 @@ class RecoveryServiceClass {
 
   _isSameLogicalClass(c1, c2) {
     if (!c1 || !c2) return false;
-    if (c1.id && c2.id && c1.id === c2.id) return true;
+    // Identidad unívoca por ID permanente: dos clases con IDs distintos NUNCA son la misma clase
+    if (c1.id && c2.id) {
+      return String(c1.id) === String(c2.id);
+    }
+    // Si alguna clase no tiene ID aún (p. ej. registro legacy sin id generado):
     if (c1.date && c2.date && c1.date === c2.date) {
-      if (this._norm(c1.subjectName) === this._norm(c2.subjectName) && this._norm(c1.group) === this._norm(c2.group)) {
+      const s1 = this._norm(c1.subjectName || c1.subject);
+      const s2 = this._norm(c2.subjectName || c2.subject);
+      const g1 = this._norm(c1.group || c1.gradeName || c1.grade);
+      const g2 = this._norm(c2.group || c2.gradeName || c2.grade);
+      if (s1 === s2 && g1 === g2) {
+        // Si ambas tienen hora asignada, deben coincidir para no fusionar sesiones distintas del mismo día
+        if (c1.time && c2.time && c1.time !== c2.time) {
+          return false;
+        }
+        // Si ambas tienen consecutivo asignado, deben coincidir
+        if (c1.sequenceNumber && c2.sequenceNumber && parseInt(c1.sequenceNumber, 10) !== parseInt(c2.sequenceNumber, 10)) {
+          return false;
+        }
+        // Si tienen slotId asignado, deben coincidir
+        if (c1.scheduleSlotId && c2.scheduleSlotId && c1.scheduleSlotId !== c2.scheduleSlotId) {
+          return false;
+        }
         return true;
       }
     }
