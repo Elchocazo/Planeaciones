@@ -108,3 +108,69 @@ Todo el procesamiento de texto, manejo de imágenes, sincronización de estado y
 - **Persistencia en Lote (`saveClassesBatch`) y Cero Congelamiento de UI**:
   - Toda modificación masiva o propagación de secuencias numéricas debe ejecutarse a través de `ClassRepository.saveClassesBatch`, realizando una única serialización y persistencia física a `LocalStorage` e `IndexedDB`.
   - Queda prohibido iterar llamadas individuales sincrónicas a `saveClass` en bucles de más de 2 clases, garantizando tiempos de respuesta inferiores a 50 ms y cero lag en el hilo principal.
+
+
+### 15. Fidelidad Visual Word = PDF en Exportaciones (`.doc` del Cuaderno Pedagógico)
+«El documento descargado como Word debe verse con la misma estética, jerarquía y paginación que el PDF/vista impresa del cuaderno.»
+
+- **Paginación nativa de Word**: Está prohibido inyectar en el `.doc` los saltos de página calculados por `PaginationEngine` (`nb-page-break-spacer`, `nb-auto-page-break`, `break-before`). Estos fragmentan párrafos y listas a mitad de frase y generan hojas a medio llenar. Word pagina solo; únicamente se conservan los saltos explícitos de hoja independiente (`.notebook-page-break` → `page-break-before:always`).
+- **HTML recombinado**: El cuerpo exportado se obtiene siempre con `PaginationEngine.getCleanHtml` (listas, tablas y párrafos recombinados) y se normaliza con `NotebookEditor.prepareWordHtml`.
+- **Unidades y CSS compatibles con Word**: Prohibido dejar `rem`/`em`/`px`, `display:flex|grid`, `gap`, `grid-template-columns` o `letter-spacing` en estilos en línea; se convierten a `pt` o se sustituyen por tablas (p. ej. el encabezado del taller con Estudiante/Fecha/Calificación).
+- **Justificado seguro**: Los párrafos con saltos manuales `<br>` se exportan alineados a la izquierda para evitar el estiramiento de líneas en Word.
+- **Encabezados y filas**: `keep-with-next` en `h1`-`h6` y `page-break-inside:avoid` en filas de tabla dentro de la hoja de estilos del `.doc`.
+- **Multimedia blindada**: `prepareWordHtml` aísla las imágenes (`___IMG_SHIELD_X___`) antes de aplicar cualquier regex y las restaura intactas.
+- **Regresión obligatoria**: Todo cambio en la exportación debe pasar `scripts/test_word_export_fidelity.js`.
+
+---
+
+### 16. Estandarización y Formato Inviolable del Prompt MEN (Cuaderno Docente y Hoja de Taller)
+«El cuaderno del docente y la hoja de taller deben analizar y renderizar con máxima fidelidad la estructura generada por el prompt institucional oficial del Ministerio de Educación Nacional (MEN).»
+
+- **Blindaje de Rótulos Compuestos**:
+  - Expresiones como `Primer tema:`, `Segundo tema:`, `Nuevo tema:` jamás deben fragmentarse ni separar el ordinal o adjetivo del sustantivo (evitar que `• Primer` quede en una línea y `tema:` en la siguiente).
+- **Inmunidad de Frases en Minúscula ante Falsos Encabezados**:
+  - Frases en minúscula o dentro del flujo gramatical de una oración (p. ej. `...los ejes temáticos, los desempeños de aprendizaje...`) NUNCA deben interpretarse como encabezados estructurales (`<h2>`). Solo los encabezados en mayúsculas sostenidas explícitas (`EJES TEMÁTICOS`, `DESEMPEÑOS DE APRENDIZAJE`) o secciones aisladas pueden transformarse en títulos.
+- **Estandarización de Pasos de Clase y Taller (`Paso \d:`)**:
+  - Todo paso numerado de clase (`Paso 1:`, `Paso 2:`, etc.) debe aislarse y renderizarse uniformemente como encabezado `<h3>` con distintivo visual (`🛠️`), independientemente de si el texto original lo presenta con viñeta, asteriscos o salto simple.
+  - La palabra plural «Pasos para...» o la locución «paso a paso:» es prosa instruccional y jamás debe interpretarse como encabezado individual de paso ni mutilar títulos como «Ejemplo resuelto paso a paso:».
+  - Las viñetas explicativas que desglosan un algoritmo escolar (`• Paso 1 (Alineación): ...`) deben preservarse integradas en su lista de viñetas continua con sus etiquetas en negrita (`<strong>`), sin fragmentarse en bloques dispersos ni convertirse en encabezados si superan los 95 caracteres.
+- **Purga de Indicadores de Paginación en Pantalla**:
+  - Etiquetas efímeras de la vista de pantalla como `Hoja 2`, `Hoja 3` o `Margen 1.27 cm` deben ser filtradas y purgadas de inmediato tanto en la importación, el pegado como en la serialización (`getCleanHtml`), impidiendo que contaminen el texto pedagógico del cuaderno.
+- **Conversión Universal de Flechas y Operadores LaTeX**:
+  - Toda flecha o conector matemático escrito por LLMs como `\rightarrow`, `\to`, `\leftarrow`, `\Rightarrow`, o con barras como `/right` o `/rightarrow`, debe ser convertido a su carácter tipográfico real (`→`, `←`, `⇒`, `×`, `÷`, `±`, `≤`, `≥`, `°`, `...`), garantizando estética de documento Word formal.
+- **Hoja de Taller Única y No Redundante**:
+  - La hoja de taller generada como hoja independiente debe poseer un único membrete institucional estándar (Estudiante, Fecha, Calificación). Queda prohibida la duplicación de bloques de cabecera o la inserción de metadatos curriculares de la Parte 1 dentro del cuerpo del ejercicio práctico.
+- **Protección contra Hojas Iniciales en Blanco (`First-Page Empty Guard`)**:
+  - En la Página 1, el motor de paginación (`PaginationEngine`) prohíbe expulsar el bloque o lista inicial hacia la Página 2 si `currentHeightOnPage < 120px` y existe espacio disponible (>= 150px). Las listas deben fragmentarse desde su primer ítem (`fitCount = 1`) para garantizar que la primera página comience con contenido docente real sin dejar un folio en blanco.
+- **Aislamiento Estricto del Salto de Página del Taller (`Worksheet Header Isolation`)**:
+  - El único salto de página manual (`.notebook-page-break`) admitido en el cuaderno pedagógico es el que precede inmediatamente a la hoja independiente del taller (`.notebook-student-worksheet-header`). Todo salto de página espurio al inicio del documento o entre encabezados introductorios es purgado obligatoriamente en `sanitizeNotebookHtml`.
+- **Regresión Obligatoria**:
+  - Todo cambio en el importador o renderizador debe superar `scripts/test_prompt_template_format.js`, `scripts/test_user_reported_cleanup.js`, `scripts/test_notebook_pagination.js` y `scripts/test_import_parser.js` al 100%.
+
+---
+
+### 17. Experiencia Documental Fidedigna de Microsoft Word (Separación Física de Hojas, Configuración de Página y Estabilidad de Teclado)
+«El cuaderno pedagógico debe brindar la misma experiencia física, visual y operativa de edición de Microsoft Word y Google Docs, garantizando hojas separadas en pantalla, controles completos de maquetación y navegación estable del cursor».
+
+- **Separación Física Real de Hojas (`Desk Gap & Sheet Shadows`)**:
+  - Las páginas en pantalla no deben mostrarse como una cinta continua blanca indistinguible. Cada página debe representarse como una hoja de papel independiente sobre el escritorio grisáceo (`#cbd5e1`), separada de la siguiente por una brecha física de 32px con sombras de relieve superior e inferior (`.nb-page-desk-gap`), con su correspondiente distintivo centrado (`Hoja X • Carta • Margen 1.27 cm`).
+- **Controles Completos de Formato y Maquetación Word**:
+  - **Tamaño de Papel**: Selector en la barra de herramientas para Carta (Letter: 215.9 x 279.4 mm), A4 (210 x 297 mm) y Oficio (Legal: 215.9 x 355.6 mm).
+  - **Orientación**: Vertical (Portrait) y Horizontal (Landscape), recalculando dinámicamente el ancho y alto útil.
+  - **Márgenes**: Estrecho (1.27 cm), Moderado (2.0 cm), Normal (2.54 cm) y Compacto (1.0 cm).
+  - **Interlineado**: 1.0 (Sencillo), 1.15 (Normal), 1.45 (Pedagógico), 1.5 (Líneas y media) y 2.0 (Doble).
+  - **Barra de Estado Word**: Pie fijo inferior que refleja en tiempo real el total de páginas, conteo de palabras, especificación de papel, orientación, margen activo y estado de guardado.
+- **Navegación Estable de Teclado y Prevención de Pegado de Texto (`Backspace & Delete Trapping Guard`)**:
+  - Al pulsar `Backspace` al inicio de un bloque situado tras un salto de página manual, este debe eliminarse limpiamente. Si se encuentra tras un espaciador automático de hoja, el cursor debe transicionar al final del bloque de la página previa sin colapsar las etiquetas ni pegar el texto (`"se pega al texto"`).
+  - Al pulsar `Delete` (`Supr`) al final de un bloque antes de un salto de página, debe suprimir el salto o avanzar el foco al inicio de la página siguiente de forma fluida.
+- **Inmunidad Universal contra Páginas Casi Vacías (`Universal Empty-Page Guard`)**:
+  - En cualquier página del cuaderno, queda terminantemente prohibido expulsar un bloque o definición hacia la hoja siguiente dejando la página actual prácticamente vacía con solo 1 o 2 líneas (`currentHeightOnPage < 150px`) si la página dispone de espacio útil (>= 150px).
+- **Anclaje Inmune del Cursor durante la Re-Paginación**:
+  - Durante los ciclos de re-paginación, la posición del cursor se preserva mediante marcador efímero (`#nb-caret-temp-marker`), impidiendo saltos arbitrarios de foco o pérdidas de cursor al teclear espacios o editar párrafos.
+- **Normalización y Ejecución Fidedigna de Saltos Manuales de Página (`Manual Page Break & List Splitting`)**:
+  - Al insertar un salto de página manual (`📄 Salto de Página` o `Ctrl+Enter`) dentro de una lista (`<ul>` o `<ol>`) o párrafo, el editor divide limpiamente el contenedor en dos partes (`ul1` y `ul2`) colocando el salto como un bloque directo de nivel superior.
+  - El motor de paginación (`_normalizeNestedPageBreaks`) repara y promueve automáticamente cualquier salto anidado previo.
+  - El salto manual actúa como remate de la página actual; el espaciador de hoja ubica la brecha física (`Hoja X`) inmediatamente después de la línea de salto, trasladando el bloque siguiente (`targetBlock`) de forma inmediata y certera al margen superior de la nueva hoja.
+
+
+

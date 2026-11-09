@@ -13,16 +13,22 @@ const DATA_SCHEMA_VERSION = 5;
 class MigrationManagerClass {
   constructor() {
     this.SCHEMA_KEY = 'planeaciones_data_schema_version';
+    this._schemaVersionMem = 0;
   }
 
   getCurrentVersion() {
+    if (this._schemaVersionMem >= DATA_SCHEMA_VERSION) {
+      return this._schemaVersionMem;
+    }
     try {
       if (typeof localStorage !== 'undefined') {
         const v = localStorage.getItem(this.SCHEMA_KEY);
-        return v ? parseInt(v, 10) : 0;
+        const parsed = v ? parseInt(v, 10) : 0;
+        if (parsed > 0) this._schemaVersionMem = parsed;
+        return parsed;
       }
     } catch (e) {}
-    return 0;
+    return this._schemaVersionMem || 0;
   }
 
   needsMigration() {
@@ -38,6 +44,16 @@ class MigrationManagerClass {
     if (!this.needsMigration()) {
       return { success: true, message: 'El esquema ya se encuentra en la versión más reciente (v5).' };
     }
+    if (typeof IDBStorage !== 'undefined' && IDBStorage.get) {
+      try {
+        const idbVer = await IDBStorage.get(this.SCHEMA_KEY);
+        if (idbVer && parseInt(String(idbVer), 10) >= DATA_SCHEMA_VERSION) {
+          this._schemaVersionMem = DATA_SCHEMA_VERSION;
+          try { if (typeof localStorage !== 'undefined') localStorage.setItem(this.SCHEMA_KEY, String(DATA_SCHEMA_VERSION)); } catch (e) {}
+          return { success: true, message: 'El esquema ya se encuentra en la versión más reciente (v5 en IndexedDB).' };
+        }
+      } catch (eIdbVer) {}
+    }
 
     console.log(`[MigrationManager] Iniciando protocolo de migración segura a v5 para ${tid}...`);
 
@@ -49,12 +65,13 @@ class MigrationManagerClass {
     }
 
     try {
+      // Capturar planes heredados ANTES de cualquier purga de cuota durante la recuperación
+      const legacyPlans = await this._extractAllLegacyPlans(tid);
       // PASO 2: EJECUTAR RECUPERACIÓN UNIVERSAL CON RecoveryService (Req. 2, 3, 110)
       if (typeof RecoveryService !== 'undefined' && RecoveryService.executeSafeRecovery) {
         const recovResult = await RecoveryService.executeSafeRecovery(tid);
         console.log(`[MigrationManager] RecoveryService procesó ${recovResult.totalClasses} clases.`);
       }
-      const legacyPlans = this._extractAllLegacyPlans(tid);
       const totalDays = Object.keys(legacyPlans).length;
       let totalLegacyClasses = 0;
       Object.values(legacyPlans).forEach(p => {
@@ -66,6 +83,7 @@ class MigrationManagerClass {
       // PASO 3: TRANSFORMAR A ENTIDADES INDEPENDIENTES ClassSession
       const migratedSessions = {};
       const generatedSequences = {};
+      let skippedOrDedupedCount = 0;
 
       Object.keys(legacyPlans).forEach(dateStr => {
         const plan = legacyPlans[dateStr];
@@ -74,9 +92,22 @@ class MigrationManagerClass {
         const period = plan.period || '1°';
 
         plan.classes.forEach((legacyClass, idx) => {
-          let classId = legacyClass.id || legacyClass.classId || ClassRepository.generateClassId('cls');
+          if (!legacyClass || typeof legacyClass !== 'object') {
+            skippedOrDedupedCount++;
+            return;
+          }
+          let classId = legacyClass.id || legacyClass.classId || ('cls_mig_' + dateStr.replace(/-/g, '') + '_' + idx);
           if (migratedSessions[classId]) {
-            classId = ClassRepository.generateClassId('cls');
+            if (migratedSessions[classId].date === dateStr) {
+              skippedOrDedupedCount++;
+              return;
+            }
+            // ID determinista por fecha para evitar explosión de clones aleatorios entre ejecuciones
+            classId = classId + '_' + dateStr.replace(/-/g, '');
+            if (migratedSessions[classId]) {
+              skippedOrDedupedCount++;
+              return;
+            }
           }
           const subName = legacyClass.subject || legacyClass.subjectName || 'General';
           const grdName = legacyClass.grade || legacyClass.gradeName || 'General';
@@ -87,6 +118,17 @@ class MigrationManagerClass {
           const parsedSeq = rawSeq !== undefined && rawSeq !== null && !isNaN(parseInt(String(rawSeq).replace(/[^0-9]/g, ''), 10))
             ? parseInt(String(rawSeq).replace(/[^0-9]/g, ''), 10)
             : (idx + 1);
+
+          if (typeof ClassRepository !== 'undefined') {
+            if (ClassRepository.isDeletedClass && ClassRepository.isDeletedClass(classId, tid)) {
+              skippedOrDedupedCount++;
+              return;
+            }
+            if (ClassRepository.isDeletedSlot && ClassRepository.isDeletedSlot(dateStr, subName, grdName, parsedSeq, tid)) {
+              skippedOrDedupedCount++;
+              return;
+            }
+          }
 
           // Parsear fases pedagógicas desde description
           const parsedPedagogy = this._parseLegacyPedagogy(legacyClass.description || '');
@@ -164,10 +206,11 @@ class MigrationManagerClass {
         });
       });
 
-      // PASO 4: VALIDACIÓN ESTRICTA (Req. 62, 68)
+      // PASO 4: VALIDACIÓN ESTRICTA DESCONTANDO TOMBSTONES Y DUPLICADOS IDÉNTICOS (Req. 62, 68)
       const migratedCount = Object.keys(migratedSessions).length;
-      if (totalLegacyClasses > 0 && migratedCount < totalLegacyClasses) {
-        throw new Error(`Validación fallida: se esperaban ${totalLegacyClasses} clases y se procesaron ${migratedCount}.`);
+      const expectedCount = Math.max(0, totalLegacyClasses - skippedOrDedupedCount);
+      if (expectedCount > 0 && migratedCount < expectedCount) {
+        throw new Error(`Validación fallida: se esperaban ${expectedCount} clases válidas y se procesaron ${migratedCount}.`);
       }
 
       // PASO 5: GUARDAR NUEVO MODELO ATÓMICO
@@ -177,6 +220,11 @@ class MigrationManagerClass {
         : {};
       
       Object.keys(migratedSessions).forEach(cid => {
+        if (typeof ClassRepository !== 'undefined') {
+          if (ClassRepository.isDeletedClass && ClassRepository.isDeletedClass(cid, tid)) return;
+          const s = migratedSessions[cid];
+          if (s && ClassRepository.isDeletedSlot && ClassRepository.isDeletedSlot(s.date, s.subject, s.grade, s.sequenceNumber || s.dayNumber, tid)) return;
+        }
         if (!currentMap[cid]) {
           currentMap[cid] = migratedSessions[cid];
         } else {
@@ -191,7 +239,14 @@ class MigrationManagerClass {
 
       const classKey = ClassRepository.getStorageKey(tid);
       if (typeof localStorage !== 'undefined') {
-        localStorage.setItem(classKey, JSON.stringify(currentMap));
+        try {
+          localStorage.setItem(classKey, JSON.stringify(currentMap));
+        } catch (eQuotaCls) {
+          if (typeof ClassRepository !== 'undefined' && typeof ClassRepository._freeUpLocalStorageQuota === 'function') {
+            ClassRepository._freeUpLocalStorageQuota(tid);
+            try { localStorage.setItem(classKey, JSON.stringify(currentMap)); } catch (eRetryCls) {}
+          }
+        }
       }
       if (typeof IDBStorage !== 'undefined' && IDBStorage.set) {
         await IDBStorage.set(classKey, currentMap);
@@ -207,7 +262,9 @@ class MigrationManagerClass {
       const seqKey = SequenceRepository.getStorageKey(tid);
       const seqArray = Object.values(generatedSequences);
       if (typeof localStorage !== 'undefined') {
-        localStorage.setItem(seqKey, JSON.stringify(seqArray));
+        try {
+          localStorage.setItem(seqKey, JSON.stringify(seqArray));
+        } catch (eQuotaSeq) {}
       }
       if (typeof IDBStorage !== 'undefined' && IDBStorage.set) {
         await IDBStorage.set(seqKey, seqArray);
@@ -216,9 +273,20 @@ class MigrationManagerClass {
         SequenceRepository._cache[tid] = seqArray;
       }
 
-      // PASO 6: REGISTRAR RESULTADO Y VERSIÓN DE ESQUEMA
+      // PASO 6: REGISTRAR RESULTADO Y VERSIÓN DE ESQUEMA EN MEMORIA, LOCALSTORAGE E INDEXEDDB
+      this._schemaVersionMem = DATA_SCHEMA_VERSION;
       if (typeof localStorage !== 'undefined') {
-        localStorage.setItem(this.SCHEMA_KEY, String(DATA_SCHEMA_VERSION));
+        try {
+          localStorage.setItem(this.SCHEMA_KEY, String(DATA_SCHEMA_VERSION));
+        } catch (eQuotaSchema) {
+          if (typeof ClassRepository !== 'undefined' && typeof ClassRepository._freeUpLocalStorageQuota === 'function') {
+            ClassRepository._freeUpLocalStorageQuota(tid);
+            try { localStorage.setItem(this.SCHEMA_KEY, String(DATA_SCHEMA_VERSION)); } catch (e2) {}
+          }
+        }
+      }
+      if (typeof IDBStorage !== 'undefined' && IDBStorage.set) {
+        await IDBStorage.set(this.SCHEMA_KEY, String(DATA_SCHEMA_VERSION));
       }
 
       console.log(`[MigrationManager] Migración completada con éxito. ${migratedCount} clases migradas y validadas.`);
@@ -308,8 +376,18 @@ class MigrationManagerClass {
     return result;
   }
 
-  _extractAllLegacyPlans(teacherId) {
+  async _extractAllLegacyPlans(teacherId) {
     const plans = {};
+
+    // 0. Consultar IndexedDB v3 primero si existe
+    if (typeof IDBStorage !== 'undefined' && IDBStorage.get) {
+      try {
+        const idbV3 = await IDBStorage.get('teacher_planner_plans_' + teacherId + '_v3');
+        if (idbV3 && typeof idbV3 === 'object') {
+          Object.assign(plans, idbV3);
+        }
+      } catch (eIdb) {}
+    }
 
     // 1. Intentar v3
     try {
@@ -403,7 +481,9 @@ class MigrationManagerClass {
     if (!snapshot || !snapshot.localStorageDump) return false;
     try {
       Object.keys(snapshot.localStorageDump).forEach(k => {
-        localStorage.setItem(k, snapshot.localStorageDump[k]);
+        try {
+          localStorage.setItem(k, snapshot.localStorageDump[k]);
+        } catch (eKey) {}
       });
       console.log('[MigrationManager] Rollback ejecutado con éxito.');
       return true;

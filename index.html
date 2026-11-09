@@ -6,7 +6,7 @@
   <title>Planeador de Clases Pedagógico - Gestión Docente</title>
   <meta name="description" content="Aplicación profesional para organizar y estructurar planeadores de clase docentes con vista de calendario y exportación a Word y PDF.">
   
-  <link rel="stylesheet" href="css/styles.css?v=20261020-v1">
+  <link rel="stylesheet" href="css/styles.css?v=20261029-v2">
   
   <!-- Favicon SVG -->
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%234f46e5'><path d='M4 19.5A2.5 2.5 0 0 1 6.5 17H20'/><path d='M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z'/></svg>">
@@ -296,7 +296,7 @@
       margin-top: 0.5rem;
     }
 
-    /* Vista estricta para Coordinación Académica (Marisol Ruiz): Únicamente Calendario */
+    /* Vista estricta para Coordinación Académica (Marisol Ruiz): Calendario y Cuaderno Pedagógico */
     body.role-coordinator-active #header-admin-tools,
     body.role-coordinator-active #main-app-nav,
     body.role-coordinator-active .user-switcher-dropdown,
@@ -306,11 +306,22 @@
     body.role-coordinator-active #recovery-view {
       display: none !important;
     }
-    body.role-coordinator-active #calendar-view {
+    body.role-coordinator-active:not(.notebook-mode) #calendar-view {
       display: grid !important;
+    }
+    body.role-coordinator-active.notebook-mode #calendar-view {
+      display: none !important;
+    }
+    body.role-coordinator-active.notebook-mode #notebook-view {
+      display: block !important;
     }
     body.role-coordinator-active .teacher-identity {
       cursor: default !important;
+    }
+    @media print {
+      body.role-coordinator-active #calendar-view {
+        display: none !important;
+      }
     }
   </style>
 
@@ -516,7 +527,7 @@
         </button>
 
         <!-- HERRAMIENTAS EXCLUSIVAS DEL ADMINISTRADOR / DOCENTE (100% ocultas para Marisol Ruiz) -->
-        <div class="header-admin-tools" id="header-admin-tools" style="display:flex; align-items:center; gap:0.4rem; flex-wrap:nowrap;">
+        <div class="header-admin-tools" id="header-admin-tools" style="display:flex; align-items:center; gap:0.4rem; flex-wrap:wrap;">
 
           <!-- Indicador de Sincronización en la Nube -->
           <div id="firestore-cloud-status-badge" class="cloud-status-pill offline" onclick="FirestoreConfigModal.open()" title="Sincronización en la Nube con Google Cloud Firestore" style="white-space:nowrap; font-size:0.78rem; padding:4px 8px; cursor:pointer;">
@@ -1190,63 +1201,63 @@
 
   <!-- Scripts de la Aplicación -->
   <!-- 1. Almacenamiento base y perfiles (JSZip se carga bajo demanda al exportar a Word) -->
-  <script src="js/idb-storage.js?v=20261020-v2"></script>
-  <script src="js/storage.js?v=20261020-v2"></script>
-  <script src="js/holidays.js?v=20261020-v2"></script>
+  <script src="js/idb-storage.js?v=20261029-v2"></script>
+  <script src="js/storage.js?v=20261029-v2"></script>
+  <script src="js/holidays.js?v=20261029-v2"></script>
 
   <!-- 2. Datos curriculares modularizados bajo demanda -->
-  <script src="js/data/curriculum/matematicas.js?v=20261020-v2"></script>
-  <script src="js/data/curriculum/sistemas.js?v=20261020-v2"></script>
-  <script src="js/data/curriculum/robotica.js?v=20261020-v2"></script>
-  <script src="js/data/curriculum/logica.js?v=20261020-v2"></script>
-  <script src="js/data/curriculum/direccion_grupo.js?v=20261020-v2"></script>
-  <script src="js/data/curriculum-data.js?v=20261020-v2"></script>
-  <script src="js/data/initial-classes-data.js?v=20261020-v2"></script>
+  <script src="js/data/curriculum/matematicas.js?v=20261029-v2"></script>
+  <script src="js/data/curriculum/sistemas.js?v=20261029-v2"></script>
+  <script src="js/data/curriculum/robotica.js?v=20261029-v2"></script>
+  <script src="js/data/curriculum/logica.js?v=20261029-v2"></script>
+  <script src="js/data/curriculum/direccion_grupo.js?v=20261029-v2"></script>
+  <script src="js/data/curriculum-data.js?v=20261029-v2"></script>
+  <script src="js/data/initial-classes-data.js?v=20261029-v2"></script>
 
   <!-- 3. Repositorios de datos desacoplados -->
-  <script src="js/repositories/schedule-repository.js?v=20261020-v2"></script>
-  <script src="js/repositories/sequence-repository.js?v=20261020-v2"></script>
-  <script src="js/repositories/class-repository.js?v=20261020-v2"></script>
-  <script src="js/repositories/curriculum-repository.js?v=20261020-v2"></script>
+  <script src="js/repositories/schedule-repository.js?v=20261029-v2"></script>
+  <script src="js/repositories/sequence-repository.js?v=20261029-v2"></script>
+  <script src="js/repositories/class-repository.js?v=20261029-v2"></script>
+  <script src="js/repositories/curriculum-repository.js?v=20261029-v2"></script>
 
   <!-- 4. Capa Core y Estado -->
-  <script src="js/core/app-state.js?v=20261020-v2"></script>
-  <script src="js/core/router.js?v=20261020-v2"></script>
-  <script src="js/core/pagination-engine.js?v=20261020-v2"></script>
+  <script src="js/core/app-state.js?v=20261029-v2"></script>
+  <script src="js/core/router.js?v=20261029-v2"></script>
+  <script src="js/core/pagination-engine.js?v=20261029-v2"></script>
 
   <!-- 5. Servicios de Dominio -->
-  <script src="js/users-service.js?v=20261020-v2"></script>
-  <script src="js/services/class-service.js?v=20261020-v2"></script>
-  <script src="js/services/sequence-service.js?v=20261020-v2"></script>
-  <script src="js/services/schedule-service.js?v=20261020-v2"></script>
-  <script src="js/services/recovery-service.js?v=20261020-v2"></script>
-  <script src="js/services/migration-manager.js?v=20261020-v2"></script>
-  <script src="js/services/backup-service.js?v=20261020-v2"></script>
-  <script src="js/services/import-parser.js?v=20261020-v2"></script>
-  <script src="js/services/import-service.js?v=20261020-v2"></script>
-  <script src="js/services/firestore-service.js?v=20261020-v2"></script>
+  <script src="js/users-service.js?v=20261029-v2"></script>
+  <script src="js/services/class-service.js?v=20261029-v2"></script>
+  <script src="js/services/sequence-service.js?v=20261029-v2"></script>
+  <script src="js/services/schedule-service.js?v=20261029-v2"></script>
+  <script src="js/services/recovery-service.js?v=20261029-v2"></script>
+  <script src="js/services/migration-manager.js?v=20261029-v2"></script>
+  <script src="js/services/backup-service.js?v=20261029-v2"></script>
+  <script src="js/services/import-parser.js?v=20261029-v2"></script>
+  <script src="js/services/import-service.js?v=20261029-v2"></script>
+  <script src="js/services/firestore-service.js?v=20261029-v2"></script>
 
   <!-- 6. Servicios auxiliares heredados pero necesarios -->
-  <script src="js/plan-repository.js?v=20261020-v2"></script>
-  <script src="js/curriculum.js?v=20261020-v2"></script>
-  <script src="js/docx-generator.js?v=20261020-v2"></script>
-  <script src="js/export/export-adapter.js?v=20261020-v2"></script>
-  <script src="js/export.js?v=20261020-v2"></script>
+  <script src="js/plan-repository.js?v=20261029-v2"></script>
+  <script src="js/curriculum.js?v=20261029-v2"></script>
+  <script src="js/docx-generator.js?v=20261029-v2"></script>
+  <script src="js/export/export-adapter.js?v=20261029-v2"></script>
+  <script src="js/export.js?v=20261029-v2"></script>
 
   <!-- 7. Vistas y Componentes UI -->
-  <script src="js/ui/curriculum-selector.js?v=20261020-v2"></script>
-  <script src="js/ui/import-modal.js?v=20261020-v2"></script>
-  <script src="js/ui/dashboard-view.js?v=20261020-v2"></script>
-  <script src="js/ui/class-editor-view.js?v=20261020-v2"></script>
-  <script src="js/ui/sequence-view.js?v=20261020-v2"></script>
-  <script src="js/ui/history-view.js?v=20261020-v2"></script>
-  <script src="js/ui/recovery-view.js?v=20261020-v2"></script>
-  <script src="js/notebook-editor.js?v=20261020-v2"></script>
-  <script src="js/coordinator-view.js?v=20261020-v2"></script>
-  <script src="js/ui/auth-modal.js?v=20261020-v2"></script>
-  <script src="js/calendar.js?v=20261020-v2"></script>
-  <script src="js/planner.js?v=20261020-v2"></script>
-  <script src="js/app.js?v=20261020-v2"></script>
+  <script src="js/ui/curriculum-selector.js?v=20261029-v2"></script>
+  <script src="js/ui/import-modal.js?v=20261029-v2"></script>
+  <script src="js/ui/dashboard-view.js?v=20261029-v2"></script>
+  <script src="js/ui/class-editor-view.js?v=20261029-v2"></script>
+  <script src="js/ui/sequence-view.js?v=20261029-v2"></script>
+  <script src="js/ui/history-view.js?v=20261029-v2"></script>
+  <script src="js/ui/recovery-view.js?v=20261029-v2"></script>
+  <script src="js/notebook-editor.js?v=20261029-v2"></script>
+  <script src="js/coordinator-view.js?v=20261029-v2"></script>
+  <script src="js/ui/auth-modal.js?v=20261029-v2"></script>
+  <script src="js/calendar.js?v=20261029-v2"></script>
+  <script src="js/planner.js?v=20261029-v2"></script>
+  <script src="js/app.js?v=20261029-v2"></script>
 </body>
 </html>
 

@@ -496,11 +496,17 @@ class SequenceViewClass {
       `;
     }
 
-    // 1. Agrupar las secuencias por Grado escolar
+    // 1. Agrupar las secuencias por Grado escolar unificado institucionalmente
     const gradeGroupsMap = {};
     sequences.forEach(seq => {
-      const gName = String(seq.gradeName || 'General').trim();
-      const gKey = gName.toLowerCase().replace(/[^a-z0-9]/g, '_');
+      const rawGName = String(seq.gradeName || 'General').trim();
+      const gName = typeof ClassRepository !== 'undefined' && typeof ClassRepository.canonicalGrade === 'function'
+        ? ClassRepository.canonicalGrade(rawGName)
+        : rawGName;
+      const gKey = (typeof ClassRepository !== 'undefined' && typeof ClassRepository._normGrade === 'function')
+        ? ClassRepository._normGrade(gName)
+        : gName.toLowerCase().replace(/[^a-z0-9]/g, '_');
+
       if (!gradeGroupsMap[gKey]) {
         gradeGroupsMap[gKey] = {
           gradeKey: gKey,
@@ -975,7 +981,12 @@ class SequenceViewClass {
     });
 
     // Filtrar estrictamente clases vigentes (no eliminadas ni tombstones)
-    const validGroupClasses = groupClasses.filter(c => c && c.id && !ClassRepository.isDeletedClass(c.id, tid));
+    const validGroupClasses = groupClasses.filter(c => {
+      if (!c || !c.id) return false;
+      if (ClassRepository.isDeletedClass && ClassRepository.isDeletedClass(c.id, tid)) return false;
+      if (ClassRepository.isDeletedSlot && ClassRepository.isDeletedSlot(c.date, c.subjectName || c.subject, c.gradeName || c.grade, c.sequenceNumber || c.dayNumber, tid)) return false;
+      return true;
+    });
 
     if (validGroupClasses.length === 0) {
       if (typeof App !== 'undefined' && App.showToast) App.showToast('No se encontraron clases para renumerar', 'info');
@@ -1045,6 +1056,7 @@ class SequenceViewClass {
       const futureClasses = allClasses.filter(c => {
         if (!c.date) return false;
         if (ClassRepository.isDeletedClass(c.id, tid)) return false;
+        if (ClassRepository.isDeletedSlot && ClassRepository.isDeletedSlot(c.date, c.subjectName || c.subject, c.gradeName || c.grade, c.sequenceNumber || c.dayNumber, tid)) return false;
         if (c.date < cls.date) return false;
         if (c.date === cls.date && c.id === cls.id) return false;
         if (curPeriod && String(c.period || '1°').trim() !== curPeriod) return false;

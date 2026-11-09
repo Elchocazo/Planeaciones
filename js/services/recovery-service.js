@@ -86,6 +86,13 @@ class RecoveryServiceClass {
       const cId = raw.id || raw.classId;
       if (cId && deletedIds.has(String(cId))) return true;
       if (repo && typeof repo.isDeletedClass === 'function' && cId && repo.isDeletedClass(cId, tid)) return true;
+      if (repo && typeof repo.isDeletedSlot === 'function') {
+        const d = raw.date || '';
+        const sub = raw.subject || raw.subjectName;
+        const grd = raw.grade || raw.gradeName || raw.group;
+        const seq = raw.sequenceNumber || raw.dayNumber || raw.consecutive;
+        if (repo.isDeletedSlot(d, sub, grd, seq, tid)) return true;
+      }
       return false;
     };
 
@@ -141,6 +148,26 @@ class RecoveryServiceClass {
           return;
         }
 
+        // Si tiene volcado stringificado (migration_backup_* o backup_recovery_pre_execution_*)
+        if (item.localStorageDump && typeof item.localStorageDump === 'object') {
+          processItem(item.localStorageDump, `${sourceName}.localStorageDump`);
+          return;
+        }
+
+        // Si contiene valores JSON stringificados (como en backup_recovery_pre_execution_*)
+        const stringJsonEntries = Object.entries(item).filter(([k, v]) =>
+          typeof v === 'string' && v.length > 20 && (v[0] === '{' || v[0] === '[') &&
+          (k.includes('plan') || k.includes('class') || k.includes('snapshot'))
+        );
+        if (stringJsonEntries.length > 0) {
+          stringJsonEntries.forEach(([k, v]) => {
+            try {
+              processItem(JSON.parse(v), `${sourceName}.${k}`);
+            } catch (eStr) {}
+          });
+          return;
+        }
+
         // Si tiene clave 'classes' o 'plans'
         if (item.plans && typeof item.plans === 'object') {
           Object.keys(item.plans).forEach(d => {
@@ -158,10 +185,13 @@ class RecoveryServiceClass {
         }
       }
 
-      // Si es un array directo de clases
+      // Si es un array (clases directas o puntos de restauración snapshot_*_history con .data)
       if (Array.isArray(item)) {
         item.forEach((cls, idx) => {
-          if (cls && typeof cls === 'object' && (cls.subject || cls.subjectName || cls.topic || cls.curriculum)) {
+          if (!cls || typeof cls !== 'object') return;
+          if (cls.data && typeof cls.data === 'object') {
+            processItem(cls.data, `${sourceName}[${idx}]`);
+          } else if (cls.subject || cls.subjectName || cls.topic || cls.curriculum) {
             if (!isDeleted(cls)) {
               allFoundClasses.push(this._normalizeExtractedClass(cls, cls.date || '', cls.period || '1°', sourceName, idx));
             }
@@ -233,6 +263,15 @@ class RecoveryServiceClass {
       const existingId = recoveredCls.id;
       if (repo && typeof repo.isDeletedClass === 'function' && repo.isDeletedClass(existingId, tid)) {
         return; // NUNCA recuperar clases eliminadas por el docente!
+      }
+      if (repo && typeof repo.isDeletedSlot === 'function') {
+        const d = recoveredCls.date || '';
+        const sub = recoveredCls.subject || recoveredCls.subjectName;
+        const grd = recoveredCls.grade || recoveredCls.gradeName || recoveredCls.group;
+        const seq = recoveredCls.sequenceNumber || recoveredCls.dayNumber || recoveredCls.consecutive;
+        if (repo.isDeletedSlot(d, sub, grd, seq, tid)) {
+          return; // NUNCA recuperar ranuras eliminadas por el docente!
+        }
       }
       const existing = currentClassesMap[existingId];
 
@@ -311,66 +350,32 @@ class RecoveryServiceClass {
     let rescuedCount = 0;
     const rescuedClasses = [];
 
-    // 1. Semilla oficial conocida para comparar temas originales
-    const seedTopics = {
-      'Matemáticas_3°_2026-10-14': 'Propiedades de la adición',
-      'Sistemas_5°_2026-10-14': 'Estructuración y diseño de tablas',
-      'Matemáticas_7°_2026-10-14': 'RESOLUCIÓN DE POLINOMIOS',
-      'Matemáticas_2°_2026-10-15': 'Taller práctico impreso',
-      'Sistemas_4°B_2026-10-15': 'Aplicación práctica y diseño de tablas',
-      'Sistemas_1°_2026-10-15': 'Diferencias entre objetos naturales'
-    };
-
-    // 2. Escanear todas las clases en el mapa
+    // 1. Escanear clases en el mapa: asegurar que ninguna clase con fecha válida de octubre esté oculta como huérfana (Regla 10 y Regla 14: jamás alterar fechas)
     Object.values(map).forEach(c => {
       if (!c || (repo && typeof repo.isDeletedClass === 'function' && repo.isDeletedClass(c.id, tid))) return;
-      const sub = c.subjectName || c.subject || '';
-      const grd = c.gradeName || c.grade || '';
+      if (repo && typeof repo.isDeletedSlot === 'function') {
+        const d = c.date || '';
+        const sub = c.subjectName || c.subject;
+        const grd = c.gradeName || c.grade || c.group;
+        const seq = c.sequenceNumber || c.dayNumber || c.consecutive;
+        if (repo.isDeletedSlot(d, sub, grd, seq, tid)) return;
+      }
       const topic = c.curriculum?.topic || c.topic || '';
       const desarrollo = c.didacticSequence?.desarrollo || c.description || '';
-      const hasContent = Boolean(topic.trim() || desarrollo.trim());
+      const notebook = c.teacherNotebook?.studentNotebookContent || c.notebookContent || '';
+      const hasContent = Boolean(topic.trim() || desarrollo.trim() || notebook.trim());
 
-      // Si está en 2026-10-21 o 2026-10-22, asegurar que no esté oculta como huérfana
-      if (c.date === '2026-10-21' || c.date === '2026-10-22') {
-        c.isOrphaned = false;
-        if (c.status === 'orphaned') c.status = 'planned';
-        rescuedClasses.push(c);
-        rescuedCount++;
-        return;
-      }
-
-      // Si fue arrastrada a 2026-10-14 pero tiene tema diferente al seed (era del 21 de octubre)
-      if (c.date === '2026-10-14' && hasContent) {
-        const seedPrefix = seedTopics[`${sub}_${grd}_2026-10-14`];
-        if (seedPrefix && !topic.toLowerCase().includes(seedPrefix.toLowerCase())) {
-          console.log(`[RecoveryService] Rescatando clase de 2026-10-14 -> 2026-10-21: ${sub} ${grd} - ${topic}`);
-          c.date = '2026-10-21';
-          c.dayOfWeek = 'Miércoles';
+      if (c.date && c.date >= '2026-10-16' && hasContent) {
+        if (c.isOrphaned || c.status === 'orphaned') {
           c.isOrphaned = false;
-          c.status = 'planned';
+          if (c.status === 'orphaned') c.status = 'planned';
           rescuedClasses.push(c);
           rescuedCount++;
-          return;
-        }
-      }
-
-      // Si fue arrastrada a 2026-10-15 pero tiene tema diferente al seed (era del 22 de octubre)
-      if (c.date === '2026-10-15' && hasContent) {
-        const seedPrefix = seedTopics[`${sub}_${grd}_2026-10-15`];
-        if (seedPrefix && !topic.toLowerCase().includes(seedPrefix.toLowerCase())) {
-          console.log(`[RecoveryService] Rescatando clase de 2026-10-15 -> 2026-10-22: ${sub} ${grd} - ${topic}`);
-          c.date = '2026-10-22';
-          c.dayOfWeek = 'Jueves';
-          c.isOrphaned = false;
-          c.status = 'planned';
-          rescuedClasses.push(c);
-          rescuedCount++;
-          return;
         }
       }
     });
 
-    // 3. También escanear localStorage por si hay snapshots recientes con clases del 21/22
+    // 2. Escanear localStorage por si existen snapshots recientes con clases desde el 16 de octubre en adelante no presentes aún en el mapa
     if (typeof localStorage !== 'undefined') {
       try {
         for (let i = 0; i < localStorage.length; i++) {
@@ -378,22 +383,39 @@ class RecoveryServiceClass {
           if (!k) continue;
           if (k.startsWith('snapshot_') || k.startsWith('backup_') || k.includes('teacher_class_sessions_') || k.includes('teacher_planner_plans_')) {
             const raw = localStorage.getItem(k);
-            if (!raw || (!raw.includes('2026-10-21') && !raw.includes('2026-10-22'))) continue;
+            if (!raw || (!raw.includes('2026-10-') && !raw.includes('2026-11-'))) continue;
             try {
               const data = JSON.parse(raw);
               const items = Array.isArray(data) ? data : (data.classes || Object.values(data));
               items.forEach(it => {
-                if (it && (it.date === '2026-10-21' || it.date === '2026-10-22')) {
-                  const itId = it.id || repo.generateClassId('cls');
-                  if (!map[itId]) {
-                    const norm = repo._normalizeClassSession ? repo._normalizeClassSession(it, null) : it;
-                    norm.isOrphaned = false;
-                    norm.status = 'planned';
-                    map[itId] = norm;
-                    rescuedClasses.push(norm);
-                    rescuedCount++;
-                  }
-                }
+                if (!it || typeof it !== 'object') return;
+                // Si es un mapa de planes diarios (con .classes adentro), iterar sus clases
+                const subItems = Array.isArray(it.classes) ? it.classes : [it];
+                subItems.forEach(clsCandidate => {
+                  if (!clsCandidate || !clsCandidate.date || clsCandidate.date < '2026-10-16') return;
+                  const itId = clsCandidate.id || clsCandidate.classId || (repo.generateClassId ? repo.generateClassId('cls') : null);
+                  if (!itId || map[itId]) return;
+                  if (repo.isDeletedClass && repo.isDeletedClass(itId, tid)) return;
+
+                  // Evitar duplicar si ya existe en esa misma fecha la misma materia, grado y tema
+                  const candSub = String(clsCandidate.subjectName || clsCandidate.subject || '').toLowerCase().trim();
+                  const candGrd = String(clsCandidate.gradeName || clsCandidate.grade || '').toLowerCase().trim();
+                  const candTop = String(clsCandidate.curriculum?.topic || clsCandidate.topic || '').toLowerCase().trim().slice(0, 40);
+                  const alreadyExists = Object.values(map).some(ec =>
+                    ec && ec.date === clsCandidate.date &&
+                    String(ec.subjectName || ec.subject || '').toLowerCase().trim() === candSub &&
+                    String(ec.gradeName || ec.grade || '').toLowerCase().trim() === candGrd &&
+                    String(ec.curriculum?.topic || ec.topic || '').toLowerCase().trim().slice(0, 40) === candTop
+                  );
+                  if (alreadyExists) return;
+
+                  const norm = repo._normalizeClassSession ? repo._normalizeClassSession(clsCandidate, null) : clsCandidate;
+                  norm.isOrphaned = false;
+                  norm.status = 'planned';
+                  map[itId] = norm;
+                  rescuedClasses.push(norm);
+                  rescuedCount++;
+                });
               });
             } catch (eSnap) {}
           }
@@ -417,6 +439,319 @@ class RecoveryServiceClass {
     }
 
     return { rescued: rescuedCount, classes: rescuedClasses };
+  }
+
+  /**
+   * Rescate forense profundo sobre IndexedDB + LocalStorage + SessionStorage.
+   * Extrae clases sobrevivientes desde:
+   *  1) snapshot_<tid>_history (puntos de restauración periódicos de StorageService / PlanRepository)
+   *  2) snapshot_<tid>_class_* (versiones individuales por clase en IndexedDB)
+   *  3) backup_recovery_pre_execution_* y migration_backup_* (volcados JSON stringificados)
+   *  4) notebook_history_<YYYY-MM-DD>_<id> (historiales del Cuaderno Pedagógico en IndexedDB)
+   */
+  async executeDeepSnapshotRescue(teacherId = null) {
+    const tid = teacherId || (typeof UserService !== 'undefined' && UserService.getCurrentUserId ? UserService.getCurrentUserId() : 'usr_manuel');
+    const repo = this._getClassRepository();
+    if (!repo) return { rescued: 0, classes: [], diag: null };
+
+    const currentMap = repo._getAllMap ? repo._getAllMap(tid) : {};
+    const candidatesById = {};
+    const notebookRecords = [];
+    let idbKeyCount = 0;
+    let snapshotHistoryEntries = 0;
+
+    const isDeletedCandidate = (raw, fallbackDate) => {
+      if (!raw) return true;
+      const cid = raw.id || raw.classId;
+      if (cid && repo.isDeletedClass && repo.isDeletedClass(cid, tid)) return true;
+      if (repo.isDeletedSlot) {
+        const d = raw.date || fallbackDate || '';
+        const sub = raw.subjectName || raw.subject || '';
+        const grd = raw.gradeName || raw.grade || raw.group || '';
+        const seq = raw.sequenceNumber || raw.dayNumber || raw.consecutive;
+        if (repo.isDeletedSlot(d, sub, grd, seq, tid)) return true;
+      }
+      return false;
+    };
+
+    const registerCandidate = (rawCls, fallbackDate, fallbackPeriod, sourceTag, idx) => {
+      if (!rawCls || typeof rawCls !== 'object') return;
+      if (isDeletedCandidate(rawCls, fallbackDate)) return;
+      const norm = this._normalizeExtractedClass(rawCls, fallbackDate || rawCls.date || '', fallbackPeriod || rawCls.period || '1°', sourceTag, idx || 0);
+      if (!norm || !norm.date || norm.date < '2026-10-16') return;
+
+      const topic = norm.curriculum?.topic || norm.topic || '';
+      const des = norm.didacticSequence?.desarrollo || norm.description || '';
+      const nb = norm.teacherNotebook?.studentNotebookContent || norm.notebookContent || '';
+      if (!topic.trim() && !des.trim() && !nb.trim()) return;
+
+      norm.isOrphaned = false;
+      if (norm.status === 'orphaned' || norm.status === 'pending') norm.status = 'planned';
+
+      if (!candidatesById[norm.id]) {
+        candidatesById[norm.id] = norm;
+      } else {
+        candidatesById[norm.id] = this._smartMerge(candidatesById[norm.id], norm);
+      }
+    };
+
+    const inspectPayload = (val, keyName, depth = 0) => {
+      if (!val || depth > 5) return;
+
+      // Caso especial: notebook_history_YYYY-MM-DD_<classIdOrIndex>
+      const nbMatch = /^notebook_history_(\d{4}-\d{2}-\d{2})_(.+)$/.exec(keyName);
+      if (nbMatch && Array.isArray(val) && val.length > 0) {
+        const bestVer = val.find(v => v && typeof v.html === 'string' && v.html.trim().length > 40) || val[0];
+        if (bestVer && typeof bestVer.html === 'string' && bestVer.html.trim().length > 40) {
+          notebookRecords.push({
+            date: nbMatch[1],
+            keyId: nbMatch[2],
+            html: bestVer.html,
+            timestamp: bestVer.timestamp || ''
+          });
+        }
+        return;
+      }
+
+      if (typeof val === 'string') {
+        if (val.length > 20 && (val[0] === '{' || val[0] === '[') && (val.includes('2026-10-') || val.includes('2026-11-'))) {
+          try {
+            inspectPayload(JSON.parse(val), keyName, depth + 1);
+          } catch (eJson) {}
+        }
+        return;
+      }
+
+      if (Array.isArray(val)) {
+        val.forEach((entry, idx) => {
+          if (!entry || typeof entry !== 'object') return;
+          if (entry.data && typeof entry.data === 'object') {
+            snapshotHistoryEntries++;
+            inspectPayload(entry.data, `${keyName}[${idx}]`, depth + 1);
+          } else if (entry.subject || entry.subjectName || entry.topic || entry.curriculum) {
+            registerCandidate(entry, entry.date || '', entry.period || '1°', keyName, idx);
+          }
+        });
+        return;
+      }
+
+      if (typeof val === 'object') {
+        // Objeto de clase individual (snapshot_usr_manuel_class_*)
+        if ((val.id || val.classId) && (val.subject || val.subjectName || val.topic || val.curriculum)) {
+          registerCandidate(val, val.date || '', val.period || '1°', keyName, 0);
+          return;
+        }
+        // Objeto de plan diario { date, classes: [...] }
+        if (val.date && Array.isArray(val.classes)) {
+          val.classes.forEach((c, idx) => registerCandidate(c, val.date, val.period || '1°', keyName, idx));
+          return;
+        }
+        // Contenedor con .plans (StorageService snapshot data: { profile, plans })
+        if (val.plans && typeof val.plans === 'object') {
+          inspectPayload(val.plans, `${keyName}.plans`, depth + 1);
+          return;
+        }
+        // Contenedor con .localStorageDump (migration_backup_*)
+        if (val.localStorageDump && typeof val.localStorageDump === 'object') {
+          inspectPayload(val.localStorageDump, `${keyName}.dump`, depth + 1);
+          return;
+        }
+        // Mapa por fechas { '2026-10-27': { classes: [...] } } o mapa de sesiones { cls_id: {...} } o dump stringificado
+        Object.entries(val).forEach(([subKey, subVal]) => {
+          if (!subVal) return;
+          if (typeof subVal === 'string') {
+            if (subKey.includes('plan') || subKey.includes('class') || subKey.includes('snapshot')) {
+              inspectPayload(subVal, `${keyName}.${subKey}`, depth + 1);
+            }
+          } else if (typeof subVal === 'object') {
+            if (/^\d{4}-\d{2}-\d{2}$/.test(subKey) && Array.isArray(subVal.classes)) {
+              if (subKey >= '2026-10-16') {
+                subVal.classes.forEach((c, idx) => registerCandidate(c, subKey, subVal.period || '1°', `${keyName}:${subKey}`, idx));
+              }
+            } else if ((subVal.id || subVal.classId) && (subVal.subject || subVal.subjectName || subVal.topic || subVal.curriculum)) {
+              registerCandidate(subVal, subVal.date || '', subVal.period || '1°', `${keyName}:${subKey}`, 0);
+            }
+          }
+        });
+      }
+    };
+
+    // 1. Escanear IndexedDB completo
+    if (typeof IDBStorage !== 'undefined' && IDBStorage.isSupported && IDBStorage.isSupported()) {
+      try {
+        await IDBStorage.init();
+        const idbKeys = await IDBStorage.keys();
+        idbKeyCount = Array.isArray(idbKeys) ? idbKeys.length : 0;
+        for (const k of (idbKeys || [])) {
+          if (!k || k === 'school_deleted_classes_' + tid || k === 'school_deleted_slots_' + tid) continue;
+          try {
+            const val = await IDBStorage.get(k);
+            if (val) inspectPayload(val, String(k), 0);
+          } catch (eKey) {}
+        }
+      } catch (eIdb) {
+        console.warn('[RecoveryService] Aviso en escaneo profundo de IndexedDB:', eIdb);
+      }
+    }
+
+    // 2. Escanear LocalStorage (snapshots y respaldos)
+    if (typeof localStorage !== 'undefined') {
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (!k) continue;
+          if (k.startsWith('snapshot_') || k.startsWith('backup_') || k.startsWith('migration_backup_') || k.startsWith('notebook_history_') || k.includes('teacher_planner_plans_') || k.includes('teacher_class_sessions_')) {
+            const raw = localStorage.getItem(k);
+            if (raw) inspectPayload(raw, k, 0);
+          }
+        }
+      } catch (eLs) {}
+    }
+
+    // 3. Reconciliar historiales de cuaderno (notebook_history_YYYY-MM-DD_<id>) para fechas >= 2026-10-16
+    notebookRecords.forEach(nbRec => {
+      if (!nbRec.date || nbRec.date < '2026-10-16') return;
+      const targetCand = candidatesById[nbRec.keyId] || currentMap[nbRec.keyId];
+      if (targetCand) {
+        const curNb = targetCand.teacherNotebook?.studentNotebookContent || targetCand.notebookContent || '';
+        if (nbRec.html.length > curNb.length) {
+          const clone = JSON.parse(JSON.stringify(targetCand));
+          if (!clone.teacherNotebook) clone.teacherNotebook = {};
+          clone.teacherNotebook.studentNotebookContent = nbRec.html;
+          clone.notebookContent = nbRec.html;
+          candidatesById[clone.id] = candidatesById[clone.id]
+            ? this._smartMerge(candidatesById[clone.id], clone)
+            : clone;
+        }
+      } else {
+        // Reconstruir sesión si únicamente sobrevivió el historial del cuaderno en IndexedDB
+        const synId = String(nbRec.keyId).startsWith('cls_')
+          ? nbRec.keyId
+          : `cls_nbrecov_${nbRec.date.replace(/-/g, '')}_${nbRec.keyId}`;
+        if (repo.isDeletedClass && repo.isDeletedClass(synId, tid)) return;
+
+        let extractedTopic = '';
+        const temaMatch = /TEMA:\s*([^<\r\n]{1,140})/i.exec(nbRec.html);
+        if (temaMatch && temaMatch[1]) {
+          extractedTopic = temaMatch[1].replace(/&nbsp;/g, ' ').trim();
+        } else {
+          const h2Match = /<h[12][^>]*>([^<]{3,140})<\/h[12]>/i.exec(nbRec.html);
+          if (h2Match && h2Match[1]) extractedTopic = h2Match[1].replace(/^📌\s*/, '').trim();
+        }
+
+        let slotSub = 'Asignatura';
+        let slotGrd = 'General';
+        let slotTime = '';
+        if (/^\d+$/.test(String(nbRec.keyId)) && typeof StorageService !== 'undefined' && StorageService.getProfile) {
+          try {
+            const prof = StorageService.getProfile();
+            const parts = nbRec.date.split('-').map(Number);
+            const dayName = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'][new Date(parts[0], parts[1] - 1, parts[2]).getDay()];
+            const daySlots = prof?.weeklySchedule?.[dayName];
+            const slotIdx = parseInt(nbRec.keyId, 10);
+            if (Array.isArray(daySlots) && daySlots[slotIdx]) {
+              slotSub = daySlots[slotIdx].subject || slotSub;
+              slotGrd = daySlots[slotIdx].grade || slotGrd;
+              slotTime = daySlots[slotIdx].time || '';
+            }
+          } catch (eSlot) {}
+        }
+
+        registerCandidate({
+          id: synId,
+          teacherId: tid,
+          date: nbRec.date,
+          time: slotSub !== 'Asignatura' ? slotTime : '',
+          subject: slotSub,
+          subjectName: slotSub,
+          grade: slotGrd,
+          gradeName: slotGrd,
+          topic: extractedTopic || `Cuaderno recuperado (${nbRec.date})`,
+          notebookContent: nbRec.html,
+          teacherNotebook: { studentNotebookContent: nbRec.html },
+          updatedAt: nbRec.timestamp || new Date().toISOString()
+        }, nbRec.date, '1°', `notebook_history:${nbRec.date}`, 0);
+      }
+    });
+
+    // 4. Determinar qué clases candidatas faltan o enriquecen a ClassRepository
+    const toPersist = [];
+    Object.values(candidatesById).forEach(cand => {
+      if (!cand || !cand.id || !cand.date) return;
+      if (isDeletedCandidate(cand, cand.date)) return;
+
+      const existingById = currentMap[cand.id];
+      if (!existingById) {
+        // Evitar duplicar si ya existe en la misma fecha la misma materia, grado y tema
+        const candSub = this._norm(cand.subjectName || cand.subject || '');
+        const candGrd = repo._normGrade ? repo._normGrade(cand.gradeName || cand.grade || '') : this._norm(cand.gradeName || cand.grade || '');
+        const candTop = this._norm(cand.curriculum?.topic || cand.topic || '').slice(0, 40);
+
+        const sameLogicalOnDate = Object.values(currentMap).find(ec => {
+          if (!ec || ec.date !== cand.date) return false;
+          const ecSub = this._norm(ec.subjectName || ec.subject || '');
+          const ecGrd = repo._normGrade ? repo._normGrade(ec.gradeName || ec.grade || '') : this._norm(ec.gradeName || ec.grade || '');
+          const ecTop = this._norm(ec.curriculum?.topic || ec.topic || '').slice(0, 40);
+          return ecSub === candSub && ecGrd === candGrd && (ecTop === candTop || Number(ec.sequenceNumber) === Number(cand.sequenceNumber));
+        });
+
+        if (!sameLogicalOnDate) {
+          toPersist.push(cand);
+        } else {
+          const exNb = (sameLogicalOnDate.teacherNotebook?.studentNotebookContent || sameLogicalOnDate.notebookContent || '').length;
+          const caNb = (cand.teacherNotebook?.studentNotebookContent || cand.notebookContent || '').length;
+          const exDes = (sameLogicalOnDate.didacticSequence?.desarrollo || sameLogicalOnDate.description || '').length;
+          const caDes = (cand.didacticSequence?.desarrollo || cand.description || '').length;
+          if (caNb > exNb + 50 || caDes > exDes + 50) {
+            toPersist.push(this._smartMerge(sameLogicalOnDate, cand));
+          }
+        }
+      } else {
+        const exNb = (existingById.teacherNotebook?.studentNotebookContent || existingById.notebookContent || '').length;
+        const caNb = (cand.teacherNotebook?.studentNotebookContent || cand.notebookContent || '').length;
+        const exDes = (existingById.didacticSequence?.desarrollo || existingById.description || '').length;
+        const caDes = (cand.didacticSequence?.desarrollo || cand.description || '').length;
+        if (caNb > exNb + 50 || caDes > exDes + 50) {
+          toPersist.push(this._smartMerge(existingById, cand));
+        }
+      }
+    });
+
+    if (toPersist.length > 0) {
+      if (typeof repo.saveClassesBatch === 'function') {
+        repo.saveClassesBatch(toPersist, tid);
+      } else {
+        toPersist.forEach(c => repo.saveClass(c, tid));
+      }
+      if (typeof repo.flushPersist === 'function') {
+        await repo.flushPersist(tid);
+      }
+      if (typeof PlanRepository !== 'undefined' && typeof PlanRepository.flushPersist === 'function') {
+        await PlanRepository.flushPersist(tid);
+      }
+    }
+
+    const oct26PlusSummary = Object.values(candidatesById)
+      .filter(c => c.date >= '2026-10-26')
+      .map(c => ({ id: c.id, date: c.date, sub: c.subjectName || c.subject, grd: c.gradeName || c.grade, seq: c.sequenceNumber }));
+
+    const diag = {
+      ranAt: new Date().toISOString(),
+      idbKeyCount,
+      snapshotHistoryEntries,
+      notebookHistoryCount: notebookRecords.length,
+      totalOct16PlusCandidatesInStorage: Object.keys(candidatesById).length,
+      oct26PlusCandidatesFound: oct26PlusSummary,
+      rescuedCount: toPersist.length,
+      rescuedDates: Array.from(new Set(toPersist.map(c => c.date))).sort()
+    };
+
+    this._lastDeepRescueDiag = diag;
+    if (typeof window !== 'undefined') {
+      window.__LAST_DEEP_RESCUE_REPORT__ = diag;
+    }
+
+    return { rescued: toPersist.length, classes: toPersist, diag };
   }
 
   /**
@@ -782,6 +1117,15 @@ class RecoveryServiceClass {
       if (!c || !c.id) return;
       if (deletedIds.has(String(c.id)) || (repo && typeof repo.isDeletedClass === 'function' && repo.isDeletedClass(c.id, teacherId))) {
         return; // IGNORAR CLASE ELIMINADA POR EL DOCENTE
+      }
+      if (repo && typeof repo.isDeletedSlot === 'function') {
+        const d = c.date || '';
+        const sub = c.subjectName || c.subject;
+        const grd = c.gradeName || c.grade || c.group;
+        const seq = c.sequenceNumber || c.dayNumber || c.consecutive;
+        if (repo.isDeletedSlot(d, sub, grd, seq, teacherId)) {
+          return; // IGNORAR RANURA ELIMINADA POR EL DOCENTE
+        }
       }
 
       // Clave lógica única: periodo + materia + grupo + sequenceNumber

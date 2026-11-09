@@ -220,12 +220,15 @@ const UserService = {
           const profData = localStorage.getItem('teacher_planner_profile_v1');
           if (profData) {
             const parsedProf = JSON.parse(profData);
-            if (parsedProf && typeof parsedProf === 'object') {
+            const isCoordProf = parsedProf && (parsedProf.role === 'coordinator' || parsedProf.id === 'usr_coordinacion' || String(parsedProf.name || '').trim() === 'Marisol Ruiz');
+            if (parsedProf && typeof parsedProf === 'object' && !isCoordProf) {
               const mainIdx = users.findIndex(u => u.id === 'usr_manuel');
               if (mainIdx >= 0) {
                 users[mainIdx] = {
                   ...users[mainIdx],
                   ...parsedProf,
+                  id: 'usr_manuel',
+                  role: 'teacher',
                   name: (parsedProf.name && parsedProf.name.trim()) ? parsedProf.name : users[mainIdx].name,
                   institution: (parsedProf.institution && parsedProf.institution.trim()) ? parsedProf.institution : users[mainIdx].institution,
                   homeroom: (parsedProf.homeroom && parsedProf.homeroom.trim()) ? parsedProf.homeroom : users[mainIdx].homeroom,
@@ -245,18 +248,33 @@ const UserService = {
       // Auto-migración y verificación: Asegurar que Marisol Ruiz esté configurada correctamente
       let modified = false;
 
-      // Preservar coherencia con teacher_planner_profile_v1 si contiene personalizaciones del docente
+      // Auto-reparación si una sesión previa de Coordinación sobreescribió accidentalmente a usr_manuel
+      const mainDocente = users.find(u => u.id === 'usr_manuel');
+      if (mainDocente && (mainDocente.name === 'Marisol Ruiz' || mainDocente.role === 'coordinator' || mainDocente.homeroom === 'Coordinación Académica')) {
+        const defManuel = DEFAULT_SYSTEM_USERS.find(u => u.id === 'usr_manuel');
+        if (defManuel) {
+          mainDocente.name = defManuel.name;
+          mainDocente.role = 'teacher';
+          mainDocente.homeroom = defManuel.homeroom;
+          if (!Array.isArray(mainDocente.subjects) || mainDocente.subjects.length === 0) mainDocente.subjects = JSON.parse(JSON.stringify(defManuel.subjects));
+          if (!mainDocente.weeklySchedule || Object.keys(mainDocente.weeklySchedule).length === 0) mainDocente.weeklySchedule = JSON.parse(JSON.stringify(defManuel.weeklySchedule));
+          modified = true;
+        }
+      }
+
+      // Preservar coherencia con teacher_planner_profile_v1 solo si corresponde al docente (jamás desde perfil de coordinadora)
       try {
         const profData = localStorage.getItem('teacher_planner_profile_v1');
         if (profData) {
           const parsedProf = JSON.parse(profData);
-          if (parsedProf && parsedProf.name && parsedProf.name.trim()) {
+          const isCoordProf = parsedProf && (parsedProf.role === 'coordinator' || parsedProf.id === 'usr_coordinacion' || String(parsedProf.name || '').trim() === 'Marisol Ruiz');
+          if (!isCoordProf && parsedProf && parsedProf.name && parsedProf.name.trim()) {
             const mainUser = users.find(u => u.id === 'usr_manuel');
             if (mainUser && mainUser.name !== parsedProf.name && parsedProf.name !== 'Manuel Muñoz') {
               mainUser.name = parsedProf.name;
               if (parsedProf.institution) mainUser.institution = parsedProf.institution;
               if (parsedProf.period) mainUser.period = parsedProf.period;
-              if (parsedProf.homeroom) mainUser.homeroom = parsedProf.homeroom;
+              if (parsedProf.homeroom && parsedProf.homeroom !== 'Coordinación Académica') mainUser.homeroom = parsedProf.homeroom;
               if (Array.isArray(parsedProf.subjects) && parsedProf.subjects.length > 0) mainUser.subjects = parsedProf.subjects;
               if (parsedProf.weeklySchedule && Object.keys(parsedProf.weeklySchedule).length > 0) mainUser.weeklySchedule = parsedProf.weeklySchedule;
               modified = true;
@@ -357,11 +375,18 @@ const UserService = {
    * Establece el usuario activo en sesión
    */
   setCurrentUser(userId) {
-    localStorage.setItem(STORAGE_CURRENT_USER_KEY, userId);
+    try {
+      localStorage.setItem(STORAGE_CURRENT_USER_KEY, userId);
+    } catch (e) {
+      if (typeof ClassRepository !== 'undefined' && typeof ClassRepository._freeUpLocalStorageQuota === 'function') {
+        ClassRepository._freeUpLocalStorageQuota('usr_manuel');
+        try { localStorage.setItem(STORAGE_CURRENT_USER_KEY, userId); } catch (e2) {}
+      }
+    }
     
-    // Sincronizar el perfil actual con StorageService para mantener compatibilidad
+    // Sincronizar el perfil actual con StorageService SOLO para perfiles docentes (jamás sobreescribir el perfil del docente con el de Coordinación)
     const user = this.getUserById(userId);
-    if (user) {
+    if (user && user.role !== 'coordinator' && user.id !== 'usr_coordinacion') {
       StorageService.saveProfile(user);
     }
   },

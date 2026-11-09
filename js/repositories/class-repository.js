@@ -19,7 +19,8 @@ class ClassRepositoryClass {
     this._tabId = 'tab_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now();
     this._cache = {}; // teacherId -> { [classId]: ClassSession }
     this._sequenceIndex = {}; // `${tid}_${per}_${sub}_${grd}_${grp}` -> maxSequenceNumber (O(1))
-    this._deletedClassSets = {}; // teacherId -> Set<classId> (tombstones de clases eliminadas)
+    this._deletedClassSets = {}; // teacherId -> Set<classId> (tombstones de clases eliminadas por ID)
+    this._deletedSlotsSets = {}; // teacherId -> Set<slotKey> (tombstones de slots eliminados: fecha__materia__grado__seq)
     this._isInitialized = false;
     this._initPromise = null;
     this._setupChannel();
@@ -28,6 +29,91 @@ class ClassRepositoryClass {
       const tid = this._getCurrentTeacherId();
       this._hydrateSyncFromLocalStorage(tid);
     } catch (e) {}
+  }
+
+  _getDeletedSlotKey(date, subject, grade, seq) {
+    const d = String(date || '').trim();
+    const s = this._norm(subject || '');
+    const g = this._normGrade(grade || '');
+    const n = seq ? String(seq).replace(/[^0-9]/g, '') : '';
+    return `${d}__${s}__${g}__${n}`;
+  }
+
+  _getDeletedSlotKeys(teacherId) {
+    const tid = teacherId || this._getCurrentTeacherId();
+    if (!this._deletedSlotsSets) {
+      this._deletedSlotsSets = {};
+    }
+    if (!this._deletedSlotsSets[tid]) {
+      this._deletedSlotsSets[tid] = new Set();
+      if (typeof localStorage !== 'undefined') {
+        try {
+          const raw = localStorage.getItem('school_deleted_slots_' + tid);
+          if (raw) {
+            const list = JSON.parse(raw);
+            if (Array.isArray(list)) {
+              list.forEach(k => { if (k) this._deletedSlotsSets[tid].add(String(k)); });
+            }
+          }
+        } catch (e) {}
+      }
+      if (typeof sessionStorage !== 'undefined') {
+        try {
+          const rawSes = sessionStorage.getItem('school_deleted_slots_' + tid);
+          if (rawSes) {
+            const listSes = JSON.parse(rawSes);
+            if (Array.isArray(listSes)) {
+              listSes.forEach(k => { if (k) this._deletedSlotsSets[tid].add(String(k)); });
+            }
+          }
+        } catch (eSes) {}
+      }
+    }
+    return this._deletedSlotsSets[tid];
+  }
+
+  isDeletedSlot(date, subject, grade, seq, teacherId) {
+    if (!date && !seq) return false;
+    const tid = teacherId || this._getCurrentTeacherId();
+    const set = this._getDeletedSlotKeys(tid);
+    const key = this._getDeletedSlotKey(date, subject, grade, seq);
+    if (set.has(key)) return true;
+    return false;
+  }
+
+  markSlotDeleted(date, subject, grade, seq, teacherId) {
+    if (!date && !seq) return;
+    const tid = teacherId || this._getCurrentTeacherId();
+    const set = this._getDeletedSlotKeys(tid);
+    const key = this._getDeletedSlotKey(date, subject, grade, seq);
+    set.add(key);
+    const jsonStr = JSON.stringify(Array.from(set));
+    if (typeof localStorage !== 'undefined') {
+      try { localStorage.setItem('school_deleted_slots_' + tid, jsonStr); } catch (e) {}
+    }
+    if (typeof sessionStorage !== 'undefined') {
+      try { sessionStorage.setItem('school_deleted_slots_' + tid, jsonStr); } catch (e) {}
+    }
+    if (typeof IDBStorage !== 'undefined' && IDBStorage.set) {
+      IDBStorage.set('school_deleted_slots_' + tid, Array.from(set)).catch(() => {});
+    }
+  }
+
+  unmarkSlotDeleted(date, subject, grade, seq, teacherId) {
+    const tid = teacherId || this._getCurrentTeacherId();
+    const set = this._getDeletedSlotKeys(tid);
+    const key = this._getDeletedSlotKey(date, subject, grade, seq);
+    set.delete(key);
+    const jsonStr = JSON.stringify(Array.from(set));
+    if (typeof localStorage !== 'undefined') {
+      try { localStorage.setItem('school_deleted_slots_' + tid, jsonStr); } catch (e) {}
+    }
+    if (typeof sessionStorage !== 'undefined') {
+      try { sessionStorage.setItem('school_deleted_slots_' + tid, jsonStr); } catch (e) {}
+    }
+    if (typeof IDBStorage !== 'undefined' && IDBStorage.set) {
+      IDBStorage.set('school_deleted_slots_' + tid, Array.from(set)).catch(() => {});
+    }
   }
 
   _getDeletedClassIds(teacherId) {
@@ -167,11 +253,14 @@ class ClassRepositoryClass {
                       if (!c) return;
                       const cId = c.id || c.classId;
                       if (cId && this.isDeletedClass(cId, tid)) return;
+                      const dateVal = c.date || d;
+                      const seqVal = c.sequenceNumber || c.consecutive || c.dayNumber;
+                      if (this.isDeletedSlot(dateVal, c.subject || c.subjectName, c.grade || c.gradeName, seqVal, tid)) return;
                       const existing = cId ? this._cache[tid][cId] : null;
                       const hasIncomingContent = this._hasRealContent(c.topic) || this._hasRealContent(c.description) || this._hasRealContent(c.notebookContent);
                       if (!existing && hasIncomingContent) {
-                        const norm = this._normalizeClassSession({ ...c, date: c.date || d, planId: dayPlan.id || ('plan_' + d) }, null);
-                        if (!this.isDeletedClass(norm.id, tid)) {
+                        const norm = this._normalizeClassSession({ ...c, date: dateVal, planId: dayPlan.id || ('plan_' + d) }, null);
+                        if (!this.isDeletedClass(norm.id, tid) && !this.isDeletedSlot(norm.date, norm.subjectName, norm.gradeName, norm.sequenceNumber, tid)) {
                           this._cache[tid][norm.id] = norm;
                         }
                       }
@@ -184,12 +273,12 @@ class ClassRepositoryClass {
         }
       } catch (e) {}
     }
-    this._seedInitialClassesIfMissing(tid);
-    // Regla Arquitectónica: Saneamiento y realineación se postergan a init()
-    // para no detonar escrituras prematuras antes de fusionar IndexedDB con LocalStorage.
+    this._seedInitialClassesIfMissing(tid, { memoryOnly: true });
+    // Regla Arquitectónica 11: La pre-hidratación sincrónica NUNCA debe marcar _isInitialized = true
+    // ni sobreescribir IndexedDB antes de que init() haya leído y fusionado todas las capas persistentes.
   }
 
-  _seedInitialClassesIfMissing(teacherId) {
+  _seedInitialClassesIfMissing(teacherId, options = {}) {
     const tid = teacherId || this._getCurrentTeacherId();
     if (!this._cache[tid]) this._cache[tid] = {};
 
@@ -205,6 +294,7 @@ class ClassRepositoryClass {
       initialSeed.forEach(seedCls => {
         if (!seedCls || !seedCls.id) return;
         if (this.isDeletedClass(seedCls.id, tid)) return;
+        if (this.isDeletedSlot(seedCls.date, seedCls.subjectName || seedCls.subject, seedCls.gradeName || seedCls.grade, seedCls.sequenceNumber, tid)) return;
 
         // 1. Comprobar si ya existe por ID exacto
         let existing = this._cache[tid][seedCls.id];
@@ -212,17 +302,22 @@ class ClassRepositoryClass {
         const sNorm = this._norm(seedCls.subjectName || seedCls.subject);
         const gNorm = this._normGrade(seedCls.gradeName || seedCls.grade);
         const seq = parseInt(seedCls.sequenceNumber, 10);
+        const seedTopicNorm = this._norm(seedCls.curriculum?.topic || seedCls.topic || '').slice(0, 40);
 
-        // 2. Si no existe por ID exacto, buscar por fecha + materia + grado
+        // 2. Si no existe por ID exacto, buscar coincidencia exacta de fecha + materia + grado + consecutivo + tema
         if (!existing && seedCls.date) {
           for (const cId in this._cache[tid]) {
             const c = this._cache[tid][cId];
             if (!c || this.isDeletedClass(cId, tid)) continue;
             if (c.date === seedCls.date &&
                 this._norm(c.subjectName || c.subject) === sNorm &&
-                this._normGrade(c.gradeName || c.grade) === gNorm) {
-              existing = c;
-              break;
+                this._normGrade(c.gradeName || c.grade) === gNorm &&
+                parseInt(c.sequenceNumber, 10) === seq) {
+              const cTopicNorm = this._norm(c.curriculum?.topic || c.topic || '').slice(0, 40);
+              if (!cTopicNorm || !seedTopicNorm || cTopicNorm === seedTopicNorm) {
+                existing = c;
+                break;
+              }
             }
           }
         }
@@ -240,9 +335,10 @@ class ClassRepositoryClass {
       });
       if (seedAdded) {
         this._sequenceIndex = {};
-        this._persist(this._cache[tid], tid);
-        this._isInitialized = true;
-        console.log(`✅ [ClassRepository] Semilla oficial inicial incorporada (${initialSeed.length} clases sincronizadas para ${tid})`);
+        if (!options.memoryOnly && this._isInitialized) {
+          this._persist(this._cache[tid], tid);
+          console.log(`✅ [ClassRepository] Semilla oficial inicial incorporada (${initialSeed.length} clases sincronizadas para ${tid})`);
+        }
       }
     }
   }
@@ -302,13 +398,20 @@ class ClassRepositoryClass {
     return 'usr_manuel';
   }
 
+  _normalizeTeacherId(teacherId) {
+    if (!teacherId || teacherId === 'usr_coordinacion') {
+      return this._getCurrentTeacherId();
+    }
+    return teacherId;
+  }
+
   getStorageKey(teacherId) {
-    const tid = teacherId || this._getCurrentTeacherId();
+    const tid = this._normalizeTeacherId(teacherId);
     return `teacher_class_sessions_${tid}_v4`;
   }
 
   getLegacyStorageKeys(teacherId) {
-    const tid = teacherId || this._getCurrentTeacherId();
+    const tid = this._normalizeTeacherId(teacherId);
     return [
       `teacher_class_sessions_${tid}_v4`,
       `teacher_class_sessions_${tid}_v3`,
@@ -332,8 +435,46 @@ class ClassRepositoryClass {
       .replace(/[\u0300-\u036f]/g, "");
   }
 
+  canonicalGrade(grade) {
+    if (!grade) return 'General';
+    let s = String(grade).trim();
+    if (!s || s.toLowerCase() === 'general' || s.toLowerCase() === 'sin grado') return 'General';
+    s = s.replace(/^(?:grado|curso)\s+/i, '').trim();
+    const matchParalelo = s.match(/^(?:cuarto|4)[\s°º\-_]*([ab])$/i);
+    if (matchParalelo) {
+      return '4°' + matchParalelo[1].toUpperCase();
+    }
+    const numMatch = s.match(/(?:\b|[^a-zA-Z0-9])(1[01]|[1-9])(?:°|º)?(?:\s*([ab])\b)?/i);
+    if (numMatch) {
+      const num = numMatch[1];
+      const letter = numMatch[2] ? numMatch[2].toUpperCase() : '';
+      return num + '°' + letter;
+    }
+    const words = [
+      { re: /\b(?:primero|primera)\b/i, g: '1°' },
+      { re: /\b(?:segundo|segunda)\b/i, g: '2°' },
+      { re: /\b(?:tercero|tercera)\b/i, g: '3°' },
+      { re: /\b(?:cuarto|cuarta)\b/i, g: '4°' },
+      { re: /\b(?:quinto|quinta)\b/i, g: '5°' },
+      { re: /\b(?:sexto|sexta)\b/i, g: '6°' },
+      { re: /\b(?:septimo|séptimo|septima|séptima)\b/i, g: '7°' },
+      { re: /\b(?:octavo|octava)\b/i, g: '8°' },
+      { re: /\b(?:noveno|novena)\b/i, g: '9°' },
+      { re: /\b(?:decimo|décimo|decima|décima)\b/i, g: '10°' },
+      { re: /\b(?:once|undecimo|undécimo)\b/i, g: '11°' }
+    ];
+    for (const w of words) {
+      if (w.re.test(s)) {
+        const mLet = s.match(/\b([ab])\b/i);
+        return w.g + (mLet ? mLet[1].toUpperCase() : '');
+      }
+    }
+    return s;
+  }
+
   _normGrade(grd) {
-    return String(grd || '')
+    const c = this.canonicalGrade(grd);
+    return String(c)
       .trim()
       .toLowerCase()
       .normalize("NFD")
@@ -375,6 +516,20 @@ class ClassRepositoryClass {
       if (typeof IDBStorage !== 'undefined' && IDBStorage.init) {
         try {
           await IDBStorage.init();
+          // Cargar lista negra permanente de clases y slots eliminados desde IDB
+          try {
+            const idbDeletedClasses = await IDBStorage.get('school_deleted_classes_' + tid);
+            if (Array.isArray(idbDeletedClasses)) {
+              const setC = this._getDeletedClassIds(tid);
+              idbDeletedClasses.forEach(id => { if (id) setC.add(String(id)); });
+            }
+            const idbDeletedSlots = await IDBStorage.get('school_deleted_slots_' + tid);
+            if (Array.isArray(idbDeletedSlots)) {
+              const setS = this._getDeletedSlotKeys(tid);
+              idbDeletedSlots.forEach(k => { if (k) setS.add(String(k)); });
+            }
+          } catch (eIdbDel) {}
+
           sessionsMap = await IDBStorage.get(this.getStorageKey(tid));
           for (const legKey of this.getLegacyStorageKeys(tid)) {
             if (legKey === this.getStorageKey(tid)) continue;
@@ -383,7 +538,8 @@ class ClassRepositoryClass {
               if (legMap && typeof legMap === 'object') {
                 if (!sessionsMap) sessionsMap = {};
                 for (const id in legMap) {
-                  if (!sessionsMap[id] && !this.isDeletedClass(id, tid)) {
+                  const legCls = legMap[id];
+                  if (!sessionsMap[id] && !this.isDeletedClass(id, tid) && (!legCls || !this.isDeletedSlot(legCls.date, legCls.subjectName || legCls.subject, legCls.gradeName || legCls.grade, legCls.sequenceNumber, tid))) {
                     sessionsMap[id] = legMap[id];
                   }
                 }
@@ -469,7 +625,8 @@ class ClassRepositoryClass {
 
       if (sessionsMap && typeof sessionsMap === 'object') {
         for (const id in sessionsMap) {
-          if (this.isDeletedClass(id, tid) || (sessionsMap[id] && this.isDeletedClass(sessionsMap[id].id, tid))) {
+          const cObj = sessionsMap[id];
+          if (this.isDeletedClass(id, tid) || (cObj && this.isDeletedClass(cObj.id, tid)) || (cObj && this.isDeletedSlot(cObj.date, cObj.subjectName || cObj.subject, cObj.gradeName || cObj.grade, cObj.sequenceNumber, tid))) {
             delete sessionsMap[id];
             continue;
           }
@@ -480,7 +637,7 @@ class ClassRepositoryClass {
       }
 
       this._cache[tid] = sessionsMap;
-      this._seedInitialClassesIfMissing(tid);
+      this._seedInitialClassesIfMissing(tid, { memoryOnly: true });
       this.cleanMismatchedGrade7Classes(tid);
       // Regla 14: No alterar numeración de fondo en el arranque (realignSequenceNumbersToSchedule solo bajo petición explícita)
       // this.realignSequenceNumbersToSchedule(tid);
@@ -595,6 +752,7 @@ class ClassRepositoryClass {
       if (notebook && notebook.trim()) score += 100 + Math.min(notebook.length, 300);
       if (c.updatedAt) score += 10;
       if (c.version) score += Math.min(c.version, 20);
+      if (c.id && /^cls_m[a-z0-9]{5,}_/.test(String(c.id))) score += 25;
       return score;
     };
 
@@ -607,7 +765,7 @@ class ClassRepositoryClass {
       const time = String(cls.time || cls.startTime || '').trim();
       const slot = String(cls.scheduleSlotId || '').trim();
       
-      // Clave lógica: fecha + materia + grado + (consecutivo si existe, o slot/hora)
+      // Clave lógica: fecha + materia + grado + (consecutivo si existe, o slot/hora, o tema)
       let key = `${date}__${sub}__${grd}`;
       if (seq && seq > 0) {
         key += `__seq_${seq}`;
@@ -637,7 +795,7 @@ class ClassRepositoryClass {
    * Obtener mapa crudo sin filtros (para serialización interna)
    */
   _getAllMap(teacherId) {
-    const tid = teacherId || this._getCurrentTeacherId();
+    const tid = this._normalizeTeacherId(teacherId);
     if (this._cache[tid]) {
       return this._cache[tid];
     }
@@ -653,18 +811,22 @@ class ClassRepositoryClass {
    */
   getClass(classId, teacherId) {
     if (!classId) return null;
-    const tid = teacherId || this._getCurrentTeacherId();
+    const tid = this._normalizeTeacherId(teacherId);
     if (this.isDeletedClass(classId, tid)) return null;
     const map = this._getAllMap(tid);
     const cls = map[classId];
     return cls ? JSON.parse(JSON.stringify(cls)) : null;
   }
 
+  getClassById(classId, teacherId) {
+    return this.getClass(classId, teacherId);
+  }
+
   /**
    * Obtiene todas las clases aplicando filtros opcionales (READ-ONLY)
    */
   getClasses(filters = {}, teacherId) {
-    const tid = teacherId || filters.teacherId || this._getCurrentTeacherId();
+    const tid = this._normalizeTeacherId(teacherId || filters.teacherId);
     const map = this._getAllMap(tid);
     let classes = Object.values(map);
 
@@ -726,12 +888,16 @@ class ClassRepositoryClass {
     return this.getClasses({}, teacherId);
   }
 
+  getClassesByDate(dateStr, teacherId) {
+    return this.getByDate(dateStr, teacherId);
+  }
+
   /**
    * Obtiene todas las clases asignadas a una fecha específica (READ-ONLY)
    */
   getByDate(dateStr, teacherId) {
     if (!dateStr) return [];
-    const tid = teacherId || this._getCurrentTeacherId();
+    const tid = this._normalizeTeacherId(teacherId);
     let classes = this.getClasses({ date: dateStr }, tid);
 
     // Salvaguarda: si ClassRepository no tiene clases o tiene menos que PlanRepository
@@ -1715,13 +1881,32 @@ class ClassRepositoryClass {
     const map = this._getAllMap(tid);
 
     const normalized = this._normalizeClassSession(classData, null);
+    this.unmarkSlotDeleted(normalized.date, normalized.subjectName, normalized.gradeName, normalized.sequenceNumber, tid);
+    this.unmarkClassDeleted(normalized.id, tid);
     map[normalized.id] = normalized;
+    if (this._hasRealContent(normalized.curriculum?.topic || normalized.topic) || this._hasRealContent(normalized.didacticSequence?.desarrollo || normalized.description) || this._hasRealContent(normalized.teacherNotebook?.studentNotebookContent || normalized.notebookContent)) {
+      this._saveSnapshot(tid, 'class_' + normalized.id + '_latest', normalized);
+    }
 
     this._persist(map, tid);
     this._broadcastSave(normalized);
     this._updateSequenceIndex(normalized);
 
     console.log(`[ClassRepository:CREATE_CLASS] ID: ${normalized.id} Sub: ${normalized.subjectName} Grd: ${normalized.gradeName} Seq: #${normalized.sequenceNumber} Date: ${normalized.date}`);
+
+    // Regla 12: Encolar creación de clase en Cloud Firestore (respetando skipCloud anti-eco)
+    if (!options.skipCloud && typeof FirestoreService !== 'undefined') {
+      if (typeof FirestoreService.enqueueChange === 'function') {
+        FirestoreService.enqueueChange(tid, {
+          entityType: 'class',
+          entityId: normalized.id,
+          docPath: `school_classes_v1/${tid}_${normalized.id}`,
+          action: 'upsert',
+          date: normalized.date || null,
+          data: normalized
+        });
+      }
+    }
 
     // Sincronización bidireccional inmediata con PlanRepository para Calendario y Planeador Diario
     if (!options.isPlanSync && !options.isClassSync) {
@@ -1731,12 +1916,12 @@ class ClassRepositoryClass {
     // Sincronizar o crear automáticamente la contraparte en cursos ligados (ej: Sistemas 1° <-> 2°, 4°A <-> 4°B)
     if (!options.isMirrorSync && !normalized._isMirrorDuplicate) {
       try {
-        const mirrorCls = this.syncMirrorClass(normalized, tid);
+        const mirrorCls = this.syncMirrorClass(normalized, tid, { skipCloud: options.skipCloud });
         // Si no existía la clase espejo para este consecutivo/semana, crearla automáticamente con su respectivo día
         if (!mirrorCls) {
           const mirrorInfo = this.getMirrorGradeInfo(normalized.gradeName, normalized.group, normalized.subjectName || normalized.subject);
           if (mirrorInfo) {
-            this.duplicateClassToMirror(normalized.id, tid);
+            this.duplicateClassToMirror(normalized.id, tid, { skipCloud: options.skipCloud });
           }
         }
       } catch (e) {
@@ -1791,6 +1976,9 @@ class ClassRepositoryClass {
         if (staleVersion > 0 && typeof IDBStorage !== 'undefined' && typeof IDBStorage.delete === 'function') {
           IDBStorage.delete('snapshot_' + tid + '_class_' + normalized.id + '_v' + staleVersion).catch(() => {});
         }
+      }
+      if (this._hasRealContent(normalized.curriculum?.topic || normalized.topic) || this._hasRealContent(normalized.didacticSequence?.desarrollo || normalized.description) || this._hasRealContent(normalized.teacherNotebook?.studentNotebookContent || normalized.notebookContent)) {
+        this._saveSnapshot(tid, 'class_' + normalized.id + '_latest', normalized);
       }
 
       map[normalized.id] = normalized;
@@ -1916,6 +2104,9 @@ class ClassRepositoryClass {
       if (staleVersion > 0 && typeof IDBStorage !== 'undefined' && typeof IDBStorage.delete === 'function') {
         IDBStorage.delete(`snapshot_${tid}_class_${normalized.id}_v${staleVersion}`).catch(() => {});
       }
+    }
+    if (this._hasRealContent(normalized.curriculum?.topic || normalized.topic) || this._hasRealContent(normalized.didacticSequence?.desarrollo || normalized.description) || this._hasRealContent(normalized.teacherNotebook?.studentNotebookContent || normalized.notebookContent)) {
+      this._saveSnapshot(tid, `class_${normalized.id}_latest`, normalized);
     }
 
     map[normalized.id] = normalized;
@@ -2186,7 +2377,7 @@ class ClassRepositoryClass {
    * Si ya existe la clase con ese consecutivo en el grado espejo, actualiza su contenido.
    * Si NO existe, la crea con el horario y fecha correspondientes a ese curso en la misma semana.
    */
-  duplicateClassToMirror(classId, teacherId) {
+  duplicateClassToMirror(classId, teacherId, options = {}) {
     if (!classId) return null;
     const tid = teacherId || this._getCurrentTeacherId();
     const sourceClass = this.getClass(classId, tid);
@@ -2233,6 +2424,16 @@ class ClassRepositoryClass {
       map[targetClass.id] = targetClass;
       this._persist(map, tid);
       this._broadcastSave(targetClass);
+      if (!options.skipCloud && typeof FirestoreService !== 'undefined' && typeof FirestoreService.enqueueChange === 'function') {
+        FirestoreService.enqueueChange(tid, {
+          entityType: 'class',
+          entityId: targetClass.id,
+          docPath: `school_classes_v1/${tid}_${targetClass.id}`,
+          action: 'upsert',
+          date: targetClass.date || null,
+          data: targetClass
+        });
+      }
       console.log(`[ClassRepository:DUPLICATE_MIRROR] Actualizada clase espejo existente ${targetClass.id} (${mirrorInfo.targetGradeName} #${targetSeq})`);
       return targetClass;
     }
@@ -2328,7 +2529,7 @@ class ClassRepositoryClass {
       updatedAt: new Date().toISOString()
     };
 
-    const created = this.createClass(newClassData, tid, { isMirrorSync: true });
+    const created = this.createClass(newClassData, tid, { isMirrorSync: true, skipCloud: options.skipCloud });
     console.log(`[ClassRepository:DUPLICATE_MIRROR] Creada nueva clase espejo ${created.id} (${mirrorInfo.targetGradeName} #${targetSeq}) para fecha ${targetDate}`);
     return created;
   }
@@ -2580,11 +2781,34 @@ class ClassRepositoryClass {
       somethingDeleted = true;
     }
 
-        // Regla Arquitectónica 14: Eliminación quirúrgica exclusiva.
-    // Solo purgar alias directos con el mismo ID exacto. NUNCA eliminar otras clases que compartan fecha, secuencia o materia.
+    const targetDate = existing?.date || fallbackOptions.date;
+    const targetSeq = existing?.sequenceNumber ? parseInt(existing.sequenceNumber, 10) : (fallbackOptions.sequenceNumber ? parseInt(fallbackOptions.sequenceNumber, 10) : null);
+    const targetSub = existing?.subjectName || existing?.subject || fallbackOptions.subjectName;
+    const targetGrd = existing?.gradeName || existing?.grade || fallbackOptions.gradeName;
+
+    // Registrar slot tombstone para blindar contra resurrecciones de seeds, respaldos o planes
+    if (targetDate && targetSub && targetGrd) {
+      this.markSlotDeleted(targetDate, targetSub, targetGrd, targetSeq, tid);
+    }
+
+    // Regla Arquitectónica 14: Eliminación quirúrgica de la clase y de cualquier duplicado redundante del mismo slot
+    const allPurgedIds = new Set();
+    if (classId) allPurgedIds.add(String(classId));
+    if (actualKey) allPurgedIds.add(String(actualKey));
+    if (existing?.id) allPurgedIds.add(String(existing.id));
+
     Object.entries(map).forEach(([k, v]) => {
       if (!v) return;
-      if (k === classId || k === actualKey || v.id === classId || v.id === existing?.id || (v.classId && (v.classId === classId || v.classId === existing?.id))) {
+      const isDirectMatch = (k === classId || k === actualKey || v.id === classId || v.id === existing?.id || (v.classId && (v.classId === classId || v.classId === existing?.id)));
+      const isSameSlotDuplicate = targetDate && targetSub && targetGrd && (
+        v.date === targetDate &&
+        this._norm(v.subjectName || v.subject) === this._norm(targetSub) &&
+        this._normGrade(v.gradeName || v.grade) === this._normGrade(targetGrd) &&
+        ((targetSeq !== null && parseInt(v.sequenceNumber, 10) === targetSeq) || (!targetSeq && !v.sequenceNumber))
+      );
+      if (isDirectMatch || isSameSlotDuplicate) {
+        allPurgedIds.add(String(k));
+        if (v.id) allPurgedIds.add(String(v.id));
         this.markClassDeleted(k, tid);
         if (v.id) this.markClassDeleted(v.id, tid);
         delete map[k];
@@ -2595,23 +2819,31 @@ class ClassRepositoryClass {
     this._persist(map, tid);
     this._sequenceIndex = {};
 
-    const targetDate = existing?.date || fallbackOptions.date;
-
     // 4. Sincronizar eliminación en PlanRepository
     if (typeof PlanRepository !== 'undefined') {
       try {
         if (targetDate && typeof PlanRepository.deleteClass === 'function') {
-          if (classId) PlanRepository.deleteClass(tid, targetDate, classId);
-          if (existing?.id && existing.id !== classId) PlanRepository.deleteClass(tid, targetDate, existing.id);
+          allPurgedIds.forEach(pId => {
+            PlanRepository.deleteClass(tid, targetDate, pId, {
+              subjectName: targetSub,
+              gradeName: targetGrd,
+              sequenceNumber: targetSeq
+            });
+          });
         }
         if (typeof PlanRepository.getAllPlans === 'function') {
           const plans = PlanRepository.getAllPlans(tid) || {};
           Object.values(plans).forEach(p => {
             if (p && Array.isArray(p.classes)) {
-              const hasIt = p.classes.some(c => c && (c.id === classId || c.classId === classId || (existing?.id && c.id === existing.id)));
+              const hasIt = p.classes.some(c => c && (allPurgedIds.has(String(c.id)) || allPurgedIds.has(String(c.classId))));
               if (hasIt && p.date) {
-                if (classId) PlanRepository.deleteClass(tid, p.date, classId);
-                if (existing?.id) PlanRepository.deleteClass(tid, p.date, existing.id);
+                allPurgedIds.forEach(pId => {
+                  PlanRepository.deleteClass(tid, p.date, pId, {
+                    subjectName: targetSub,
+                    gradeName: targetGrd,
+                    sequenceNumber: targetSeq
+                  });
+                });
                 somethingDeleted = true;
               }
             }
@@ -2627,7 +2859,7 @@ class ClassRepositoryClass {
         const plan = StorageService.getPlan(targetDate);
         if (plan && Array.isArray(plan.classes)) {
           const prevLen = plan.classes.length;
-          plan.classes = plan.classes.filter(c => c.id !== classId && c.id !== existing?.id && c.classId !== classId);
+          plan.classes = plan.classes.filter(c => c && !allPurgedIds.has(String(c.id)) && !allPurgedIds.has(String(c.classId)));
           if (plan.classes.length !== prevLen) {
             StorageService.savePlan(targetDate, plan, true);
             somethingDeleted = true;
@@ -2639,50 +2871,35 @@ class ClassRepositoryClass {
     // 6. Sincronizar eliminación en la nube con Cloud Firestore
     if (typeof FirestoreService !== 'undefined') {
       if (!fallbackOptions.skipCloud && typeof FirestoreService.enqueueChange === 'function') {
-        if (classId) {
+        allPurgedIds.forEach(pId => {
           FirestoreService.enqueueChange(tid, {
             entityType: 'class',
-            entityId: classId,
-            docPath: `school_classes_v1/${tid}_${classId}`,
+            entityId: pId,
+            docPath: `school_classes_v1/${tid}_${pId}`,
             action: 'delete',
             date: targetDate
           });
-        }
-        if (existing?.id && existing.id !== classId) {
-          FirestoreService.enqueueChange(tid, {
-            entityType: 'class',
-            entityId: existing.id,
-            docPath: `school_classes_v1/${tid}_${existing.id}`,
-            action: 'delete',
-            date: targetDate
-          });
-        }
+        });
       }
       try {
-        if (typeof FirestoreService.deleteClassFromCloud === 'function') {
-          if (classId) FirestoreService.deleteClassFromCloud(tid, classId, targetDate);
-          if (existing?.id && existing.id !== classId) {
-            FirestoreService.deleteClassFromCloud(tid, existing.id, targetDate);
+        allPurgedIds.forEach(pId => {
+          if (typeof FirestoreService.deleteClassFromCloud === 'function') {
+            FirestoreService.deleteClassFromCloud(tid, pId, targetDate);
+          } else if (FirestoreService.isReady && FirestoreService.isReady()) {
+            FirestoreService.db.collection('school_classes_v1').doc(`${tid}_${pId}`).delete().catch(() => {});
           }
-        } else if (FirestoreService.isReady && FirestoreService.isReady()) {
-          // Eliminar documento individual de school_classes_v1
-          if (classId) FirestoreService.db.collection('school_classes_v1').doc(`${tid}_${classId}`).delete().catch(() => {});
-          if (existing?.id && existing.id !== classId) {
-            FirestoreService.db.collection('school_classes_v1').doc(`${tid}_${existing.id}`).delete().catch(() => {});
-          }
-          // Actualizar documento de plan del día en school_plans_v1
-          if (targetDate) {
-            const planRef = FirestoreService.db.collection(FirestoreService.COLLECTION_PATH).doc(`plan_${tid}_${targetDate}`);
-            planRef.get().then(snap => {
-              if (snap.exists) {
-                const p = snap.data();
-                if (Array.isArray(p.classes)) {
-                  const filtered = p.classes.filter(c => c.id !== classId && c.id !== existing?.id && c.classId !== classId);
-                  planRef.update({ classes: filtered, updatedAt: new Date().toISOString() }).catch(() => {});
-                }
+        });
+        if (targetDate && FirestoreService.isReady && FirestoreService.isReady()) {
+          const planRef = FirestoreService.db.collection(FirestoreService.COLLECTION_PATH).doc(`plan_${tid}_${targetDate}`);
+          planRef.get().then(snap => {
+            if (snap.exists) {
+              const p = snap.data();
+              if (Array.isArray(p.classes)) {
+                const filtered = p.classes.filter(c => c && !allPurgedIds.has(String(c.id)) && !allPurgedIds.has(String(c.classId)));
+                planRef.update({ classes: filtered, updatedAt: new Date().toISOString() }).catch(() => {});
               }
-            }).catch(() => {});
-          }
+            }
+          }).catch(() => {});
         }
       } catch (eCloud) {
         console.warn('[ClassRepository] Error al sincronizar eliminación con Firestore:', eCloud);
@@ -2785,6 +3002,66 @@ class ClassRepositoryClass {
     }
   }
 
+  _freeUpLocalStorageQuota(teacherId) {
+    if (typeof localStorage === 'undefined') return false;
+    const tid = teacherId || this._getCurrentTeacherId();
+    let freedCount = 0;
+
+    // 1. Purgar claves históricas de sesiones ya migradas y respaldadas en IndexedDB
+    const legacySessionKeys = [
+      `teacher_class_sessions_${tid}_v3`,
+      `teacher_class_sessions_${tid}_v2`,
+      `teacher_class_sessions_${tid}_v1`,
+      `teacher_class_sessions_${tid}`
+    ];
+    legacySessionKeys.forEach(k => {
+      try {
+        if (localStorage.getItem(k) !== null) {
+          localStorage.removeItem(k);
+          freedCount++;
+        }
+      } catch (e) {}
+    });
+
+    // 2. Purgar claves históricas y espejo secundario de planes en LocalStorage (cuyo respaldo íntegro vive en IndexedDB)
+    const legacyPlanKeys = [
+      `teacher_planner_plans_${tid}_v3`,
+      `teacher_planner_plans_${tid}_v2`,
+      `teacher_planner_plans_${tid}_v1`,
+      `teacher_planner_plans_v1`
+    ];
+    legacyPlanKeys.forEach(k => {
+      try {
+        if (localStorage.getItem(k) !== null) {
+          localStorage.removeItem(k);
+          freedCount++;
+        }
+      } catch (e) {}
+    });
+
+    // 3. Purgar snapshots efímeros en LocalStorage (los respaldos duraderos se custodian en IndexedDB)
+    try {
+      const keysToClean = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && (k.startsWith(`snapshot_${tid}_class_`) || k.startsWith(`backup_recovery_pre_execution_`) || k.startsWith(`snapshot_default_history`))) {
+          keysToClean.push(k);
+        }
+      }
+      keysToClean.forEach(k => {
+        try {
+          localStorage.removeItem(k);
+          freedCount++;
+        } catch (e) {}
+      });
+    } catch (eSnap) {}
+
+    if (freedCount > 0) {
+      console.log(`[ClassRepository] Cuota de LocalStorage aliviada: ${freedCount} registros obsoletos/duplicados purgados.`);
+    }
+    return freedCount > 0;
+  }
+
   _persist(sessionsMap, teacherId) {
     const tid = teacherId || this._getCurrentTeacherId();
     if (!sessionsMap || typeof sessionsMap !== 'object') return;
@@ -2808,6 +3085,15 @@ class ClassRepositoryClass {
       }
     } catch (eLS) {
       console.warn('[ClassRepository] LocalStorage lleno o error al guardar síncrono. Se prioriza IndexedDB.', eLS);
+      if (eLS && (eLS.name === 'QuotaExceededError' || eLS.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
+        const freed = this._freeUpLocalStorageQuota(tid);
+        if (freed) {
+          try {
+            const key = this.getStorageKey(tid);
+            localStorage.setItem(key, JSON.stringify(sessionsMap));
+          } catch (eRetry) {}
+        }
+      }
     }
 
     // Escritura agrupada para IndexedDB y tareas complementarias
@@ -2854,7 +3140,17 @@ class ClassRepositoryClass {
           lsOk = true;
         }
       } catch (e) {
-        console.warn('[ClassRepository] LocalStorage lleno o no disponible. Se asegura en IndexedDB.', e && e.name);
+        console.warn('[ClassRepository] LocalStorage lleno o no disponible. Purgando claves obsoletas...', e && e.name);
+        const freed = this._freeUpLocalStorageQuota(tid);
+        if (freed) {
+          try {
+            localStorage.setItem(key, JSON.stringify(sessionsMap));
+            lsOk = true;
+            console.log('[ClassRepository] LocalStorage recuperado tras purga de cuota.');
+          } catch (eRetry) {
+            lsOk = false;
+          }
+        }
       }
 
       // 2. IndexedDB (capa principal de alta capacidad y confirmación física en disco)
@@ -2862,9 +3158,19 @@ class ClassRepositoryClass {
       if (typeof IDBStorage !== 'undefined' && IDBStorage.set) {
         try {
           idbOk = await IDBStorage.set(key, sessionsMap);
+          if (!idbOk) {
+            console.warn('[ClassRepository] Reintentando persistencia en IDBStorage...');
+            if (typeof IDBStorage.reconnect === 'function') await IDBStorage.reconnect();
+            idbOk = await IDBStorage.set(key, sessionsMap);
+          }
         } catch (eIdb) {
           console.warn('[ClassRepository] Excepción al persistir en IDBStorage:', eIdb);
-          idbOk = false;
+          try {
+            if (typeof IDBStorage.reconnect === 'function') await IDBStorage.reconnect();
+            idbOk = await IDBStorage.set(key, sessionsMap);
+          } catch (eRetryIdb) {
+            idbOk = false;
+          }
         }
       }
 
@@ -2967,9 +3273,15 @@ class ClassRepositoryClass {
 
     if (typeof IDBStorage !== 'undefined' && IDBStorage.get) {
       try {
-        const map = await IDBStorage.get(key);
+        let map = await IDBStorage.get(key);
         if (map && (map[classId] || Object.values(map).some(c => c && c.id === classId))) {
           inIDB = true;
+        } else if (!inLS && typeof IDBStorage.reconnect === 'function') {
+          await IDBStorage.reconnect();
+          map = await IDBStorage.get(key);
+          if (map && (map[classId] || Object.values(map).some(c => c && c.id === classId))) {
+            inIDB = true;
+          }
         }
       } catch (e) {}
     }
@@ -3081,9 +3393,19 @@ class ClassRepositoryClass {
         }
       });
 
-      // Actualizar localStorage v3 para compatibilidad sin bloquear la UI
+      // Actualizar localStorage v3 solo si cabe holgadamente en la cuota; de lo contrario reservar LocalStorage para ClassRepository (v4) y banderas críticas
       if (typeof localStorage !== 'undefined') {
-        localStorage.setItem(legacyKey, JSON.stringify(plansByDate));
+        try {
+          const serializedMirror = JSON.stringify(plansByDate);
+          if (serializedMirror.length <= 1200000) {
+            localStorage.setItem(legacyKey, serializedMirror);
+          } else {
+            localStorage.removeItem(legacyKey);
+          }
+        } catch (eLSPlan) {
+          // Si LocalStorage está saturado, liberar el espejo secundario y priorizar IndexedDB + ClassRepository
+          try { localStorage.removeItem(legacyKey); } catch (eRem) {}
+        }
       }
       if (typeof PlanRepository !== 'undefined' && PlanRepository._cache) {
         PlanRepository._cache[teacherId] = plansByDate;

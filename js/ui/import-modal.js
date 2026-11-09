@@ -274,12 +274,12 @@ class ImportModalClass {
             Cancelar
           </button>
           
-          <button type="button" class="btn btn-primary" onclick="ImportModal.importAsNewClass()">
+          <button type="button" class="btn btn-primary" id="btn-import-as-new" onclick="ImportModal.importAsNewClass()" style="${this.targetClass && hasConflicts ? 'display:none;' : ''}">
             ➕ Importar como nueva clase
           </button>
 
           ${this.targetClass ? `
-            <button type="button" class="btn btn-success" id="btn-apply-to-target" onclick="ImportModal.applyToCurrentClass()">
+            <button type="button" class="btn btn-success" id="btn-apply-to-target" onclick="ImportModal.applyToCurrentClass()" style="background:#059669; border-color:#059669; color:#ffffff;">
               ✅ Aplicar a Clase #${this.targetClass.sequenceNumber}
             </button>
           ` : ''}
@@ -297,12 +297,38 @@ class ImportModalClass {
       }
     });
 
+    const parsed = this.analysisResult?.parsed;
+    const parsedSeq = parsed?.metadata?.sequenceNumber ?? parsed?.general?.sequenceNumber ?? null;
+    const targetSeq = this.targetClass ? this.targetClass.sequenceNumber : '';
+
     const btnApply = document.getElementById('btn-apply-to-target');
+    const btnNew = document.getElementById('btn-import-as-new');
+
     if (btnApply) {
-      if (val === 'new') {
-        btnApply.style.display = 'none';
+      btnApply.style.display = 'inline-flex';
+      if (val === 'overwrite') {
+        const seqLabel = parsedSeq ? `Clase #${parsedSeq}` : (parsed?.metadata?.grade || parsed?.general?.grade ? `Grado ${parsed.metadata?.grade || parsed.general?.grade}` : 'nueva identidad');
+        btnApply.innerHTML = `⚠️ Sobrescribir como ${seqLabel}`;
+        btnApply.className = 'btn btn-warning';
+        btnApply.style.background = '#d97706';
+        btnApply.style.borderColor = '#d97706';
+        btnApply.style.color = '#ffffff';
+        if (btnNew) btnNew.style.display = 'none';
+      } else if (val === 'new') {
+        btnApply.innerHTML = '➕ Importar como nueva clase';
+        btnApply.className = 'btn btn-primary';
+        btnApply.style.background = '';
+        btnApply.style.borderColor = '';
+        btnApply.style.color = '';
+        if (btnNew) btnNew.style.display = 'none';
       } else {
-        btnApply.style.display = 'inline-flex';
+        // 'keep'
+        btnApply.innerHTML = `✅ Aplicar a Clase #${targetSeq}`;
+        btnApply.className = 'btn btn-success';
+        btnApply.style.background = '#059669';
+        btnApply.style.borderColor = '#059669';
+        btnApply.style.color = '#ffffff';
+        if (btnNew) btnNew.style.display = 'none';
       }
     }
   }
@@ -364,6 +390,14 @@ class ImportModalClass {
       return;
     }
 
+    const actionRadio = document.querySelector('input[name="import_identity_action"]:checked');
+    const identityAction = actionRadio ? actionRadio.value : 'keep';
+
+    if (identityAction === 'new') {
+      await this.importAsNewClass();
+      return;
+    }
+
     const btnApply = document.getElementById('btn-apply-to-target');
     const prevBtnText = btnApply ? btnApply.innerHTML : '';
     if (btnApply) {
@@ -372,17 +406,6 @@ class ImportModalClass {
     }
 
     const adjustedData = this._getAdjustedParsedData();
-    const actionRadio = document.querySelector('input[name="import_identity_action"]:checked');
-    const identityAction = actionRadio ? actionRadio.value : 'keep';
-
-    if (identityAction === 'new') {
-      if (btnApply) {
-        btnApply.disabled = false;
-        btnApply.innerHTML = prevBtnText;
-      }
-      await this.importAsNewClass();
-      return;
-    }
 
     const decisions = {};
     if (identityAction === 'overwrite') {
@@ -430,10 +453,16 @@ class ImportModalClass {
    */
   async importAsNewClass() {
     const btnNew = document.getElementById('btn-import-as-new');
-    const prevBtnText = btnNew ? btnNew.innerHTML : '';
+    const btnApply = document.getElementById('btn-apply-to-target');
+    const prevBtnNewText = btnNew ? btnNew.innerHTML : '';
+    const prevBtnApplyText = btnApply ? btnApply.innerHTML : '';
     if (btnNew) {
       btnNew.disabled = true;
       btnNew.innerHTML = '⏳ Creando y verificando...';
+    }
+    if (btnApply) {
+      btnApply.disabled = true;
+      btnApply.innerHTML = '⏳ Creando y verificando...';
     }
 
     const adjustedData = this._getAdjustedParsedData();
@@ -467,7 +496,11 @@ class ImportModalClass {
       alert('Error al crear clase: ' + err.message);
       if (btnNew) {
         btnNew.disabled = false;
-        btnNew.innerHTML = prevBtnText;
+        btnNew.innerHTML = prevBtnNewText;
+      }
+      if (btnApply) {
+        btnApply.disabled = false;
+        btnApply.innerHTML = prevBtnApplyText;
       }
     }
   }

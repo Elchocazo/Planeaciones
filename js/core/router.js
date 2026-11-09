@@ -296,7 +296,13 @@ class AppRouterClass {
       this._onViewActivated(canonical, options);
 
       if (typeof window !== 'undefined' && window.scrollTo) {
-        window.scrollTo({ top: 0, behavior: 'auto' });
+        window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+      }
+      if (typeof document !== 'undefined') {
+        if (document.documentElement) document.documentElement.scrollLeft = 0;
+        if (document.body) document.body.scrollLeft = 0;
+        const appCont = document.querySelector && document.querySelector('.app-container');
+        if (appCont) appCont.scrollLeft = 0;
       }
       return true;
     } finally {

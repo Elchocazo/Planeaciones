@@ -22,6 +22,7 @@ const App = {
     }
 
     this._initPromise = (async () => {
+      this._installHorizontalScrollGuard();
       this.currentProfile = StorageService.getProfile();
     // Renderizado sincrónico e inmediato del perfil para evitar cualquier dato provisional
     this.renderHeaderProfile();
@@ -166,6 +167,11 @@ const App = {
         console.error('[App] Error durante la migración segura:', err);
       }
     }
+    try {
+      if (typeof localStorage !== 'undefined' && !localStorage.getItem('planeaciones_data_schema_version')) {
+        localStorage.setItem('planeaciones_data_schema_version', '5');
+      }
+    } catch (eVer) {}
 
     // Saneamiento preventivo de respaldos temporales acumulados en localStorage para prevenir saturación de memoria
     try {
@@ -186,19 +192,16 @@ const App = {
       }
     } catch (ePurge) {}
 
-    // Rescate único de clases de octubre (si aún no se ha ejecutado)
-    if (typeof RecoveryService !== 'undefined' && typeof RecoveryService.rescueDisplacedOctoberClasses === 'function') {
+    // Rescate forense profundo sobre IndexedDB + LocalStorage (snapshots históricos, versiones por clase e historiales de cuaderno)
+    let deepRescueResult = null;
+    if (typeof RecoveryService !== 'undefined' && typeof RecoveryService.executeDeepSnapshotRescue === 'function') {
       try {
-        const flagKey = `october_classes_rescued_flag_${tid}_v2`;
-        if (typeof localStorage !== 'undefined' && !localStorage.getItem(flagKey)) {
-          const res = RecoveryService.rescueDisplacedOctoberClasses(tid);
-          if (res && res.rescued > 0) {
-            console.log(`🎉 [App] Rescatadas ${res.rescued} clases del 21 y 22 de octubre.`);
-          }
-          localStorage.setItem(flagKey, 'true');
+        deepRescueResult = await RecoveryService.executeDeepSnapshotRescue(tid);
+        if (deepRescueResult && deepRescueResult.rescued > 0) {
+          console.log(`🎉 [App] Rescatadas ${deepRescueResult.rescued} planeación(es) desde copias internas (${(deepRescueResult.diag?.rescuedDates || []).join(', ')}).`);
         }
-      } catch (errRecov) {
-        console.warn('[App] Aviso en rescate preventivo de clases de octubre:', errRecov);
+      } catch (errDeep) {
+        console.warn('[App] Aviso en rescate forense profundo de IndexedDB:', errDeep);
       }
     }
 
@@ -224,12 +227,14 @@ const App = {
       console.warn('[App] Aviso inicializando vistas y modales:', eViews);
     }
 
-    // Marcar banderas de versiones anteriores para prevenir ejecuciones destructivas
-    localStorage.setItem('schedule_official_updated_v5', 'true');
-    localStorage.setItem('robotics_10_curriculum_updated_v1', 'true');
-    localStorage.setItem('mallas_official_folder_synced_v14', 'true');
-    localStorage.setItem('schedule_merge_consecutive_v2', 'true');
-    localStorage.setItem('schedule_official_calibrated_v4', 'true');
+    // Marcar banderas de versiones anteriores para prevenir ejecuciones destructivas (tolerante a cuota)
+    try {
+      localStorage.setItem('schedule_official_updated_v5', 'true');
+      localStorage.setItem('robotics_10_curriculum_updated_v1', 'true');
+      localStorage.setItem('mallas_official_folder_synced_v14', 'true');
+      localStorage.setItem('schedule_merge_consecutive_v2', 'true');
+      localStorage.setItem('schedule_official_calibrated_v4', 'true');
+    } catch (eFlags) {}
 
     // 4. Inicializar componentes ANTES de AppRouter para que estén disponibles al renderizar la vista inicial
     try {
@@ -252,6 +257,9 @@ const App = {
     try {
       this.bindEvents();
       this.checkProfileOrOnboarding();
+      if (deepRescueResult && deepRescueResult.rescued > 0 && typeof this.showToast === 'function') {
+        this.showToast(`✅ Se recuperaron ${deepRescueResult.rescued} planeación(es) desde copias internas (${(deepRescueResult.diag?.rescuedDates || []).join(', ')})`, 'success');
+      }
     } catch (eBind) {
       console.warn('[App] Aviso vinculando eventos o verificando perfil:', eBind);
     }
@@ -260,7 +268,16 @@ const App = {
     // La conexión de red y la sincronización con la nube nunca deben bloquear el arranque ni la navegación local
     if (typeof FirestoreService !== 'undefined' && !FirestoreService.isReady()) {
       setTimeout(() => {
-        FirestoreService.init().catch(e => console.warn('[App] Firestore init notice:', e));
+        FirestoreService.init().then(() => {
+          if (deepRescueResult && deepRescueResult.diag && FirestoreService.db) {
+            try {
+              FirestoreService.db.collection('school_bundles_v1').doc(`${tid}_idb_rescue_diag`).set(deepRescueResult.diag, { merge: true }).catch(() => {});
+            } catch (eDiag) {}
+          }
+          if (deepRescueResult && deepRescueResult.rescued > 0 && typeof FirestoreService.processSyncQueue === 'function') {
+            FirestoreService.processSyncQueue(tid).catch(() => {});
+          }
+        }).catch(e => console.warn('[App] Firestore init notice:', e));
       }, 50);
     }
 
@@ -549,7 +566,8 @@ const App = {
     if (document?.body?.classList) document.body.classList.remove('notebook-mode');
 
     window.Calendar.render();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
+    this._resetHorizontalScroll();
   },
 
   showPlannerView() {
@@ -577,7 +595,8 @@ const App = {
       }
       window.Planner.render();
     }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
+    this._resetHorizontalScroll();
   },
 
   openDayPlanner(dateStr) {
@@ -619,7 +638,8 @@ const App = {
     if (document?.body?.classList) document.body.classList.remove('notebook-mode');
 
     window.Planner.loadDate(dateStr);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
+    this._resetHorizontalScroll();
   },
 
   openNotebookEditorView(classIndex) {
@@ -641,7 +661,41 @@ const App = {
     if (window.NotebookEditor) {
       window.NotebookEditor.openInPage(classIndex);
     }
-    window.scrollTo({ top: 0, behavior: 'instant' });
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    this._resetHorizontalScroll();
+  },
+
+  _resetHorizontalScroll() {
+    if (typeof document === 'undefined') return;
+    if (document.body && document.body.classList && document.body.classList.contains('printing-notebook')) return;
+    if (document.documentElement && document.documentElement.scrollLeft !== 0) {
+      document.documentElement.scrollLeft = 0;
+    }
+    if (document.body && document.body.scrollLeft !== 0) {
+      document.body.scrollLeft = 0;
+    }
+    const appCont = document.querySelector && document.querySelector('.app-container');
+    if (appCont && appCont.scrollLeft !== 0) {
+      appCont.scrollLeft = 0;
+    }
+  },
+
+  _installHorizontalScrollGuard() {
+    if (this._hScrollGuardBound || typeof window === 'undefined' || typeof document === 'undefined') return;
+    this._hScrollGuardBound = true;
+    const enforceZeroX = () => {
+      if (document.body && document.body.classList && document.body.classList.contains('printing-notebook')) return;
+      if ((window.scrollX && window.scrollX !== 0) ||
+          (document.documentElement && document.documentElement.scrollLeft !== 0) ||
+          (document.body && document.body.scrollLeft !== 0)) {
+        if (document.documentElement) document.documentElement.scrollLeft = 0;
+        if (document.body) document.body.scrollLeft = 0;
+        if (window.scrollX) window.scrollTo(0, window.scrollY || 0);
+      }
+    };
+    enforceZeroX();
+    window.addEventListener('scroll', enforceZeroX, { passive: true });
+    window.addEventListener('resize', enforceZeroX, { passive: true });
   },
 
   // =========================================================================

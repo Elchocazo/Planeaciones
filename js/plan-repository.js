@@ -178,8 +178,15 @@ const PlanRepository = {
   /**
    * Obtiene todas las planeaciones de un docente (lectura atomica desde cache, IndexedDB o LocalStorage)
    */
+  _normalizeTeacherId(teacherId) {
+    if (!teacherId || teacherId === 'usr_coordinacion') {
+      return this._getCurrentTeacherId();
+    }
+    return teacherId;
+  },
+
   getAllPlans(teacherId) {
-    const tid = teacherId || this._getCurrentTeacherId();
+    const tid = this._normalizeTeacherId(teacherId);
 
     if (this._cache[tid] && Object.keys(this._cache[tid]).length > 0) {
       return JSON.parse(JSON.stringify(this._cache[tid]));
@@ -215,6 +222,31 @@ const PlanRepository = {
       loaded = {};
     }
 
+    // Regla 11: Si LocalStorage cedió espacio para ClassRepository, hidratar vista agregada desde ClassRepository
+    if (Object.keys(loaded).length === 0 && typeof ClassRepository !== 'undefined' && typeof ClassRepository.getAllClasses === 'function') {
+      try {
+        const allCls = ClassRepository.getAllClasses(tid);
+        if (Array.isArray(allCls) && allCls.length > 0) {
+          allCls.forEach(c => {
+            if (!c || !c.date) return;
+            if (!loaded[c.date]) {
+              loaded[c.date] = {
+                id: this.generatePlanId(tid, c.date),
+                teacherId: tid,
+                date: c.date,
+                period: c.period || '1°',
+                classes: []
+              };
+            }
+            const formatted = typeof ClassRepository._toLegacyClassFormat === 'function'
+              ? ClassRepository._toLegacyClassFormat(c)
+              : c;
+            loaded[c.date].classes.push(formatted);
+          });
+        }
+      } catch (eSynth) {}
+    }
+
     // Normalizar identidad estable en cada plan cargado sin alterar fechas
     Object.keys(loaded).forEach(d => {
       loaded[d] = this._normalizePlanStructure(tid, d, loaded[d]);
@@ -224,6 +256,9 @@ const PlanRepository = {
           const cId = c.id || c.classId;
           if (cId && typeof ClassRepository !== 'undefined' && typeof ClassRepository.isDeletedClass === 'function') {
             if (ClassRepository.isDeletedClass(cId, tid)) return false;
+          }
+          if (typeof ClassRepository !== 'undefined' && typeof ClassRepository.isDeletedSlot === 'function') {
+            if (ClassRepository.isDeletedSlot(c.date || d, c.subject, c.grade, c.sequenceNumber || c.dayNumber, tid)) return false;
           }
           return true;
         });
@@ -240,7 +275,7 @@ const PlanRepository = {
    */
   getPlan(teacherId, date) {
     if (!date) return null;
-    const tid = teacherId || this._getCurrentTeacherId();
+    const tid = this._normalizeTeacherId(teacherId);
     if (!this._cache[tid] || Object.keys(this._cache[tid]).length === 0) {
       this.getAllPlans(tid);
     }
@@ -253,6 +288,9 @@ const PlanRepository = {
         const cId = c.id || c.classId;
         if (cId && typeof ClassRepository !== 'undefined' && typeof ClassRepository.isDeletedClass === 'function') {
           if (ClassRepository.isDeletedClass(cId, tid)) return false;
+        }
+        if (typeof ClassRepository !== 'undefined' && typeof ClassRepository.isDeletedSlot === 'function') {
+          if (ClassRepository.isDeletedSlot(c.date || date, c.subject, c.grade, c.sequenceNumber || c.dayNumber, tid)) return false;
         }
         return true;
       });
@@ -457,13 +495,20 @@ const PlanRepository = {
     if (!this._cache[tid]) this._cache[tid] = {};
     this._cache[tid][date] = finalizedPlan;
 
-    // Regla 10: Escritura síncrona inmediata en LocalStorage para garantizar permanencia ante F5
+    // Regla 10 y 11: Escritura síncrona en LocalStorage solo si no satura la cuota reservada para ClassRepository
     try {
       if (typeof localStorage !== 'undefined') {
         const key = this.getStorageKey(tid);
-        localStorage.setItem(key, JSON.stringify(this._cache[tid]));
+        const serialized = JSON.stringify(this._cache[tid]);
+        if (serialized.length <= 1200000 || typeof ClassRepository === 'undefined') {
+          localStorage.setItem(key, serialized);
+        } else {
+          localStorage.removeItem(key);
+        }
       }
-    } catch (eLS) {}
+    } catch (eLS) {
+      try { localStorage.removeItem(this.getStorageKey(tid)); } catch (eRem) {}
+    }
 
     // 5-6. Persistir en LocalStorage + IndexedDB (escritura agrupada: un guardado de N clases
     //      en la misma tarea produce una sola serialización)
@@ -740,12 +785,31 @@ const PlanRepository = {
     if (!currentPlan || !Array.isArray(currentPlan.classes)) return false;
 
     const classToDelete = currentPlan.classes.find(c => c.id === classId);
-    if (!classToDelete) return false;
+    if (!classToDelete && (!options.purgedIds || options.purgedIds.length === 0)) return false;
 
     // Snapshot de seguridad antes de eliminar
-    this.saveSnapshot(tid, `delete_class_${date}_${classId}`, classToDelete);
+    if (classToDelete) {
+      this.saveSnapshot(tid, 'delete_class_' + date + '_' + classId, classToDelete);
+      if (!options.skipTombstone && typeof ClassRepository !== 'undefined' && typeof ClassRepository.markSlotDeleted === 'function') {
+        ClassRepository.markSlotDeleted(date, classToDelete.subject, classToDelete.grade, classToDelete.sequenceNumber || classToDelete.dayNumber, tid);
+      }
+    }
 
-    currentPlan.classes = currentPlan.classes.filter(c => c.id !== classId);
+    const idsToPurge = new Set([classId]);
+    if (Array.isArray(options.purgedIds)) {
+      options.purgedIds.forEach(id => idsToPurge.add(id));
+    }
+    if (Array.isArray(options.additionalClassIds)) {
+      options.additionalClassIds.forEach(id => idsToPurge.add(id));
+    }
+
+    currentPlan.classes = currentPlan.classes.filter(c => {
+      if (idsToPurge.has(c.id)) return false;
+      if (classToDelete && c.subject === classToDelete.subject && String(c.grade) === String(classToDelete.grade) && String(c.sequenceNumber || c.dayNumber) === String(classToDelete.sequenceNumber || classToDelete.dayNumber)) {
+        return false;
+      }
+      return true;
+    });
     currentPlan.version = (currentPlan.version || 1) + 1;
     currentPlan.updatedAt = new Date().toISOString();
 
@@ -901,6 +965,14 @@ const PlanRepository = {
           return; // Clase explícitamente eliminada por el docente, no preservar
         }
       }
+      if (typeof ClassRepository !== 'undefined' && typeof ClassRepository.isDeletedSlot === 'function') {
+        const sub = inc.subject || exist?.subject;
+        const grd = inc.grade || exist?.grade;
+        const seq = inc.sequenceNumber || inc.consecutive || exist?.sequenceNumber || exist?.consecutive || inc.dayNumber || exist?.dayNumber;
+        if (ClassRepository.isDeletedSlot(date, sub, grd, seq, tid)) {
+          return; // Ranura explícitamente eliminada por el docente
+        }
+      }
       const seqNum = inc.sequenceNumber || inc.consecutive || exist?.sequenceNumber || exist?.consecutive || parseInt(inc.dayNumber || exist?.dayNumber || (idx + 1), 10) || 1;
       const safeClass = {
         id: classId,
@@ -1042,11 +1114,21 @@ const PlanRepository = {
               }
             } catch (e) {}
           }
-          localStorage.setItem(key, JSON.stringify(data));
-          lsOk = true;
+          try {
+            const serialized = JSON.stringify(data);
+            if (serialized.length <= 1200000 || typeof ClassRepository === 'undefined') {
+              localStorage.setItem(key, serialized);
+              lsOk = true;
+            } else {
+              localStorage.removeItem(key);
+            }
+          } catch (eQuota) {
+            try { localStorage.removeItem(key); } catch (eRem) {}
+            console.warn('[PlanRepository] LocalStorage reservado para ClassRepository; persistiendo planes íntegros en IndexedDB.');
+          }
         }
       } catch (eLS) {
-        console.warn('[PlanRepository] LocalStorage lleno o error al guardar. Se prioriza IndexedDB.');
+        console.warn('[PlanRepository] Error en LocalStorage:', eLS);
       }
 
       let idbOk = false;

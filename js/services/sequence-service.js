@@ -75,17 +75,29 @@ class SequenceServiceClass {
       const gradeRaw = String(c.gradeName || c.grade || 'General').trim();
       const groupRaw = String(c.group || gradeRaw).trim();
 
+      // Resolución de grado canónico institucional (ej: 'Segundo (2°)' -> '2°')
+      const canonGrd = typeof ClassRepository !== 'undefined' && typeof ClassRepository.canonicalGrade === 'function'
+        ? ClassRepository.canonicalGrade(gradeRaw)
+        : gradeRaw;
+      const canonGrp = typeof ClassRepository !== 'undefined' && typeof ClassRepository.canonicalGrade === 'function'
+        ? ClassRepository.canonicalGrade(groupRaw)
+        : groupRaw;
+
       // Normalizar para clave única de agrupación sin duplicaciones por espacios o mayúsculas
       const sNorm = subjRaw.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-      const cleanGrd = gradeRaw.replace(/[^0-9a-zA-Z]/g, '').toLowerCase();
-      const cleanGrp = groupRaw.replace(/[^0-9a-zA-Z]/g, '').toLowerCase();
+      const cleanGrd = (typeof ClassRepository !== 'undefined' && typeof ClassRepository._normGrade === 'function')
+        ? ClassRepository._normGrade(canonGrd)
+        : canonGrd.replace(/[^0-9a-zA-Z]/g, '').toLowerCase();
+      const cleanGrp = (typeof ClassRepository !== 'undefined' && typeof ClassRepository._normGrade === 'function')
+        ? ClassRepository._normGrade(canonGrp)
+        : canonGrp.replace(/[^0-9a-zA-Z]/g, '').toLowerCase();
 
       // Grados equivalentes: '4°a' y '4a' son el mismo grado/grupo (sin redundancias tipo '4°A (4A)')
       const isEquivalent = (cleanGrd === cleanGrp) || (cleanGrd.length > 0 && cleanGrp.length > 0 && (cleanGrd.includes(cleanGrp) || cleanGrp.includes(cleanGrd)));
-      const hasDistinctGroup = !isEquivalent && groupRaw.length > 0;
+      const hasDistinctGroup = !isEquivalent && groupRaw.length > 0 && !groupRaw.includes('(');
 
-      // Formato limpio del grado escolar (ej: '4°A', '4°B', '8°')
-      let displayGrade = gradeRaw;
+      // Formato limpio del grado escolar (ej: '4°A', '4°B', '2°', '8°')
+      let displayGrade = canonGrd;
       const matchAB = cleanGrd.match(/^(\d+)([ab])$/i);
       if (matchAB) {
         displayGrade = `${matchAB[1]}°${matchAB[2].toUpperCase()}`;

@@ -48,9 +48,17 @@ const FirestoreService = {
    */
   isInitialSyncDone(teacherId = 'usr_manuel') {
     const tid = teacherId || 'usr_manuel';
+    if (this._initialSyncDoneMem && this._initialSyncDoneMem[tid] === true) {
+      return true;
+    }
     try {
       if (typeof localStorage !== 'undefined') {
-        return localStorage.getItem(this._getInitialSyncKey(tid)) === 'true';
+        const done = localStorage.getItem(this._getInitialSyncKey(tid)) === 'true';
+        if (done) {
+          this._initialSyncDoneMem = this._initialSyncDoneMem || {};
+          this._initialSyncDoneMem[tid] = true;
+        }
+        return done;
       }
     } catch (e) {}
     return false;
@@ -62,6 +70,8 @@ const FirestoreService = {
   setInitialSyncDone(teacherId = 'usr_manuel', done = true) {
     const tid = teacherId || 'usr_manuel';
     const key = this._getInitialSyncKey(tid);
+    this._initialSyncDoneMem = this._initialSyncDoneMem || {};
+    this._initialSyncDoneMem[tid] = Boolean(done);
     try {
       if (typeof localStorage !== 'undefined') {
         if (done) {
@@ -70,7 +80,12 @@ const FirestoreService = {
           localStorage.removeItem(key);
         }
       }
-    } catch (e) {}
+    } catch (e) {
+      if (done && typeof ClassRepository !== 'undefined' && typeof ClassRepository._freeUpLocalStorageQuota === 'function') {
+        ClassRepository._freeUpLocalStorageQuota(tid);
+        try { localStorage.setItem(key, 'true'); } catch (e2) {}
+      }
+    }
     if (typeof IDBStorage !== 'undefined' && IDBStorage.set) {
       IDBStorage.set(key, done ? 'true' : 'false').catch(() => {});
     }
@@ -191,9 +206,20 @@ const FirestoreService = {
     const key = this._getQueueKey(tid);
     try {
       if (typeof localStorage !== 'undefined') {
-        localStorage.setItem(key, JSON.stringify(queue));
+        const serialized = JSON.stringify(queue);
+        if (serialized.length <= 250000) {
+          localStorage.setItem(key, serialized);
+        } else {
+          const lightQueue = queue.map(it => ({ ...it, data: null }));
+          localStorage.setItem(key, JSON.stringify(lightQueue));
+        }
       }
-    } catch (e) {}
+    } catch (e) {
+      try {
+        const lightQueue = queue.map(it => ({ ...it, data: null }));
+        localStorage.setItem(key, JSON.stringify(lightQueue));
+      } catch (e2) {}
+    }
     if (typeof IDBStorage !== 'undefined' && IDBStorage.set) {
       IDBStorage.set(key, queue).catch(() => {});
     }
@@ -267,9 +293,25 @@ const FirestoreService = {
 
     this._saveSyncQueue(tid, queue);
 
-    // Si ya completó la fase inicial y Firestore está conectado, programar procesamiento incremental
-    if (this.isReady() && this.isInitialSyncDone(tid)) {
-      this._scheduleIncrementalSync(tid);
+    // Si ya completó la fase inicial y Firestore está conectado, programar procesamiento incremental;
+    // si aún no se ha completado la fase inicial, ejecutar reconciliación inicial no destructiva para no dejar cambios sin subir
+    if (this.isReady()) {
+      if (this.isInitialSyncDone(tid)) {
+        this._scheduleIncrementalSync(tid);
+      } else if (!this._isSyncing) {
+        if (this._syncDebounceTimers[tid]) {
+          clearTimeout(this._syncDebounceTimers[tid]);
+        }
+        this._syncDebounceTimers[tid] = setTimeout(() => {
+          if (!this.isInitialSyncDone(tid) && !this._isSyncing) {
+            this.runInitialSync(tid).catch(err => {
+              console.warn('[FirestoreService] Aviso en sync inicial automático tras cambio local:', err);
+            });
+          } else {
+            this.processSyncQueue(tid).catch(() => {});
+          }
+        }, 600);
+      }
     }
   },
 
@@ -359,20 +401,66 @@ const FirestoreService = {
 
         // Desacoplar escucha en tiempo real y procesamiento de cola para que se ejecuten en segundo plano
         // sin bloquear el arranque ni retrasar el renderizado de la UI local (Regla 13)
-        setTimeout(() => {
+        setTimeout(async () => {
           try {
             const currentTeacherId = (typeof UserService !== 'undefined') ? UserService.getCurrentUserId() : 'usr_manuel';
+            const isCoordinator = (currentTeacherId === 'usr_coordinacion') || (typeof UserService !== 'undefined' && UserService.isCoordinatorActive && UserService.isCoordinatorActive());
             const targetTeacherId = (currentTeacherId === 'usr_coordinacion') ? 'usr_manuel' : currentTeacherId;
             
+            // Respaldo desde IndexedDB si LocalStorage sufrió purga o límite de cuota
+            if (typeof IDBStorage !== 'undefined' && IDBStorage.get) {
+              try {
+                if (!this.isInitialSyncDone(targetTeacherId)) {
+                  const idbInitDone = await IDBStorage.get(this._getInitialSyncKey(targetTeacherId));
+                  if (idbInitDone === 'true' || idbInitDone === true) {
+                    this.setInitialSyncDone(targetTeacherId, true);
+                  }
+                }
+                const idbQueue = await IDBStorage.get(this._getQueueKey(targetTeacherId));
+                if (Array.isArray(idbQueue) && idbQueue.length > 0 && this.getPendingQueueCount(targetTeacherId) === 0) {
+                  this._syncQueue = this._syncQueue || {};
+                  this._syncQueue[targetTeacherId] = idbQueue;
+                }
+              } catch (eIdbHydrate) {}
+            }
+
             this._loadKnownHashes(targetTeacherId);
             this.startRealtimeSync(targetTeacherId);
 
+            if (isCoordinator) {
+              // La coordinadora opera en modo supervisión de solo lectura: descarga siempre las últimas planeaciones
+              this.downloadAllFromCloud(targetTeacherId).catch(e => console.warn('[FirestoreService] Aviso en descarga inicial para Coordinación:', e));
+              return;
+            }
+
             const initialDone = this.isInitialSyncDone(targetTeacherId);
             const pendingCount = this.getPendingQueueCount(targetTeacherId);
+            const octReconcileKey = 'firestore_oct2026_reconcile_v1_' + targetTeacherId;
+            let octReconciled = !!(this._octReconcileFlags && this._octReconcileFlags[targetTeacherId]);
+            if (!octReconciled) {
+              try {
+                if (typeof localStorage !== 'undefined' && localStorage.getItem(octReconcileKey) === 'true') {
+                  octReconciled = true;
+                }
+              } catch (_) {}
+            }
+            if (!octReconciled && typeof IDBStorage !== 'undefined' && IDBStorage.get) {
+              try {
+                const idbFlag = await IDBStorage.get(octReconcileKey);
+                if (idbFlag === 'true' || idbFlag === true) octReconciled = true;
+              } catch (_) {}
+            }
 
-            if (!initialDone) {
-              console.log(`☁️ [FirestoreService] Primera conexión para ${targetTeacherId}. Se requiere sincronización inicial.`);
-              this._updateStatus('connected', 'Conectado a Firestore (Pendiente sincronización inicial)');
+            if (!initialDone || !octReconciled) {
+              console.log(`☁️ [FirestoreService] Reconciliación bidireccional segura para ${targetTeacherId} (initialDone=${initialDone}, octReconciled=${octReconciled}).`);
+              this.runInitialSync(targetTeacherId).then(() => {
+                this._octReconcileFlags = this._octReconcileFlags || {};
+                this._octReconcileFlags[targetTeacherId] = true;
+                try { if (typeof localStorage !== 'undefined') localStorage.setItem(octReconcileKey, 'true'); } catch (_) {}
+                if (typeof IDBStorage !== 'undefined' && IDBStorage.set) {
+                  IDBStorage.set(octReconcileKey, 'true').catch(() => {});
+                }
+              }).catch(e => console.warn('[FirestoreService] Aviso en sincronización inicial automática:', e));
             } else {
               if (pendingCount > 0) {
                 console.log(`☁️ [FirestoreService] Sincronización incremental para ${targetTeacherId} (${pendingCount} cambios pendientes).`);
@@ -421,6 +509,7 @@ const FirestoreService = {
    * Renderiza el indicador de estado de la nube en la cabecera
    */
   renderCloudStatusIndicator() {
+    if (typeof document === 'undefined' || !document.getElementById) return;
     const el = document.getElementById('firestore-cloud-status-badge');
     if (!el) return;
 
@@ -603,6 +692,11 @@ const FirestoreService = {
           }
           const docPath = `${this.CLASSES_COLLECTION_PATH}/${doc.id}`;
           this._knownHashes[docPath] = this._computeHash(cloudCls);
+          // Proteger fecha local reciente contra regresión por colisiones heredadas
+          const localExisting = ClassRepository.getClass ? ClassRepository.getClass(cloudCls.id, tid) : null;
+          if (localExisting && localExisting.date && cloudCls.date && localExisting.date >= '2026-10-16' && cloudCls.date < '2026-10-01') {
+            cloudCls.date = localExisting.date;
+          }
           initClasses.push(cloudCls);
         }
       });
@@ -788,6 +882,13 @@ const FirestoreService = {
 
         for (const item of chunk) {
           item.status = 'syncing';
+          if (item.action === 'upsert' && !item.data) {
+            if (item.entityType === 'class' && typeof ClassRepository !== 'undefined' && ClassRepository.getClass) {
+              item.data = ClassRepository.getClass(item.entityId, tid);
+            } else if (item.entityType === 'plan' && typeof PlanRepository !== 'undefined' && PlanRepository.getPlan) {
+              item.data = PlanRepository.getPlan(tid, item.entityId);
+            }
+          }
           if (item.action === 'upsert' && item.data) {
             const parts = item.docPath.split('/');
             const col = parts[0];
@@ -861,7 +962,15 @@ const FirestoreService = {
             if (snap && snap.exists) {
               const data = snap.data();
               if (Array.isArray(data.classes)) {
-                const filtered = data.classes.filter(c => c.id !== delItem.entityId && c.classId !== delItem.entityId);
+                const filtered = data.classes.filter(c => {
+                  if (!c) return false;
+                  if (c.id === delItem.entityId || c.classId === delItem.entityId) return false;
+                  if (typeof ClassRepository !== 'undefined') {
+                    if (ClassRepository.isDeletedClass && ClassRepository.isDeletedClass(c.id, tid)) return false;
+                    if (ClassRepository.isDeletedSlot && ClassRepository.isDeletedSlot(data.date || delItem.date, c.subject, c.grade, c.sequenceNumber || c.dayNumber, tid)) return false;
+                  }
+                  return true;
+                });
                 await planDocRef.update({ classes: filtered, updatedAt: new Date().toISOString() }).catch(() => {});
               }
             }
@@ -962,6 +1071,10 @@ const FirestoreService = {
       try { this._unsubscribeListener(); } catch (e) {}
       this._unsubscribeListener = null;
     }
+    if (this._unsubscribeClassesListener) {
+      try { this._unsubscribeClassesListener(); } catch (e) {}
+      this._unsubscribeClassesListener = null;
+    }
 
     try {
       console.log(`👂 [FirestoreService] Iniciando escucha en tiempo real para docente: ${tid}`);
@@ -1008,6 +1121,61 @@ const FirestoreService = {
         }, (err) => {
           console.warn('[FirestoreService] Error en listener en tiempo real:', err);
         });
+
+      // Escucha en tiempo real de sesiones individuales en school_classes_v1 con blindaje anti-eco
+      this._unsubscribeClassesListener = this.db.collection(this.CLASSES_COLLECTION_PATH)
+        .where('teacherId', '==', tid)
+        .onSnapshot((snapshot) => {
+          if (typeof ClassRepository === 'undefined') return;
+          const incomingBatch = [];
+          let removedAny = false;
+
+          snapshot.docChanges().forEach((change) => {
+            const cloudCls = change.doc.data();
+            const docPath = `${this.CLASSES_COLLECTION_PATH}/${change.doc.id}`;
+            if (change.type === 'removed') {
+              delete this._knownHashes[docPath];
+              removedAny = true;
+              return;
+            }
+            if ((change.type === 'added' || change.type === 'modified') && cloudCls && cloudCls.id) {
+              if (ClassRepository.isDeletedClass && ClassRepository.isDeletedClass(cloudCls.id, tid)) {
+                return;
+              }
+              const cloudHash = this._computeHash(cloudCls);
+              if (this._knownHashes[docPath] === cloudHash) {
+                return; // Anti-eco
+              }
+              this._knownHashes[docPath] = cloudHash;
+              const localExisting = ClassRepository.getClass ? ClassRepository.getClass(cloudCls.id, tid) : null;
+              if (localExisting && localExisting.date && cloudCls.date && localExisting.date >= '2026-10-16' && cloudCls.date < '2026-10-01') {
+                cloudCls.date = localExisting.date;
+              }
+              incomingBatch.push(cloudCls);
+            }
+          });
+
+          if (incomingBatch.length > 0 || removedAny) {
+            if (incomingBatch.length > 0) {
+              if (typeof ClassRepository.saveClassesBatch === 'function') {
+                ClassRepository.saveClassesBatch(incomingBatch, tid, { skipCloud: true, isPlanSync: true });
+              } else {
+                incomingBatch.forEach(c => ClassRepository.saveClass(c, tid, { skipCloud: true, isPlanSync: true }));
+              }
+            }
+            this._saveKnownHashes(tid);
+            if (typeof window !== 'undefined' && window.dispatchEvent) {
+              window.dispatchEvent(new CustomEvent('plan_remote_update', {
+                detail: { teacherId: tid, source: 'firestore_classes' }
+              }));
+            }
+            if (typeof CoordinatorView !== 'undefined' && document.getElementById('coordinator-dashboard-modal')?.classList.contains('active')) {
+              CoordinatorView.renderDashboard();
+            }
+          }
+        }, (err) => {
+          console.warn('[FirestoreService] Error en listener de clases en tiempo real:', err);
+        });
     } catch (err) {
       console.warn('[FirestoreService] No se pudo activar listener en tiempo real:', err);
     }
@@ -1030,6 +1198,17 @@ const FirestoreService = {
     const tid = teacherId || 'usr_manuel';
 
     try {
+      // Filtrar inmediatamente clases y ranuras eliminadas por el docente (Reglas 10, 12)
+      if (Array.isArray(cloudPlan.classes) && typeof ClassRepository !== 'undefined') {
+        cloudPlan.classes = cloudPlan.classes.filter(c => {
+          if (!c) return false;
+          const cId = c.id || c.classId;
+          if (cId && ClassRepository.isDeletedClass && ClassRepository.isDeletedClass(cId, tid)) return false;
+          if (ClassRepository.isDeletedSlot && ClassRepository.isDeletedSlot(c.date || date, c.subjectName || c.subject, c.gradeName || c.grade, c.sequenceNumber || c.dayNumber, tid)) return false;
+          return true;
+        });
+      }
+
       // Alinear numeración de clases entrantes de la nube según el horario oficial antes de fusionar
       if (Array.isArray(cloudPlan.classes) && typeof ClassRepository !== 'undefined' && typeof ClassRepository.getScheduleSequenceNumber === 'function') {
         cloudPlan.classes.forEach(c => {
@@ -1176,12 +1355,19 @@ const FirestoreService = {
     try {
       this._loadKnownHashes(tid);
 
-      // 1. Intentar restauración rápida desde el Bundle Maestro
-      const bundleDoc = await this.db.collection(this.BUNDLES_COLLECTION_PATH).doc(tid).get().catch(() => null);
-      if (bundleDoc && bundleDoc.exists) {
-        const bundle = bundleDoc.data();
-        if (bundle && bundle.profile && typeof StorageService !== 'undefined') {
-          StorageService.saveProfile(bundle.profile);
+      // 1. Intentar restauración rápida desde el Bundle Maestro (solo si el perfil local está vacío y no es sesión de Coordinación)
+      const isCoordSession = (typeof UserService !== 'undefined' && UserService.isCoordinatorActive && UserService.isCoordinatorActive());
+      if (!isCoordSession) {
+        const bundleDoc = await this.db.collection(this.BUNDLES_COLLECTION_PATH).doc(tid).get().catch(() => null);
+        if (bundleDoc && bundleDoc.exists) {
+          const bundle = bundleDoc.data();
+          if (bundle && bundle.profile && typeof StorageService !== 'undefined') {
+            const existingProf = StorageService.getProfile ? StorageService.getProfile() : null;
+            const hasValidLocalSchedule = existingProf && existingProf.weeklySchedule && Object.keys(existingProf.weeklySchedule).length > 0;
+            if (!hasValidLocalSchedule && bundle.profile.role !== 'coordinator') {
+              StorageService.saveProfile(bundle.profile);
+            }
+          }
         }
       }
 
@@ -1231,6 +1417,11 @@ const FirestoreService = {
               cloudCls.sequenceNumber = schedSeq;
               cloudCls.dayNumber = String(schedSeq);
             }
+          }
+          // Proteger fecha local reciente contra regresión por colisiones heredadas
+          const localExisting = ClassRepository.getClass ? ClassRepository.getClass(cloudCls.id, tid) : null;
+          if (localExisting && localExisting.date && cloudCls.date && localExisting.date >= '2026-10-16' && cloudCls.date < '2026-10-01') {
+            cloudCls.date = localExisting.date;
           }
           downloadedClasses.push(cloudCls);
         }

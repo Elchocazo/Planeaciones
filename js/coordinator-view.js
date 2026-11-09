@@ -476,11 +476,14 @@ const CoordinatorView = {
               </button>
             ` : '')}
 
-            <button type="button" class="btn btn-primary btn-sm" onclick="CoordinatorView.downloadTeacherDocx('${tid}', '${dateStr}', '${(singleClassFound?.id || classIndexOrId || '')}')" style="display:inline-flex; align-items:center; gap:5px; font-weight:700;">
-              📄 Descargar Word (.docx)
+            <button type="button" class="btn btn-secondary btn-sm" onclick="CoordinatorView.openClassNotebookReader('${tid}', '${dateStr}', '${(singleClassFound?.id || classIndexOrId || '0')}'); ${closeInspectAndRestore};" style="display:inline-flex; align-items:center; gap:5px; font-weight:700; color:#1e40af; background:#eff6ff; border-color:#bfdbfe;" title="Ver el cuaderno pedagógico docente de esta clase">
+              📖 Ver Cuaderno
             </button>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="CoordinatorView.downloadTeacherPdf('${tid}', '${dateStr}', '${(singleClassFound?.id || classIndexOrId || '')}')" style="display:inline-flex; align-items:center; gap:5px; font-weight:700;">
-              🖨️ Imprimir / PDF
+            <button type="button" class="btn btn-primary btn-sm" onclick="CoordinatorView.downloadTeacherPdf('${tid}', '${dateStr}', '${(singleClassFound?.id || classIndexOrId || '')}')" style="display:inline-flex; align-items:center; gap:5px; font-weight:700; background:#0f766e; border-color:#0f766e;" title="Descargar o imprimir en PDF la tabla de desarrollo de clases">
+              🖨️ Descargar / Imprimir PDF (Tabla)
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="CoordinatorView.downloadTeacherDocx('${tid}', '${dateStr}', '${(singleClassFound?.id || classIndexOrId || '')}')" style="display:inline-flex; align-items:center; gap:5px; font-weight:700;" title="Descargar tabla oficial en Word">
+              📄 Descargar Word (.docx)
             </button>
             <button type="button" class="btn btn-secondary btn-sm" onclick="CoordinatorView.openFeedbackModal('${tid}', '${dateStr}'); ${closeInspectAndRestore};" style="display:inline-flex; align-items:center; gap:5px; font-weight:700;">
               ✍️ Visto Bueno
@@ -504,15 +507,15 @@ const CoordinatorView = {
    * Obtiene la planeación y las clases de un docente para una fecha combinando todas las fuentes de almacenamiento
    */
   _getPlanAndClasses(teacherId, dateStr) {
-    const tid = teacherId || 'usr_manuel';
-    let classes = [];
+    const tid = (teacherId && teacherId !== 'usr_coordinacion') ? teacherId : 'usr_manuel';
+    let repoClasses = [];
 
     // 1. Obtener desde ClassRepository
     if (typeof ClassRepository !== 'undefined') {
       if (typeof ClassRepository.getByDate === 'function') {
-        classes = ClassRepository.getByDate(dateStr, tid) || [];
+        repoClasses = ClassRepository.getByDate(dateStr, tid) || [];
       } else if (typeof ClassRepository.getClasses === 'function') {
-        classes = ClassRepository.getClasses({ date: dateStr }, tid) || [];
+        repoClasses = ClassRepository.getClasses({ date: dateStr }, tid) || [];
       }
     }
 
@@ -532,10 +535,22 @@ const CoordinatorView = {
       plan = plans ? plans[dateStr] : null;
     }
 
-    // 3. Cruzar datos si uno de los dos está vacío
-    if ((!classes || classes.length === 0) && plan && Array.isArray(plan.classes)) {
-      classes = plan.classes;
+    let planClasses = (plan && Array.isArray(plan.classes)) ? plan.classes : [];
+
+    // 3. Obtener desde ScheduleService.buildDayView si existe
+    let dayView = null;
+    let dayViewClasses = [];
+    if (typeof ScheduleService !== 'undefined' && typeof ScheduleService.buildDayView === 'function') {
+      try {
+        dayView = ScheduleService.buildDayView(dateStr, tid);
+        if (dayView && Array.isArray(dayView.allSavedClasses)) {
+          dayViewClasses = dayView.allSavedClasses;
+        }
+      } catch (eDV) {}
     }
+
+    // 4. Combinar todas las clases de las tres fuentes
+    let combined = [...repoClasses, ...planClasses, ...dayViewClasses];
 
     const isBackupFn = (typeof ClassRepository !== 'undefined' && ClassRepository.isBackupClass)
       ? (c) => ClassRepository.isBackupClass(c)
@@ -548,34 +563,42 @@ const CoordinatorView = {
           return (src.includes('backup') || src.includes('respaldo') || src.includes('snapshot')) && (!c.date || (!c.subjectName && !c.subject));
         };
 
-    // 4. Filtrar rigurosamente clases marcadas como respaldo
-    classes = classes.filter(c => !isBackupFn(c));
+    // Filtrar rigurosamente clases marcadas como respaldo
+    combined = combined.filter(c => c && !isBackupFn(c));
 
-    // 5. Deduplicar copias redundantes generadas por importaciones repetidas de respaldo
+    // Deduplicar copias redundantes
     if (typeof ClassRepository !== 'undefined' && ClassRepository.deduplicateClasses) {
-      classes = ClassRepository.deduplicateClasses(classes);
+      combined = ClassRepository.deduplicateClasses(combined);
+    } else {
+      const seen = new Set();
+      combined = combined.filter(c => {
+        const id = c.id || `${c.date}_${c.subject}_${c.grade}_${c.sequenceNumber}`;
+        if (seen.has(id)) return false;
+        seen.add(id);
+        return true;
+      });
     }
 
     if (!plan) {
-      plan = { date: dateStr, classes: classes, period: '1°' };
+      plan = { date: dateStr, classes: combined, period: '1°' };
     } else {
       plan = JSON.parse(JSON.stringify(plan));
-      plan.classes = classes;
+      plan.classes = combined;
     }
 
-    return { plan, classes, teacherId: tid };
+    return { plan, classes: combined, teacherId: tid, dayView };
   },
 
   /**
    * Vista Exclusiva de Coordinación: Revisión de clases del día con cuaderno, tabla y descargas
    */
   openDayClassesReview(dateStr, teacherId = 'usr_manuel') {
-    const tid = teacherId || 'usr_manuel';
+    const tid = (teacherId && teacherId !== 'usr_coordinacion') ? teacherId : 'usr_manuel';
     const teacher = (typeof UserService !== 'undefined' && UserService.getUserById) 
       ? (UserService.getUserById(tid) || { name: 'Manuel Muñoz' }) 
       : { name: 'Manuel Muñoz' };
 
-    const { plan, classes } = this._getPlanAndClasses(tid, dateStr);
+    const { plan, classes, dayView } = this._getPlanAndClasses(tid, dateStr);
 
     const dayName = (typeof ExportService !== 'undefined' && ExportService.getDayOfWeekName) 
       ? ExportService.getDayOfWeekName(dateStr) 
@@ -594,14 +617,47 @@ const CoordinatorView = {
     modal.style.zIndex = '3100';
 
     let classesHtml = '';
+    const scheduledSlots = (dayView && Array.isArray(dayView.scheduledItems)) ? dayView.scheduledItems : [];
+
     if (!classes || classes.length === 0) {
-      classesHtml = `
-        <div style="text-align:center; padding:3rem 1.5rem; color:var(--slate-500); background:#f8fafc; border-radius:12px; border:1px dashed #cbd5e1;">
-          <div style="font-size:2.5rem; margin-bottom:0.75rem;">📅</div>
-          <h4 style="margin:0 0 0.5rem 0; font-size:1.1rem; color:var(--slate-700); font-weight:700;">No hay clases programadas</h4>
-          <p style="margin:0; font-size:0.88rem;">El docente ${teacher.name} no tiene secuencias didácticas registradas para esta fecha.</p>
-        </div>
-      `;
+      if (scheduledSlots.length > 0) {
+        classesHtml = `
+          <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:12px; padding:1.25rem; margin-bottom:1rem;">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:0.75rem;">
+              <span style="font-size:1.4rem;">📅</span>
+              <div>
+                <h4 style="margin:0; font-size:1rem; font-weight:800; color:#1e3a8a;">
+                  Horario Escolar Oficial del Día (${dayName})
+                </h4>
+                <div style="font-size:0.8rem; color:#64748b; margin-top:2px;">
+                  El docente ${teacher.name} tiene ${scheduledSlots.length} sesiones asignadas en su horario para esta fecha:
+                </div>
+              </div>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:8px;">
+              ${scheduledSlots.map(item => `
+                <div style="display:flex; justify-content:space-between; align-items:center; background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; padding:10px 14px; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+                  <div>
+                    <strong style="color:#0f172a; font-size:0.92rem;">${item.slot.subjectName || item.slot.subject} ${item.slot.gradeName || item.slot.grade}</strong>
+                    <div style="font-size:0.78rem; color:#64748b; margin-top:2px;">⏰ ${item.slot.time || 'Horario regular'}</div>
+                  </div>
+                  <span style="font-size:0.75rem; background:#fffbeb; color:#b45309; border:1px solid #fde68a; padding:4px 10px; border-radius:6px; font-weight:700;">
+                    ⏳ Pendiente por planear
+                  </span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      } else {
+        classesHtml = `
+          <div style="text-align:center; padding:3rem 1.5rem; color:var(--slate-500); background:#f8fafc; border-radius:12px; border:1px dashed #cbd5e1;">
+            <div style="font-size:2.5rem; margin-bottom:0.75rem;">📅</div>
+            <h4 style="margin:0 0 0.5rem 0; font-size:1.1rem; color:var(--slate-700); font-weight:700;">No hay clases programadas</h4>
+            <p style="margin:0; font-size:0.88rem;">El docente ${teacher.name} no tiene secuencias didácticas registradas para esta fecha.</p>
+          </div>
+        `;
+      }
     } else {
       classesHtml = classes.map((cls, idx) => {
         const topic = cls.topic || cls.curriculum?.topic || 'Sin tema registrado';
@@ -610,25 +666,26 @@ const CoordinatorView = {
         const subject = cls.subject || cls.subjectName || 'Asignatura';
         const grade = cls.grade || cls.gradeName || '';
         const time = cls.time || `${cls.startTime || ''} - ${cls.endTime || ''}`.trim() || 'Horario regular';
-        // Generar ID estable si no existe: combina fecha, materia, grado y índice
         const clsId = cls.id || cls._id || `${dateStr.replace(/-/g,'')}_${subject.replace(/\s+/g,'')}_${grade.replace(/\s+/g,'')}_${idx}`;
         cls.id = clsId;
         window.__classIdMap = window.__classIdMap || {};
         window.__classIdMap[clsId] = idx;
 
-
         return `
-          <div class="coord-class-card" style="background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; padding:1.25rem; margin-bottom:1rem; box-shadow:0 2px 4px rgba(0,0,0,0.04);">
+          <div class="coord-class-card" style="background:#ffffff; border:1px solid #e2e8f0; border-radius:12px; padding:1.25rem; margin-bottom:1.15rem; box-shadow:0 2px 6px rgba(0,0,0,0.04);">
             <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:0.75rem; flex-wrap:wrap; gap:8px;">
               <div>
-                <div style="display:flex; align-items:center; gap:8px;">
+                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
                   <span style="background:#eff6ff; color:#1d4ed8; font-weight:800; font-size:0.95rem; padding:3px 10px; border-radius:6px; border:1px solid #bfdbfe;">
                     ${subject} ${grade}
                   </span>
                   <span style="font-size:0.83rem; font-weight:700; color:#64748b;">
                     ⏰ ${time}
                   </span>
-                  ${cls.dayNumber ? `<span style="font-size:0.8rem; background:#f1f5f9; color:#475569; padding:2px 8px; border-radius:4px; font-weight:600;">Clase #${cls.dayNumber}</span>` : ''}
+                  ${cls.sequenceNumber || cls.dayNumber ? `<span style="font-size:0.8rem; background:#f1f5f9; color:#475569; padding:2px 8px; border-radius:4px; font-weight:600;">Clase #${cls.sequenceNumber || cls.dayNumber}</span>` : ''}
+                  <span style="font-size:0.75rem; background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0; padding:2px 8px; border-radius:4px; font-weight:700;">
+                    ✓ Planeada
+                  </span>
                 </div>
                 <h4 style="margin:0.5rem 0 0.25rem 0; font-size:1.02rem; font-weight:800; color:#0f172a;">
                   ${topic}
@@ -638,26 +695,51 @@ const CoordinatorView = {
                     <strong>Desempeño:</strong> ${achievement}
                   </div>
                 ` : ''}
+                ${dba ? `
+                  <div style="font-size:0.8rem; color:#64748b; margin-top:3px; line-height:1.35;">
+                    <strong>DBA:</strong> ${dba.split('\n')[0]}
+                  </div>
+                ` : ''}
               </div>
             </div>
 
-            <!-- Acciones requeridas por Coordinación: Ver Cuaderno, Ver Tabla de Secuencia, Descargar -->
-            <div style="display:flex; flex-wrap:wrap; gap:0.6rem; margin-top:1rem; padding-top:0.85rem; border-top:1px solid #f1f5f9;">
-              <button type="button" class="btn btn-secondary btn-sm" onclick="CoordinatorView.openClassNotebookReader('${tid}', '${dateStr}', ${idx})" style="display:inline-flex; align-items:center; gap:6px; font-weight:700; color:#1e40af; background:#eff6ff; border-color:#bfdbfe;">
-                📖 Ver Cuaderno Docente
-              </button>
+            <!-- Acciones de Coordinación: Ver Cuaderno, Descargar Cuaderno, Ver Tabla, Descargar PDF Tabla -->
+            <div style="display:flex; flex-direction:column; gap:0.6rem; margin-top:1rem; padding-top:0.85rem; border-top:1px solid #f1f5f9;">
+              <!-- 1. Cuaderno Pedagógico -->
+              <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px;">
+                <span style="font-size:0.82rem; font-weight:700; color:#1e40af; display:flex; align-items:center; gap:5px;">
+                  📖 Cuaderno Docente:
+                </span>
+                <div style="display:flex; flex-wrap:wrap; gap:6px;">
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="CoordinatorView.openClassNotebookReader('${tid}', '${dateStr}', ${idx})" style="font-weight:700; color:#1e40af; background:#eff6ff; border-color:#bfdbfe; font-size:0.8rem;" title="Ver contenido del cuaderno pedagógico">
+                    👁️ Ver Cuaderno
+                  </button>
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="CoordinatorView.downloadNotebookWord('${tid}', '${dateStr}', ${idx})" style="font-weight:700; color:#1d4ed8; background:#fff; border-color:#bfdbfe; font-size:0.8rem;" title="Descargar cuaderno en formato Word (.doc)">
+                    📄 Word (.doc)
+                  </button>
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="CoordinatorView.downloadNotebookPdf('${tid}', '${dateStr}', ${idx})" style="font-weight:700; color:#1e3a8a; background:#dbeafe; border-color:#93c5fd; font-size:0.8rem;" title="Descargar o imprimir cuaderno en PDF">
+                    🖨️ PDF Cuaderno
+                  </button>
+                </div>
+              </div>
 
-              <button type="button" class="btn btn-secondary btn-sm" onclick="CoordinatorView.inspectPlan('${tid}', '${dateStr}', ${idx})" style="display:inline-flex; align-items:center; gap:6px; font-weight:700; color:#0f766e; background:#f0fdfa; border-color:#99f6e4;">
-                📋 Ver Tabla de Secuencia Didáctica
-              </button>
-
-              <button type="button" class="btn btn-primary btn-sm" onclick="CoordinatorView.downloadTeacherDocx('${tid}', '${dateStr}')" style="display:inline-flex; align-items:center; gap:6px; font-weight:700;">
-                📄 Descargar Word (.docx)
-              </button>
-
-              <button type="button" class="btn btn-secondary btn-sm" onclick="CoordinatorView.downloadTeacherPdf('${tid}', '${dateStr}')" style="display:inline-flex; align-items:center; gap:6px; font-weight:700;">
-                🖨️ Descargar PDF
-              </button>
+              <!-- 2. Tabla de Desarrollo de Clase / Secuencia Didáctica -->
+              <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px; padding-top:5px; border-top:1px dashed #e2e8f0;">
+                <span style="font-size:0.82rem; font-weight:700; color:#0f766e; display:flex; align-items:center; gap:5px;">
+                  📋 Tabla de Desarrollo de Clase:
+                </span>
+                <div style="display:flex; flex-wrap:wrap; gap:6px;">
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="CoordinatorView.inspectPlan('${tid}', '${dateStr}', ${idx})" style="font-weight:700; color:#0f766e; background:#f0fdfa; border-color:#99f6e4; font-size:0.8rem;" title="Ver tabla de secuencia didáctica y desarrollo">
+                    👁️ Ver Tabla
+                  </button>
+                  <button type="button" class="btn btn-primary btn-sm" onclick="CoordinatorView.downloadTeacherPdf('${tid}', '${dateStr}', ${idx})" style="font-weight:700; background:#0f766e; border-color:#0f766e; font-size:0.8rem;" title="Descargar o imprimir el PDF que contiene la tabla de desarrollo de esta clase">
+                    🖨️ PDF Tabla
+                  </button>
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="CoordinatorView.downloadTeacherDocx('${tid}', '${dateStr}', ${idx})" style="font-weight:700; color:#0f766e; background:#fff; border-color:#99f6e4; font-size:0.8rem;" title="Descargar tabla oficial en Word">
+                    📄 Word (.docx)
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         `;
@@ -667,8 +749,8 @@ const CoordinatorView = {
     const review = plan?.coordinatorReview || {};
 
     modal.innerHTML = `
-      <div class="coordinator-modal-card" style="max-width:850px; max-height:92vh; display:flex; flex-direction:column;">
-        <div class="coordinator-modal-header" style="background:#f8fafc; border-bottom:1px solid #e2e8f0; padding:1.25rem 1.5rem;">
+      <div class="coordinator-modal-card" style="max-width:870px; max-height:92vh; display:flex; flex-direction:column; box-shadow:0 25px 60px rgba(0,0,0,0.5);">
+        <div class="coordinator-modal-header" style="background:#f8fafc; border-bottom:1px solid #e2e8f0; padding:1.2rem 1.5rem;">
           <div style="display:flex; align-items:center; gap:0.75rem;">
             <div style="width:42px; height:42px; border-radius:50%; background:#eff6ff; color:#1d4ed8; display:flex; align-items:center; justify-content:center; font-size:1.3rem; border:1px solid #bfdbfe;">
               🎓
@@ -678,13 +760,21 @@ const CoordinatorView = {
                 Planeaciones del Día: ${dayName}, ${formattedDate}
               </h3>
               <div style="font-size:0.83rem; color:#64748b; margin-top:2px;">
-                Docente titular: <strong>${teacher.name}</strong> • ${classes.length} clase(s) programada(s)
+                Docente titular: <strong>${teacher.name}</strong> • ${classes.length} clase(s) registradas
               </div>
             </div>
           </div>
 
-          <div style="display:flex; align-items:center; gap:0.5rem;">
-            <button type="button" class="btn-close-modal" onclick="document.getElementById('coordinator-day-classes-modal')?.remove()">&times;</button>
+          <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+            ${classes.length > 0 ? `
+              <button type="button" class="btn btn-secondary btn-sm" onclick="CoordinatorView.downloadTeacherDocx('${tid}', '${dateStr}')" style="font-weight:700; font-size:0.8rem;" title="Descargar tabla consolidada de todas las clases del día en Word">
+                📄 Tabla del Día (Word)
+              </button>
+              <button type="button" class="btn btn-primary btn-sm" onclick="CoordinatorView.downloadTeacherPdf('${tid}', '${dateStr}')" style="font-weight:700; font-size:0.8rem; background:#0f766e; border-color:#0f766e;" title="Descargar o imprimir tabla oficial de desarrollo de clases en PDF">
+                🖨️ Tabla del Día (PDF)
+              </button>
+            ` : ''}
+            <button type="button" class="btn-close-modal" onclick="document.getElementById('coordinator-day-classes-modal')?.remove()" title="Cerrar">&times;</button>
           </div>
         </div>
 
@@ -728,7 +818,7 @@ const CoordinatorView = {
    * Visor de lectura limpio del Cuaderno Docente para Coordinación (Solo Lectura)
    */
   openClassNotebookReader(teacherId, dateStr, classIndex) {
-    const tid = teacherId || 'usr_manuel';
+    const tid = (teacherId && teacherId !== 'usr_coordinacion') ? teacherId : 'usr_manuel';
     const { classes } = this._getPlanAndClasses(tid, dateStr);
     const cls = classes[classIndex] || {};
     const subject = cls.subject || cls.subjectName || 'Clase';
@@ -737,7 +827,7 @@ const CoordinatorView = {
 
     let contentHtml = cls.notebookContent;
     if (!contentHtml || contentHtml.trim().length < 20) {
-      const ped = cls.pedagogy || {};
+      const ped = cls.pedagogy || cls.didacticSequence || {};
       contentHtml = `
         <div style="font-family:'Segoe UI', sans-serif; padding:1.5rem; line-height:1.6; color:#1e293b;">
           <h3 style="color:#1e40af; border-bottom:2px solid #bfdbfe; padding-bottom:6px; margin-top:0;">1. Fase de Inicio / Saberes Previos</h3>
@@ -747,6 +837,7 @@ const CoordinatorView = {
           <h3 style="color:#1e40af; border-bottom:2px solid #bfdbfe; padding-bottom:6px; margin-top:1.5rem;">3. Fase de Cierre / Evaluación Formativa</h3>
           <p>${ped.cierre || 'No especificado'}</p>
           ${ped.recursos ? `<h3 style="color:#1e40af; border-bottom:2px solid #bfdbfe; padding-bottom:6px; margin-top:1.5rem;">Recursos Didácticos</h3><p>${ped.recursos}</p>` : ''}
+          ${ped.tareas ? `<h3 style="color:#1e40af; border-bottom:2px solid #bfdbfe; padding-bottom:6px; margin-top:1.5rem;">Tareas / Compromisos</h3><p>${ped.tareas}</p>` : ''}
         </div>
       `;
     }
@@ -773,12 +864,18 @@ const CoordinatorView = {
             </div>
           </div>
 
-          <div style="display:flex; align-items:center; gap:0.5rem;">
-            <button type="button" class="btn btn-primary btn-sm" onclick="CoordinatorView.downloadTeacherDocx('${tid}', '${dateStr}')">
-              📄 Descargar Word
+          <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="CoordinatorView.openFullNotebookEditor('${tid}', '${dateStr}', ${classIndex})" style="font-weight:700; color:#1e40af; background:#eff6ff; border-color:#bfdbfe;" title="Abrir vista tipo Google Docs en pantalla completa">
+              🔍 Pantalla Completa
             </button>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="CoordinatorView.downloadTeacherPdf('${tid}', '${dateStr}')">
+            <button type="button" class="btn btn-primary btn-sm" onclick="CoordinatorView.downloadNotebookWord('${tid}', '${dateStr}', ${classIndex})" style="font-weight:700;" title="Descargar este cuaderno en Word (.doc)">
+              📄 Descargar Word (.doc)
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="CoordinatorView.downloadNotebookPdf('${tid}', '${dateStr}', ${classIndex})" style="font-weight:700; color:#1e3a8a; background:#dbeafe; border-color:#93c5fd;" title="Descargar o imprimir este cuaderno en PDF">
               🖨️ Descargar PDF
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="CoordinatorView.inspectPlan('${tid}', '${dateStr}', ${classIndex})" style="font-weight:700; color:#0f766e; background:#f0fdfa; border-color:#99f6e4;" title="Ver tabla de desarrollo de esta clase">
+              📋 Ver Tabla
             </button>
             <button type="button" class="btn-close-modal" onclick="document.getElementById('coordinator-notebook-reader-modal')?.remove()" title="Cerrar cuaderno y volver">&times;</button>
           </div>
@@ -795,6 +892,117 @@ const CoordinatorView = {
     document.body.appendChild(readerModal);
   },
 
+  /**
+   * Abre la clase en la vista de Cuaderno completo (Solo Lectura para Coordinación)
+   */
+  openFullNotebookEditor(teacherId, dateStr, classIndexOrId = null) {
+    const tid = (teacherId && teacherId !== 'usr_coordinacion') ? teacherId : 'usr_manuel';
+    let targetClass = null;
+    if (classIndexOrId && typeof classIndexOrId === 'string' && typeof ClassRepository !== 'undefined') {
+      targetClass = ClassRepository.getClass(classIndexOrId, tid);
+    }
+    if (!targetClass) {
+      const { classes } = this._getPlanAndClasses(tid, dateStr);
+      if (classIndexOrId !== null && classIndexOrId !== undefined && !isNaN(Number(classIndexOrId))) {
+        targetClass = classes[Number(classIndexOrId)];
+      } else if (classIndexOrId) {
+        targetClass = classes.find(c => c.id === classIndexOrId || c._id === classIndexOrId);
+      } else if (classes.length > 0) {
+        targetClass = classes[0];
+      }
+    }
+
+    if (!targetClass) {
+      alert('Esta sesión de clase no contiene contenido pedagógico.');
+      return;
+    }
+
+    // Ocultar modales de coordinación
+    document.getElementById('coordinator-day-classes-modal')?.remove();
+    document.getElementById('coordinator-notebook-reader-modal')?.remove();
+    document.getElementById('coordinator-inspect-plan-modal')?.remove();
+
+    if (typeof NotebookEditor !== 'undefined' && typeof NotebookEditor.openForClass === 'function') {
+      NotebookEditor.openForClass(targetClass.id, 'calendar');
+    }
+  },
+
+  /**
+   * Descarga el Cuaderno Pedagógico de una clase en Word (.doc)
+   */
+  downloadNotebookWord(teacherId, dateStr, classIndexOrId = null) {
+    const tid = (teacherId && teacherId !== 'usr_coordinacion') ? teacherId : 'usr_manuel';
+    const teacher = (typeof UserService !== 'undefined' && UserService.getUserById) 
+      ? (UserService.getUserById(tid) || { name: 'Manuel Muñoz' }) 
+      : { name: 'Manuel Muñoz' };
+
+    let targetClass = null;
+    if (classIndexOrId && typeof classIndexOrId === 'string' && typeof ClassRepository !== 'undefined') {
+      targetClass = ClassRepository.getClass(classIndexOrId, tid);
+    }
+    if (!targetClass) {
+      const { classes } = this._getPlanAndClasses(tid, dateStr);
+      if (classIndexOrId !== null && classIndexOrId !== undefined && !isNaN(Number(classIndexOrId))) {
+        targetClass = classes[Number(classIndexOrId)];
+      } else if (classIndexOrId) {
+        targetClass = classes.find(c => c.id === classIndexOrId || c._id === classIndexOrId);
+      } else if (classes.length > 0) {
+        targetClass = classes[0];
+      }
+    }
+
+    if (!targetClass) {
+      alert('Esta sesión de clase no contiene contenido pedagógico para exportar.');
+      return;
+    }
+
+    if (typeof NotebookEditor !== 'undefined' && typeof NotebookEditor.exportClassDocx === 'function') {
+      NotebookEditor.exportClassDocx(targetClass, teacher);
+    } else if (typeof NotebookEditor !== 'undefined' && typeof NotebookEditor.exportWordDocx === 'function') {
+      NotebookEditor.exportWordDocx(targetClass, teacher);
+    }
+  },
+
+  /**
+   * Descarga o imprime el Cuaderno Pedagógico de una clase en PDF
+   */
+  downloadNotebookPdf(teacherId, dateStr, classIndexOrId = null) {
+    const tid = (teacherId && teacherId !== 'usr_coordinacion') ? teacherId : 'usr_manuel';
+    let targetClass = null;
+    if (classIndexOrId && typeof classIndexOrId === 'string' && typeof ClassRepository !== 'undefined') {
+      targetClass = ClassRepository.getClass(classIndexOrId, tid);
+    }
+    if (!targetClass) {
+      const { classes } = this._getPlanAndClasses(tid, dateStr);
+      if (classIndexOrId !== null && classIndexOrId !== undefined && !isNaN(Number(classIndexOrId))) {
+        targetClass = classes[Number(classIndexOrId)];
+      } else if (classIndexOrId) {
+        targetClass = classes.find(c => c.id === classIndexOrId || c._id === classIndexOrId);
+      } else if (classes.length > 0) {
+        targetClass = classes[0];
+      }
+    }
+
+    if (!targetClass) {
+      alert('Esta sesión de clase no contiene contenido pedagógico para imprimir.');
+      return;
+    }
+
+    // Ocultar modales de coordinación para que la vista del cuaderno quede activa
+    const dayModal = document.getElementById('coordinator-day-classes-modal');
+    if (dayModal) dayModal.style.display = 'none';
+    const readerModal = document.getElementById('coordinator-notebook-reader-modal');
+    if (readerModal) readerModal.remove();
+
+    if (typeof NotebookEditor !== 'undefined' && typeof NotebookEditor.openForClass === 'function') {
+      NotebookEditor.openForClass(targetClass.id, 'calendar');
+      setTimeout(() => {
+        if (typeof NotebookEditor.printNotebook === 'function') {
+          NotebookEditor.printNotebook();
+        }
+      }, 350);
+    }
+  },
   /**
    * Guarda y sincroniza el Visto Bueno oficial de Coordinación
    */

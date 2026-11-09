@@ -46,7 +46,11 @@ const NotebookEditor = {
     try {
       const editor = document.getElementById('notebook-single-editor');
       if (!editor) return;
-      editor.focus();
+      try {
+        editor.focus({ preventScroll: true });
+      } catch (_) {
+        editor.focus();
+      }
       const sel = window.getSelection();
       if (this._savedSelectionRange) {
         if (sel) {
@@ -427,13 +431,36 @@ const NotebookEditor = {
 
             <div class="toolbar-divider"></div>
 
+            <!-- Configuración Integral de Página Word / Docs -->
             <div class="toolbar-group" style="align-items:center; gap:4px;">
-              <span style="font-size:0.75rem; font-weight:700; color:var(--slate-600); margin-left:2px;">📐 Margen:</span>
+              <span style="font-size:0.75rem; font-weight:700; color:var(--slate-600);">📄 Hoja:</span>
+              <select id="nb-size-select" class="form-input form-input-sm" onchange="NotebookEditor.setPaperSize(this.value)" style="font-size:0.78rem; padding:2px 6px; height:28px; width:auto; font-weight:600; cursor:pointer;" title="Tamaño de papel">
+                <option value="letter" selected>Carta</option>
+                <option value="a4">A4</option>
+                <option value="legal">Oficio</option>
+              </select>
+
+              <span style="font-size:0.75rem; font-weight:700; color:var(--slate-600); margin-left:3px;">🔄</span>
+              <select id="nb-orient-select" class="form-input form-input-sm" onchange="NotebookEditor.setOrientation(this.value)" style="font-size:0.78rem; padding:2px 6px; height:28px; width:auto; font-weight:600; cursor:pointer;" title="Orientación">
+                <option value="portrait" selected>Vertical</option>
+                <option value="landscape">Horizontal</option>
+              </select>
+
+              <span style="font-size:0.75rem; font-weight:700; color:var(--slate-600); margin-left:3px;">📐</span>
               <select id="nb-margin-select" class="form-input form-input-sm" onchange="NotebookEditor.setMargin(this.value)" style="font-size:0.78rem; padding:2px 6px; height:28px; width:auto; font-weight:600; cursor:pointer;" title="Márgenes de página">
-                <option value="1.27" selected>Estrecho (1.27 cm)</option>
-                <option value="2.0">Moderado (2.0 cm)</option>
-                <option value="2.54">Normal (2.54 cm)</option>
-                <option value="1.0">Compacto (1.0 cm)</option>
+                <option value="1.27" selected>1.27 cm (Estrecho)</option>
+                <option value="2.0">2.0 cm (Moderado)</option>
+                <option value="2.54">2.54 cm (Normal)</option>
+                <option value="1.0">1.0 cm (Compacto)</option>
+              </select>
+
+              <span style="font-size:0.75rem; font-weight:700; color:var(--slate-600); margin-left:3px;">↕️</span>
+              <select id="nb-linespacing-select" class="form-input form-input-sm" onchange="NotebookEditor.setLineSpacing(this.value)" style="font-size:0.78rem; padding:2px 6px; height:28px; width:auto; font-weight:600; cursor:pointer;" title="Interlineado">
+                <option value="1.0">1.0 (Sencillo)</option>
+                <option value="1.15">1.15 (Normal)</option>
+                <option value="1.45" selected>1.45 (Pedagógico)</option>
+                <option value="1.5">1.5 (Líneas y media)</option>
+                <option value="2.0">2.0 (Doble)</option>
               </select>
             </div>
           </div>
@@ -501,6 +528,20 @@ const NotebookEditor = {
           </div>
         </div>
 
+        <!-- Barra de Estado Estilo Word en la Parte Inferior -->
+        <div class="notebook-word-status-bar" id="notebook-word-status-bar">
+          <div class="status-bar-left">
+            <span id="sb-page-info">📄 Total: 1 página</span>
+            <span class="sb-divider">•</span>
+            <span id="sb-word-count">📝 0 palabras</span>
+            <span class="sb-divider">•</span>
+            <span id="sb-page-setup">Carta • Vertical • Margen 1.27 cm</span>
+          </div>
+          <div class="status-bar-right">
+            <span id="sb-save-status">✓ Guardado</span>
+          </div>
+        </div>
+
         <!-- Modal de Historial de Versiones -->
         <div class="modal-backdrop" id="notebook-history-modal">
           <div class="modal-card modal-large" style="max-width:700px;">
@@ -521,6 +562,10 @@ const NotebookEditor = {
     // Usar el binding completo que incluye el fix de toolbar, imágenes y page breaks
     this._bindSingleEditorEvents();
     this._listenToRemoteSync();
+    if (typeof document !== 'undefined') {
+      if (document.documentElement) document.documentElement.scrollLeft = 0;
+      if (document.body) document.body.scrollLeft = 0;
+    }
   },
 
   /**
@@ -839,13 +884,36 @@ const NotebookEditor = {
 
             <div class="toolbar-divider"></div>
 
+            <!-- Configuración Integral de Página Word / Docs -->
             <div class="toolbar-group" style="align-items:center; gap:4px;">
-              <span style="font-size:0.75rem; font-weight:700; color:var(--slate-600); margin-left:2px;">📐 Margen:</span>
+              <span style="font-size:0.75rem; font-weight:700; color:var(--slate-600);">📄 Hoja:</span>
+              <select id="nb-size-select-full" class="form-input form-input-sm" onchange="NotebookEditor.setPaperSize(this.value)" style="font-size:0.78rem; padding:2px 6px; height:28px; width:auto; font-weight:600; cursor:pointer;" title="Tamaño de papel">
+                <option value="letter" selected>Carta</option>
+                <option value="a4">A4</option>
+                <option value="legal">Oficio</option>
+              </select>
+
+              <span style="font-size:0.75rem; font-weight:700; color:var(--slate-600); margin-left:3px;">🔄</span>
+              <select id="nb-orient-select-full" class="form-input form-input-sm" onchange="NotebookEditor.setOrientation(this.value)" style="font-size:0.78rem; padding:2px 6px; height:28px; width:auto; font-weight:600; cursor:pointer;" title="Orientación">
+                <option value="portrait" selected>Vertical</option>
+                <option value="landscape">Horizontal</option>
+              </select>
+
+              <span style="font-size:0.75rem; font-weight:700; color:var(--slate-600); margin-left:3px;">📐</span>
               <select id="nb-margin-select-full" class="form-input form-input-sm" onchange="NotebookEditor.setMargin(this.value)" style="font-size:0.78rem; padding:2px 6px; height:28px; width:auto; font-weight:600; cursor:pointer;" title="Márgenes de página">
-                <option value="1.27" selected>Estrecho (1.27 cm)</option>
-                <option value="2.0">Moderado (2.0 cm)</option>
-                <option value="2.54">Normal (2.54 cm)</option>
-                <option value="1.0">Compacto (1.0 cm)</option>
+                <option value="1.27" selected>1.27 cm (Estrecho)</option>
+                <option value="2.0">2.0 cm (Moderado)</option>
+                <option value="2.54">2.54 cm (Normal)</option>
+                <option value="1.0">1.0 cm (Compacto)</option>
+              </select>
+
+              <span style="font-size:0.75rem; font-weight:700; color:var(--slate-600); margin-left:3px;">↕️</span>
+              <select id="nb-linespacing-select-full" class="form-input form-input-sm" onchange="NotebookEditor.setLineSpacing(this.value)" style="font-size:0.78rem; padding:2px 6px; height:28px; width:auto; font-weight:600; cursor:pointer;" title="Interlineado">
+                <option value="1.0">1.0 (Sencillo)</option>
+                <option value="1.15">1.15 (Normal)</option>
+                <option value="1.45" selected>1.45 (Pedagógico)</option>
+                <option value="1.5">1.5 (Líneas y media)</option>
+                <option value="2.0">2.0 (Doble)</option>
               </select>
             </div>
           </div>
@@ -916,6 +984,20 @@ const NotebookEditor = {
           </div>
         </div>
 
+        <!-- Barra de Estado Estilo Word en la Parte Inferior -->
+        <div class="notebook-word-status-bar" id="notebook-word-status-bar">
+          <div class="status-bar-left">
+            <span id="sb-page-info">📄 Total: 1 página</span>
+            <span class="sb-divider">•</span>
+            <span id="sb-word-count">📝 0 palabras</span>
+            <span class="sb-divider">•</span>
+            <span id="sb-page-setup">Carta • Vertical • Margen 1.27 cm</span>
+          </div>
+          <div class="status-bar-right">
+            <span id="sb-save-status">✓ Guardado</span>
+          </div>
+        </div>
+
         <!-- Modal de Historial de Versiones -->
         <div class="modal-backdrop" id="notebook-history-modal">
           <div class="modal-card modal-large" style="max-width:700px;">
@@ -936,12 +1018,81 @@ const NotebookEditor = {
 
     this._bindSingleEditorEvents();
     this._listenToRemoteSync();
+    if (typeof document !== 'undefined') {
+      if (document.documentElement) document.documentElement.scrollLeft = 0;
+      if (document.body) document.body.scrollLeft = 0;
+    }
   },
 
   /**
    * Prepara el HTML inicial garantizando que nunca quede en blanco, roto o en texto plano/Markdown colapsado.
    * Si se detecta taller o actividad práctica, lo organiza en una hoja independiente con ficha institucional para el estudiante.
    */
+  /**
+   * Sanitiza y estandariza el HTML del cuaderno docente y la hoja de taller,
+   * eliminando encabezados ficticios de "Hoja Independiente", membretes redundantes y emoticones huérfanos.
+   */
+  sanitizeNotebookHtml(html) {
+    if (!html || typeof html !== 'string') return '';
+    let out = html;
+
+    // 1. Proteger la primera ficha institucional del taller y el primer salto de página con blindaje
+    let worksheetHeaderCard = null;
+    out = out.replace(/<div class="notebook-student-worksheet-header"[^>]*>[sS]*?<\/div>\s*<\/div>/i, (m) => {
+      worksheetHeaderCard = m;
+      return '___WORKSHEET_CARD_SHIELD___';
+    });
+
+    // 2. Eliminar cualquier ficha de taller DUPLICADA posterior
+    out = out.replace(/<div class="notebook-student-worksheet-header"[^>]*>[sS]*?<\/div>\s*<\/div>/gi, '');
+
+    // 3. Salto de página oficial para el taller
+    const pageBreakHtml = '<div class="notebook-page-break" contenteditable="false" data-page-break="true"><div class="page-break-line"></div><span class="page-break-label">📄 Hoja Independiente: Taller / Ejercicio Práctico</span></div>';
+
+    // 4. Eliminar TODOS los saltos de página preexistentes para prevenir saltos espurios al inicio del documento
+    out = out.replace(/<div class="notebook-page-break"[^>]*>[sS]*?<\/div>/gi, '');
+
+    // 5. Quitar encabezados ficticios de "Hoja Independiente"
+    out = out.replace(/<h[1-6][^>]*>(?:[\s\p{Emoji}\p{Extended_Pictographic}\uFE0F\u200D]*)?📄?\s*Hoja\s+Independiente[^\n<]*<\/h[1-6]>/giu, '');
+
+    // 6. Quitar párrafos o encabezados que contengan únicamente emojis o signos sueltos
+    out = out.replace(/<(?:p|h[1-6])[^>]*>\s*[\p{Emoji}\p{Extended_Pictographic}\uFE0F\u200D\s\/\\|\-—–_•*#]{1,10}\s*<\/(?:p|h[1-6])>/gmu, '');
+
+    // 7. Quitar encabezados o párrafos redundantes de Estudiante, Fecha, Calificación en el cuerpo
+    out = out.replace(/<(?:p|h[1-6])[^>]*>(?:[📌✍️\s]*)?(?:Estudiante|Calificaci[oó]n|Fecha)\s*:\s*_{2,}[\s\S]*?<\/(?:p|h[1-6])>/gi, '');
+
+    // 8. Quitar encabezados redundantes de Asignatura - Grado en el cuerpo
+    out = out.replace(/<h[1-6][^>]*>(?:[📑📌📚\s]*)?[A-ZÁÉÍÓÚÑa-z]+\s*-\s*Grado\s+[0-9°ºA-Za-z]+[\s\S]*?<\/h[1-6]>/gi, '');
+
+    // 9. Quitar encabezados redundantes de Taller / Actividad Práctica fuera de la ficha
+    out = out.replace(/<h[1-6][^>]*>(?:[📑📌✍️\s]*)?Taller\s*\/\s*Actividad\s+Práctica\s+de\s+la\s+Clase[\s\S]*?<\/h[1-6]>/gi, '');
+
+    // 10. Quitar párrafos que solo tengan "Tema: ..." repetido con una barra suelta
+    out = out.replace(/<p[^>]*><strong>Tema:<\/strong>[^<]*<br\s*\/?>\s*\/<\/p>/gi, '');
+
+    // 11. Eliminar cualquier indicador residual de paginación ("Hoja 2", "Margen 1.27 cm")
+    out = out.replace(/<(?:p|li|h[1-6]|div)[^>]*>(?:[📌📄•\-\s*#]*)?Hoja\s+\d+[\s•\-\–—\.,]*(?:Margen\s+[\d\.,]+\s*cm)?<\/(?:p|li|h[1-6]|div)>/gi, '');
+    out = out.replace(/<(?:p|li|h[1-6]|div)[^>]*>(?:[📌•\-\s*#]*)?Margen\s+[\d\.,]+\s*cm<\/(?:p|li|h[1-6]|div)>/gi, '');
+    out = out.replace(/<div class="nb-page-break-spacer"[^>]*>[\s\S]*?<\/div>/gi, '');
+
+    // 12. Eliminar tarjetas de metadatos redundantes pegadas dentro del cuerpo del cuaderno
+    out = out.replace(/<div[^>]*class=["'][^"']*(?:notebook-metadata|metadata-card)[^"']*["'][^>]*>[\s\S]*?<\/div>/gi, '');
+    out = out.replace(/<p\b[^>]*class=["'][^"']*notebook-metadata-line[^"']*["'][^>]*>[\s\S]*?<\/p>/gi, '');
+
+    // 13. Restaurar la ficha protegida junto con su salto de página independiente
+    if (worksheetHeaderCard) {
+      out = out.replace('___WORKSHEET_CARD_SHIELD___', `${pageBreakHtml}\n${worksheetHeaderCard}`);
+    }
+
+    // 14. Limpiar saltos dobles excesivos entre bloques HTML
+    out = out.replace(/(?:<p><br\/?><\/p>\s*){2,}/gi, '<p><br/></p>');
+
+    // 15. Aplicar reparaciones semánticas de artefactos
+    out = this.repairCorruptedNotebookHtml(out);
+
+    return out.trim();
+  },
+
   _prepareInitialHtml(cls) {
     let raw = '';
     if (cls) {
@@ -949,12 +1100,15 @@ const NotebookEditor = {
       // truncados (< 100 caracteres) pero existe sourceText completo (> 200 caracteres),
       // re-analizamos con ImportParser para restaurar el contenido íntegro sin intervención manual.
       const parser = (typeof ImportParser !== 'undefined') ? ImportParser : (typeof window !== 'undefined' ? window.ImportParser : null);
-      if (parser && cls.teacherNotebook?.sourceText && cls.teacherNotebook.sourceText.length > 200) {
+      const source = cls.teacherNotebook?.sourceText || cls.sourceText;
+      if (parser && source && source.length > 200) {
         const studentNbLen = (cls.teacherNotebook?.studentNotebookContent || '').trim().length;
         const nbCleanLen = (cls.notebookContent || '').replace(/<[^>]+>/g, '').trim().length;
-        if (studentNbLen < 100 || nbCleanLen < 100) {
+        const hasLegacyArtifacts = /Primer<\/li>|ejes\s+tem[aá]ticos<\/h[1-6]>|\\rightarrow|Hoja\s+\d|Margen\s+[\d\.,]+\s*cm/i.test(cls.notebookContent || '') ||
+          /Primer<\/li>|ejes\s+tem[aá]ticos<\/h[1-6]>|\\rightarrow|Hoja\s+\d|Margen\s+[\d\.,]+\s*cm/i.test(cls.teacherNotebook?.studentNotebookContent || '');
+        if (studentNbLen < 100 || nbCleanLen < 100 || hasLegacyArtifacts) {
           try {
-            const reParsed = parser.parse(cls.teacherNotebook.sourceText);
+            const reParsed = parser.parse(source);
             if (reParsed.teacherNotebook?.studentNotebookContent && reParsed.teacherNotebook.studentNotebookContent.length > studentNbLen) {
               cls.teacherNotebook.studentNotebookContent = reParsed.teacherNotebook.studentNotebookContent;
               if (reParsed.teacherNotebook.practicalActivity) {
@@ -1021,6 +1175,11 @@ const NotebookEditor = {
       raw = raw.replace(/(?:<p>\s*)?(?:•\s*)?TALLER\s*[\/:\-]?\s*(?:<\/p>)?\s*$/i, '').trim();
     }
 
+    // Limpiar cajas de metadatos redundantes con el encabezado oficial
+    if (raw) {
+      raw = raw.replace(/<p\b[^>]*class=["'][^"']*notebook-metadata-line[^"']*["'][^>]*>[\s\S]*?<\/p>\s*/gi, '').trim();
+    }
+
     const subDisplay = cls?.subjectName || cls?.subject || 'Clase';
     const grdDisplay = cls?.gradeName || cls?.grade || '';
     const rawTopic = cls?.curriculum?.topic || cls?.topic || '';
@@ -1056,9 +1215,9 @@ const NotebookEditor = {
 
         if (raw && raw.trim()) {
           const mainFormatted = this.formatNotebookHtml(raw);
-          return `${mainFormatted}\n\n${pageBreakHtml}\n\n${worksheetHeader}\n${practicalFormatted}`;
+          return this.sanitizeNotebookHtml(`${mainFormatted}\n\n${pageBreakHtml}\n\n${worksheetHeader}\n${practicalFormatted}`);
         } else {
-          return `${worksheetHeader}\n${practicalFormatted}`;
+          return this.sanitizeNotebookHtml(`${worksheetHeader}\n${practicalFormatted}`);
         }
       } else {
         // Si el contenido ya estaba dentro de raw pero no tiene el salto de página, independizarlo
@@ -1068,6 +1227,7 @@ const NotebookEditor = {
       }
     }
 
+    let finalHtml = '';
     if (raw && raw.trim()) {
       const formatted = this.formatNotebookHtml(raw);
       // Si el contenido original era un párrafo monolítico, actualizarlo en la clase para que quede estructurado de forma persistente
@@ -1090,9 +1250,11 @@ const NotebookEditor = {
           }
         } catch (eSave) {}
       }
-      return formatted;
+      finalHtml = formatted;
+    } else {
+      finalHtml = this.generateDefaultContentFromClass(cls);
     }
-    return this.generateDefaultContentFromClass(cls);
+    return this.sanitizeNotebookHtml(finalHtml);
   },
 
   /**
@@ -1152,7 +1314,7 @@ const NotebookEditor = {
       hdrObs.onblur = () => this.triggerAutoSave(true);
     }
 
-    // Atajos de teclado tipo Word nativos
+    // Atajos de teclado tipo Word nativos y gestión inteligente de saltos de página
     editor.onkeydown = (e) => {
       // Ctrl + S: Guardar
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
@@ -1173,6 +1335,87 @@ const NotebookEditor = {
         e.preventDefault();
         this.insertLink();
         return;
+      }
+
+      // Backspace (Borrar hacia atrás) en límites de página o saltos
+      if (e.key === 'Backspace' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const sel = window.getSelection();
+        if (sel && sel.isCollapsed && sel.rangeCount > 0) {
+          const range = sel.getRangeAt(0);
+          if (range.startOffset === 0) {
+            let node = range.startContainer;
+            while (node && node.parentNode !== editor) {
+              if (node.previousSibling) break;
+              node = node.parentNode;
+            }
+            if (node && node.parentNode === editor) {
+              const prev = node.previousElementSibling;
+              if (prev) {
+                // Si el elemento previo es un salto de página manual
+                if (prev.classList && prev.classList.contains('notebook-page-break')) {
+                  e.preventDefault();
+                  prev.remove();
+                  this.recalculatePagination();
+                  this.triggerAutoSave(false);
+                  return;
+                }
+                // Si el elemento previo es un espaciador de hoja (.nb-page-break-spacer)
+                if (prev.classList && prev.classList.contains('nb-page-break-spacer')) {
+                  const blockBeforeSpacer = prev.previousElementSibling;
+                  if (blockBeforeSpacer) {
+                    const text = (node.textContent || '').trim();
+                    if (!text && !node.querySelector?.('img, table, hr')) {
+                      e.preventDefault();
+                      node.remove();
+                      this._setCaretToEnd(blockBeforeSpacer);
+                      this.recalculatePagination();
+                      this.triggerAutoSave(false);
+                      return;
+                    }
+                    e.preventDefault();
+                    this._setCaretToEnd(blockBeforeSpacer);
+                    return;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // Supr / Delete (Borrar hacia adelante) en límites de página
+      if (e.key === 'Delete' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const sel = window.getSelection();
+        if (sel && sel.isCollapsed && sel.rangeCount > 0) {
+          const range = sel.getRangeAt(0);
+          let node = range.startContainer;
+          while (node && node.parentNode !== editor) {
+            if (node.nextSibling) break;
+            node = node.parentNode;
+          }
+          if (node && node.parentNode === editor) {
+            if (this._isCaretAtEndOfBlock(node, range)) {
+              const next = node.nextElementSibling;
+              if (next) {
+                if (next.classList && next.classList.contains('notebook-page-break')) {
+                  e.preventDefault();
+                  next.remove();
+                  this.recalculatePagination();
+                  this.triggerAutoSave(false);
+                  return;
+                }
+                if (next.classList && next.classList.contains('nb-page-break-spacer')) {
+                  const blockAfterSpacer = next.nextElementSibling;
+                  if (blockAfterSpacer) {
+                    e.preventDefault();
+                    this._setCaretToStart(blockAfterSpacer);
+                    return;
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     };
 
@@ -1821,9 +2064,85 @@ const NotebookEditor = {
   },
 
   insertPageBreakAtCursor() {
-    const breakHtml = '<div class="notebook-page-break" contenteditable="false" data-page-break="true"><div class="page-break-line"></div><span class="page-break-label">📄 Salto de Página</span></div><p><br/></p>';
-    this._insertHtmlAtCursor(breakHtml);
-    setTimeout(() => this.recalculatePagination(), 50);
+    this._restoreSelection();
+    const editor = document.getElementById('notebook-single-editor');
+    if (!editor) return;
+
+    const breakEl = document.createElement('div');
+    breakEl.className = 'notebook-page-break';
+    breakEl.contentEditable = 'false';
+    breakEl.setAttribute('data-page-break', 'true');
+    breakEl.innerHTML = '<div class="page-break-line"></div><span class="page-break-label">📄 Salto de Página</span>';
+
+    const sel = (typeof window !== 'undefined' && window.getSelection) ? window.getSelection() : null;
+    if (!sel || sel.rangeCount === 0) {
+      const newP = document.createElement('p');
+      newP.innerHTML = '<br/>';
+      editor.appendChild(breakEl);
+      editor.appendChild(newP);
+      this._setCaretToStart(newP);
+      this.recalculatePagination();
+      this.triggerAutoSave(false);
+      return;
+    }
+
+    const range = sel.getRangeAt(0);
+    let container = range.startContainer;
+
+    // Detectar si estamos dentro de una lista (UL o OL)
+    const li = container.nodeType === 1 ? container.closest('li') : container.parentElement?.closest('li');
+    const ul = li ? li.closest('ul, ol') : (container.nodeType === 1 ? container.closest('ul, ol') : container.parentElement?.closest('ul, ol'));
+
+    if (ul && ul.parentNode) {
+      const allLis = Array.from(ul.children).filter(el => el.tagName === 'LI');
+      const targetLi = li || allLis[allLis.length - 1];
+      const targetIndex = allLis.indexOf(targetLi);
+      const remainingLis = allLis.slice(targetIndex + 1);
+
+      if (remainingLis.length > 0) {
+        const nextUl = document.createElement(ul.tagName);
+        if (ul.className) nextUl.className = ul.className;
+        if (ul.style && ul.style.cssText) nextUl.style.cssText = ul.style.cssText;
+        if (ul.tagName === 'OL') {
+          const start = parseInt(ul.getAttribute('start') || '1', 10) || 1;
+          nextUl.setAttribute('start', String(start + targetIndex + 1));
+        }
+        remainingLis.forEach(it => nextUl.appendChild(it));
+
+        ul.parentNode.insertBefore(breakEl, ul.nextSibling);
+        breakEl.parentNode.insertBefore(nextUl, breakEl.nextSibling);
+        this._setCaretToStart(remainingLis[0]);
+      } else {
+        const newP = document.createElement('p');
+        newP.innerHTML = '<br/>';
+        ul.parentNode.insertBefore(breakEl, ul.nextSibling);
+        breakEl.parentNode.insertBefore(newP, breakEl.nextSibling);
+        this._setCaretToStart(newP);
+      }
+    } else {
+      // Buscar bloque padre directo bajo editor
+      let block = container.nodeType === 1 ? container : container.parentElement;
+      while (block && block.parentNode !== editor) {
+        block = block.parentNode;
+      }
+
+      if (block && block.parentNode === editor) {
+        const newP = document.createElement('p');
+        newP.innerHTML = '<br/>';
+        block.parentNode.insertBefore(breakEl, block.nextSibling);
+        breakEl.parentNode.insertBefore(newP, breakEl.nextSibling);
+        this._setCaretToStart(newP);
+      } else {
+        const newP = document.createElement('p');
+        newP.innerHTML = '<br/>';
+        editor.appendChild(breakEl);
+        editor.appendChild(newP);
+        this._setCaretToStart(newP);
+      }
+    }
+
+    this.recalculatePagination();
+    this.triggerAutoSave(false);
   },
 
   insertLink() {
@@ -2078,44 +2397,63 @@ const NotebookEditor = {
   /**
    * Exporta el Cuaderno / Guía Pedagógica a Microsoft Word (.doc) con diseño institucional completo
    */
-  exportWordDocx() {
-    this.saveCurrentNotebookContent(false);
-    const cls = this.currentClassData || (this.currentClassIndex !== null && window.Planner?.currentPlan?.classes?.[this.currentClassIndex]) || {};
-    const profile = (typeof StorageService !== 'undefined') ? StorageService.getProfile() : {};
+  exportClassDocx(cls, profile) {
+    return this.exportWordDocx(cls, profile);
+  },
+
+  exportWordDocx(customCls = null, customProfile = null) {
+    if (!customCls) this.saveCurrentNotebookContent(false);
+    const cls = customCls || this.currentClassData || (this.currentClassIndex !== null && window.Planner?.currentPlan?.classes?.[this.currentClassIndex]) || {};
+    const profile = customProfile || (typeof StorageService !== 'undefined' ? StorageService.getProfile() : {}) || {};
     const institution = profile.institution || 'COLEGIO HOGAR MADRE DE DIOS';
     const teacherName = profile.name || 'Manuel Muñoz';
     const formattedDate = (typeof ExportService !== 'undefined' && ExportService.formatDate) ? ExportService.formatDate(cls.date || this.currentDateStr) : (cls.date || this.currentDateStr || '');
     const classNum = cls.sequenceNumber || cls.dayNumber || 1;
     const subjectDisplay = cls.subjectName || cls.subject || 'Asignatura';
-    const gradeDisplay = cls.gradeName || cls.grade || '';
+    const gradeDisplay = (cls.gradeName || cls.grade) ? String(cls.gradeName || cls.grade).trim() : '';
     const period = cls.period || profile.period || '1°';
     const topic = cls.curriculum?.topic || cls.topic || 'Guía de Clase';
 
-    const editor = document.getElementById('notebook-single-editor');
+    const editor = !customCls && typeof document !== 'undefined' ? document.getElementById('notebook-single-editor') : null;
     let bodyHtml = '';
     if (editor) {
-      const clone = editor.cloneNode(true);
-      // Reemplazar espaciadores de página de PaginationEngine por saltos de página nativos de Word
-      clone.querySelectorAll('.nb-page-break-spacer').forEach(sp => {
-        const br = document.createElement('br');
-        br.setAttribute('clear', 'all');
-        br.style.cssText = 'page-break-before:always; mso-break-type:page-break;';
-        sp.parentNode.replaceChild(br, sp);
-      });
-      clone.querySelectorAll('.nb-auto-page-break').forEach(el => el.remove());
-      bodyHtml = this.cleanDocumentArtifacts(clone.innerHTML);
+      // Regla 15: HTML semántico limpio (listas/tablas recombinadas, sin espaciadores efímeros de pantalla).
+      // Word pagina de forma nativa; NO se inyectan saltos calculados por el motor visual.
+      let rawHtml;
+      if (typeof PaginationEngine !== 'undefined' && PaginationEngine.getCleanHtml) {
+        rawHtml = PaginationEngine.getCleanHtml(editor);
+      } else {
+        const clone = editor.cloneNode(true);
+        clone.querySelectorAll('.nb-page-break-spacer, .nb-auto-page-break').forEach(el => el.remove());
+        rawHtml = clone.innerHTML;
+      }
+      bodyHtml = this.prepareWordHtml(this.cleanDocumentArtifacts(rawHtml));
     } else {
-      bodyHtml = this.cleanDocumentArtifacts(cls.notebookContent || '');
+      let rawHtml = cls.notebookContent;
+      if (!rawHtml || String(rawHtml).trim().length < 20) {
+        const ped = cls.pedagogy || cls.didacticSequence || {};
+        rawHtml = `
+          <h3 style="color:#1e40af; border-bottom:2px solid #bfdbfe; padding-bottom:6px;">1. Fase de Inicio / Saberes Previos</h3>
+          <p>${ped.inicio || 'No especificado'}</p>
+          <h3 style="color:#1e40af; border-bottom:2px solid #bfdbfe; padding-bottom:6px;">2. Fase de Desarrollo / Conceptualización</h3>
+          <p>${ped.desarrollo || 'No especificado'}</p>
+          <h3 style="color:#1e40af; border-bottom:2px solid #bfdbfe; padding-bottom:6px;">3. Fase de Cierre / Evaluación Formativa</h3>
+          <p>${ped.cierre || 'No especificado'}</p>
+          ${ped.recursos ? `<h3 style="color:#1e40af; border-bottom:2px solid #bfdbfe; padding-bottom:6px;">Recursos Didácticos</h3><p>${ped.recursos}</p>` : ''}
+          ${ped.tareas ? `<h3 style="color:#1e40af; border-bottom:2px solid #bfdbfe; padding-bottom:6px;">Tareas / Compromisos</h3><p>${ped.tareas}</p>` : ''}
+        `;
+      }
+      bodyHtml = this.prepareWordHtml(this.cleanDocumentArtifacts(rawHtml));
     }
 
-    const hdrObs = document.getElementById('hdr-edit-observations');
+    const hdrObs = !customCls && typeof document !== 'undefined' ? document.getElementById('hdr-edit-observations') : null;
     const obsVal = hdrObs ? hdrObs.value.trim() : (cls.observations || '');
 
     const paperSize = (typeof PageConfig !== 'undefined' && PageConfig.paperSize === 'a4') ? 'a4' : 'letter';
     const marginVal = (typeof PageConfig !== 'undefined') ? PageConfig.margins.topCm : 1.27;
 
     // Comprobar si las observaciones tienen salto de página previo
-    const obsCard = document.querySelector('.notebook-observations-card');
+    const obsCard = typeof document !== 'undefined' && typeof document.querySelector === 'function' ? document.querySelector('.notebook-observations-card') : null;
     const obsHasBreak = obsCard && obsCard.previousElementSibling && obsCard.previousElementSibling.classList.contains('nb-page-break-spacer');
 
     const wordContent = `
@@ -2159,7 +2497,9 @@ const NotebookEditor = {
           h1 { font-size: 18pt; border-bottom: 2pt solid #1e3a8a; padding-bottom: 4pt; }
           h2 { font-size: 14pt; border-bottom: 1pt solid #cbd5e1; padding-bottom: 2pt; }
           h3 { font-size: 12pt; }
-          p { margin: 0 0 7pt 0; }
+          p, li { margin: 0 0 7pt 0; text-align: justify; text-justify: inter-word; }
+          ul, ol { margin-top: 4pt; margin-bottom: 7pt; }
+          li { margin-bottom: 3pt; text-align: justify; text-justify: inter-word; }
           table {
             width: 100%;
             border-collapse: collapse;
@@ -2181,50 +2521,34 @@ const NotebookEditor = {
             padding: 8pt 12pt;
             margin: 10pt 0;
           }
-          .notebook-callout.concept {
-            border-left-color: #059669;
-            background-color: #ecfdf5;
-          }
-          .notebook-callout.activity {
-            border-left-color: #2563eb;
-            background-color: #eff6ff;
-          }
-          .notebook-callout.homework {
-            border-left-color: #d97706;
-            background-color: #fffbeb;
-          }
           .header-table {
             width: 100%;
             border: none;
+            border-bottom: 2pt solid #1e3a8a;
             margin-bottom: 14pt;
-            border-collapse: collapse;
           }
           .header-table td {
             border: none;
-            padding: 2pt 4pt;
+            padding: 4pt 0;
           }
           .meta-table {
             width: 100%;
-            border-collapse: collapse;
-            background-color: #f8fafc;
             border: 1pt solid #cbd5e1;
             margin-bottom: 14pt;
+            background-color: #f8fafc;
           }
           .meta-table td {
-            border: 1pt solid #e2e8f0;
+            border: 1pt solid #cbd5e1;
             padding: 4pt 8pt;
             font-size: 9.5pt;
           }
           .observations-box {
-            border: 1pt solid #fde68a;
+            border: 1.5pt solid #f59e0b;
             background-color: #fffbeb;
             padding: 8pt 12pt;
-            margin-top: 20pt;
-            border-radius: 4pt;
-          }
-          .page-break {
-            page-break-before: always;
-            mso-break-type: section-break;
+            margin-top: ${obsHasBreak ? '0' : '18pt'};
+            page-break-inside: avoid;
+            ${obsHasBreak ? 'page-break-before: always; mso-break-type: page-break;' : ''}
           }
         </style>
       </head>
@@ -2234,11 +2558,11 @@ const NotebookEditor = {
           <table class="header-table">
             <tr>
               <td style="width: 75%; vertical-align: middle;">
-                <div style="font-size: 11pt; font-weight: bold; color: #1e3a8a; text-transform: uppercase;">
+                <div style="font-size: 14pt; font-weight: bold; color: #1e3a8a; text-transform: uppercase;">
                   ${this.escapeHtml(institution)}
                 </div>
-                <div style="font-size: 15pt; font-weight: bold; color: #0f172a; margin-top: 2pt;">
-                  GUÍA PEDAGÓGICA Y CUADERNO DE CLASE
+                <div style="font-size: 10pt; color: #64748b; font-weight: bold;">
+                  Cuaderno Pedagógico de Clase • Preparador Curricular
                 </div>
               </td>
               <td style="width: 25%; text-align: right; vertical-align: middle;">
@@ -2270,7 +2594,6 @@ const NotebookEditor = {
 
           <!-- Observaciones Pedagógicas -->
           ${obsVal ? `
-            ${obsHasBreak ? `<br clear="all" style="page-break-before:always; mso-break-type:page-break;" />` : ''}
             <div class="observations-box">
               <strong style="color: #92400e; font-size: 10pt;">📝 Observaciones Pedagógicas de la Sesión:</strong>
               <p style="margin: 4pt 0 0 0; font-size: 9.5pt; white-space: pre-wrap;">${this.escapeHtml(obsVal)}</p>
@@ -2281,23 +2604,86 @@ const NotebookEditor = {
       </html>
     `;
 
-    const blob = new Blob(['\ufeff' + wordContent], { type: 'application/msword;charset=utf-8' });
-    const subClean = (subjectDisplay || 'Materia').replace(/[\s\/\\:*?"<>|]+/g, ' ').trim();
-    const grdClean = (gradeDisplay || '').replace(/[\s\/\\:*?"<>|]+/g, ' ').trim();
-    const fileName = grdClean ? `Cuaderno docente - ${subClean} - ${grdClean}.doc` : `Cuaderno docente - ${subClean}.doc`;
+    if (typeof Blob !== 'undefined' && typeof document !== 'undefined') {
+      const blob = new Blob(['\ufeff' + wordContent], { type: 'application/msword;charset=utf-8' });
+      const subClean = (subjectDisplay || 'Materia').replace(/[\s\/\\:*?"<>|]+/g, ' ').trim();
+      const grdClean = (gradeDisplay || '').replace(/[\s\/\\:*?"<>|]+/g, ' ').trim();
+      const fileName = grdClean ? `Cuaderno docente - ${subClean} - ${grdClean}.doc` : `Cuaderno docente - ${subClean}.doc`;
 
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+      if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
+    }
 
     if (typeof App !== 'undefined' && App.showToast) {
       App.showToast('Descargando Cuaderno Docente en formato Word (.doc)...', 'info');
     }
+
+    return wordContent;
+  },
+
+  prepareWordHtml(html) {
+    if (!html) return '';
+    html = this.repairCorruptedNotebookHtml(html);
+    const shields = [];
+    let out = String(html).replace(/<img\b[^>]*>/gi, (m) => {
+      shields.push(m);
+      return '___IMG_SHIELD_' + (shields.length - 1) + '___';
+    });
+
+    const PB = '<br clear="all" style="page-break-before:always; mso-break-type:page-break;">';
+
+    // Saltos ficticios de pantalla (espaciadores / break-before inyectados por el motor visual)
+    out = out.replace(/<br\b[^>]{0,200}(?:break-before|page-break-before)[^>]{0,200}>/gi, '');
+
+    // Marcador de hoja independiente -> salto de página nativo de Word
+    out = out.replace(/<div\b[^>]{0,200}notebook-page-break[^>]{0,200}>\s*<div\b[^>]{0,200}><\/div>\s*<span\b[^>]{0,200}>[\s\S]{0,300}?<\/span>\s*<\/div>/gi, PB);
+
+    // Encabezado del taller (flex/grid) -> tabla compatible con Word
+    out = out.replace(/<div\b[^>]{0,200}notebook-student-worksheet-header[^>]{0,400}>[\s\S]{0,4000}?<strong>\s*Tema:\s*<\/strong>([\s\S]{0,2000}?)<\/div>\s*<\/div>/gi, (m, tema) => {
+      const h2 = /<h2\b[^>]{0,400}>([\s\S]{0,300}?)<\/h2>/i.exec(m);
+      const sp = /<span\b[^>]{0,300}>([\s\S]{0,200}?)<\/span>/i.exec(m);
+      return '<table style="width:100%; border-collapse:collapse; border:1.5pt solid #1e3a8a; background-color:#f8fafc; margin:8pt 0;">' +
+        '<tr><td colspan="3" style="border:none; border-bottom:1pt solid #cbd5e1; padding:5pt 8pt;">' +
+        '<span style="font-size:13pt; font-weight:bold; color:#1e3a8a; text-transform:uppercase;">' + (h2 ? h2[1] : 'Taller / Actividad Práctica de la Clase') + '</span>' +
+        (sp ? '<br><span style="font-size:10pt; font-weight:bold; color:#475569;">' + sp[1] + '</span>' : '') + '</td></tr>' +
+        '<tr><td style="width:56%; border:none; padding:4pt 8pt; font-size:10pt;"><strong>Estudiante:</strong> ____________________________</td>' +
+        '<td style="width:22%; border:none; padding:4pt 8pt; font-size:10pt;"><strong>Fecha:</strong> __________</td>' +
+        '<td style="width:22%; border:none; padding:4pt 8pt; font-size:10pt;"><strong>Calificación:</strong> _______</td></tr>' +
+        '<tr><td colspan="3" style="border:none; border-top:1pt dashed #cbd5e1; padding:4pt 8pt; font-size:10pt;"><strong>Tema:</strong>' + tema + '</td></tr>' +
+        '</table>';
+    });
+
+    // Atributos de edición
+    out = out.replace(/\s(?:contenteditable|data-page-break|spellcheck)="[^"]{0,20}"/gi, '');
+
+    // Estilos en línea: rem/em/px -> pt y propiedades no soportadas por Word
+    out = out.replace(/\sstyle="([^"]{0,2000})"/gi, (m, st) => {
+      let t = st
+        .replace(/(-?\d*\.?\d+)rem\b/gi, (x, n) => (parseFloat(n) * 12).toFixed(1) + 'pt')
+        .replace(/(-?\d*\.?\d+)em\b/gi, (x, n) => (parseFloat(n) * 11).toFixed(1) + 'pt')
+        .replace(/(-?\d*\.?\d+)px\b/gi, (x, n) => (parseFloat(n) * 0.75).toFixed(1) + 'pt')
+        .replace(/(?:^|;)\s*(?:display\s*:\s*(?:flex|grid)|justify-content|align-items|gap|grid-template-columns|letter-spacing|break-inside|break-before|break-after)\s*:[^;]{0,100}/gi, ';')
+        .replace(/^;+/, '').replace(/;{2,}/g, ';');
+      return ' style="' + t + '"';
+    });
+
+    // Párrafos con saltos de línea manuales: sin justificado (Word estira cada línea antes del <br>)
+    out = out.replace(/<p\b([^>]{0,600})>([\s\S]{0,20000}?)<\/p>/gi, (m, attrs, inner) => {
+      if (!/<br\b/i.test(inner) || !/text-align\s*:\s*justify/i.test(attrs)) return m;
+      return '<p' + attrs.replace(/text-align\s*:\s*justify/i, 'text-align:left') + '>' + inner + '</p>';
+    });
+
+    // Restaurar multimedia íntegra
+    out = out.replace(/___IMG_SHIELD_(\d+)___/g, (m, i) => shields[+i] || '');
+    return out;
   },
 
   printNotebook() {
@@ -2581,9 +2967,48 @@ const NotebookEditor = {
     return clean;
   },
 
+  repairCorruptedNotebookHtml(h) {
+    if (!h || typeof h !== 'string') return '';
+    let out = h;
+
+    // 1. Flechas LaTeX
+    out = out.replace(/[\/\\](?:rightarrow|rigtharrow|right|to)\b/gi, '→');
+    out = out.replace(/[\/\\](?:leftarrow)\b/gi, '←');
+    out = out.replace(/[\/\\](?:leftrightarrow)\b/gi, '↔');
+    out = out.replace(/[\/\\](?:Rightarrow|implies)\b/gi, '⇒');
+    out = out.replace(/[\/\\](?:Leftarrow)\b/gi, '⇐');
+
+    // 2. Primer + tema:
+    out = out.replace(/<li[^>]*>\s*Primer\s*<\/li>\s*(?:<\/ul>\s*)?(?:<p[^>]*>)?\s*(?:<strong[^>]*>)?\s*tema:\s*(?:<\/strong>)?([\s\S]*?)(?:<\/p>|<\/li>)/gi, (m, rest) => {
+      return '<li style="margin-bottom:0.2rem; text-align:justify;"><strong>Primer tema:</strong> ' + rest.trim() + '</li>';
+    });
+
+    // 3. Ejemplo resuelto + 🛠️ paso a paso
+    out = out.replace(/<(?:li|p)[^>]*>\s*Ejemplo\s+resuelto\s*<\/(?:li|p)>\s*(?:<\/ul>\s*)?<h3[^>]*>🛠️\s*(?:<strong[^>]*>)?\s*paso\s+a\s+paso:?\s*(?:<\/strong>)?<\/h3>/gi, () => {
+      return '<li style="margin-bottom:0.2rem; text-align:justify;"><strong>Ejemplo resuelto paso a paso:</strong></li>';
+    });
+
+    // 4. ejes tematicos y desempeños partidos en Taller
+    out = out.replace(/(<p[^>]*>[\s\S]*?colores\s+los)\s*<\/p>\s*<h[1-6][^>]*>[^<]*ejes\s+tem[aá]ticos[^<]*<\/h[1-6]>\s*(?:<p[^>]*>)?\s*,?\s*los\s*(?:<\/p>)?\s*<h[1-6][^>]*>[^<]*desempeños\s+de\s+aprendizaje[^<]*<\/h[1-6]>\s*<p[^>]*>\s*(y\s+la\s+pregunta[\s\S]*?<\/p>)/gi, (m, p1, p2) => {
+      return p1 + ' ejes temáticos, los desempeños de aprendizaje ' + p2;
+    });
+
+    // 5. Limpiar cualquier indicador residual de paginación ("Hoja 2", "Margen 1.27 cm")
+    out = out.replace(/<(?:p|li|h[1-6]|div)[^>]*>(?:[📌📄•\-\s*#]*)?Hoja\s+\d+[\s•\-\–—\.,]*(?:Margen\s+[\d\.,]+\s*cm)?<\/(?:p|li|h[1-6]|div)>/gi, '');
+    out = out.replace(/<(?:p|li|h[1-6]|div)[^>]*>(?:[📌•\-\s*#]*)?Margen\s+[\d\.,]+\s*cm<\/(?:p|li|h[1-6]|div)>/gi, '');
+    out = out.replace(/<div class="nb-page-break-spacer"[^>]*>[\s\S]*?<\/div>/gi, '');
+
+    // 6. NUESTROS LOGROS Y METAS (DESEMPEÑOS DE APRENDIZAJE) fracturado
+    out = out.replace(/<h[1-6][^>]*>[^<]*NUESTROS\s+LOGROS\s+Y\s+METAS\s*\([^<]*<\/h[1-6]>\s*(?:<p[^>]*>[^<]*<\/p>\s*)?<h[1-6][^>]*>[^<]*DESEMPEÑOS\s+DE\s+APRENDIZAJE[^<]*<\/h[1-6]>\s*(?:<p[^>]*>)?\s*\):?\s*(?:<\/p>)?/gi, () => {
+      return '<h2 style="color:#1e3a8a; margin-top:1.1rem; margin-bottom:0.4rem; font-size:1.15rem; font-weight:700; border-bottom:1.5px solid #bfdbfe; padding-bottom:4px; letter-spacing:-0.01em;">🎯 NUESTROS LOGROS Y METAS (DESEMPEÑOS DE APRENDIZAJE):</h2>';
+    });
+
+    return out;
+  },
+
   _cleanAutoCallouts(html) {
     if (!html || typeof html !== 'string') return '';
-    let cleaned = this.cleanDocumentArtifacts(html);
+    let cleaned = this.repairCorruptedNotebookHtml(this.cleanDocumentArtifacts(html));
     cleaned = cleaned.replace(/<div class="notebook-callout concept"[^>]*>([\s\S]*?)<\/div>/gi, (match, inner) => {
       if (/(?:📌|✍️|🏠|Concepto Clave:|Actividad en Clase:|Tarea \/ Compromiso:)/i.test(inner)) {
         return match;
@@ -2964,6 +3389,10 @@ const NotebookEditor = {
       const prefix = match.slice(0, match.indexOf(prep));
       return prefix + prep + ' ' + nextChar;
     });
+
+    // 5b. Unir paréntesis o corchetes partidos por salto de línea
+    clean = clean.replace(/(\([^\n\)]*)\n+\s*(\)(?:\s*:)?)/g, '');
+    clean = clean.replace(/(?:^|\n)\s*\)(?:\s*:)?\s*(?=\n|$)/g, '\n');
 
     // 6. Unir líneas que terminan en palabra normal y la siguiente empieza con minúscula
     clean = clean.replace(/([a-záéíóúñA-ZÁÉÍÓÚÑ0-9,])\s*\n\s*([a-záéíóúñ])/g, '$1 $2');
@@ -3625,13 +4054,64 @@ const NotebookEditor = {
     const paperContainer = document.querySelector('.notebook-paper-container');
     if (!editor || !paperContainer || !editor.isConnected) return { totalPages: 1, breaks: [] };
     if (typeof PaginationEngine !== 'undefined') {
-      return PaginationEngine.paginate(paperContainer, editor);
+      const res = PaginationEngine.paginate(paperContainer, editor);
+      this.updateStatusBar();
+      return res;
     }
     return { totalPages: 1, breaks: [] };
   },
 
   _updatePageBreakIndicators() {
     return this.recalculatePagination();
+  },
+
+  setPaperSize(size) {
+    const paperSize = size || 'letter';
+    if (typeof PageConfig !== 'undefined') {
+      PageConfig.setPaperSize(paperSize);
+      const widthPx = PageConfig.getPageWidthPx();
+      document.querySelectorAll('.notebook-paper-container').forEach(p => {
+        p.style.maxWidth = widthPx + 'px';
+      });
+    }
+    const s1 = document.getElementById('nb-size-select');
+    if (s1) s1.value = paperSize;
+    const s2 = document.getElementById('nb-size-select-full');
+    if (s2) s2.value = paperSize;
+    this.recalculatePagination();
+    this.updateStatusBar();
+  },
+
+  setOrientation(orientation) {
+    const orient = (orientation === 'landscape') ? 'landscape' : 'portrait';
+    if (typeof PageConfig !== 'undefined') {
+      PageConfig.setOrientation(orient);
+      const widthPx = PageConfig.getPageWidthPx();
+      document.querySelectorAll('.notebook-paper-container').forEach(p => {
+        p.style.maxWidth = widthPx + 'px';
+      });
+    }
+    const o1 = document.getElementById('nb-orient-select');
+    if (o1) o1.value = orient;
+    const o2 = document.getElementById('nb-orient-select-full');
+    if (o2) o2.value = orient;
+    this.recalculatePagination();
+    this.updateStatusBar();
+  },
+
+  setLineSpacing(spacingVal) {
+    const val = spacingVal || '1.45';
+    const editor = document.getElementById('notebook-single-editor');
+    if (editor) {
+      editor.style.lineHeight = val;
+    }
+    const ls1 = document.getElementById('nb-linespacing-select');
+    if (ls1) ls1.value = val;
+    const ls2 = document.getElementById('nb-linespacing-select-full');
+    if (ls2) ls2.value = val;
+    this.recalculatePagination();
+    this.triggerAutoSave(false);
+    this.updateStatusBar();
   },
 
   setMargin(marginCm) {
@@ -3653,6 +4133,80 @@ const NotebookEditor = {
     this.recalculatePagination();
     if (typeof App !== 'undefined' && App.showToast) {
       App.showToast(`Margen configurado en ${margin} cm en los 4 lados`, 'info');
+    }
+    this.updateStatusBar();
+  },
+
+  updateStatusBar() {
+    const editor = document.getElementById('notebook-single-editor');
+    if (!editor) return;
+
+    // 1. Contador de palabras
+    const text = (editor.innerText || editor.textContent || '').trim();
+    const words = text ? text.split(/\s+/).filter(Boolean).length : 0;
+    document.querySelectorAll('#sb-word-count').forEach(el => {
+      el.textContent = '📝 ' + words + ' palabras';
+    });
+
+    // 2. Información de páginas
+    const paperContainer = document.querySelector('.notebook-paper-container');
+    const totalPages = paperContainer ? (paperContainer.querySelectorAll('.nb-page-break-spacer').length + 1) : 1;
+    document.querySelectorAll('#sb-page-info').forEach(el => {
+      el.textContent = '📄 Total: ' + totalPages + (totalPages === 1 ? ' página' : ' páginas');
+    });
+
+    // 3. Configuración de página (Tamaño • Orientación • Margen)
+    if (typeof PageConfig !== 'undefined') {
+      const paperName = PageConfig.getPaperName ? PageConfig.getPaperName() : 'Carta';
+      const orient = (PageConfig.orientation === 'landscape') ? 'Horizontal' : 'Vertical';
+      const margin = PageConfig.margins.topCm;
+      document.querySelectorAll('#sb-page-setup').forEach(el => {
+        el.textContent = paperName + ' • ' + orient + ' • Margen ' + margin + ' cm';
+      });
+    }
+
+    // 4. Estado de autoguardado
+    const badge = document.getElementById('notebook-autosave-badge');
+    if (badge) {
+      document.querySelectorAll('#sb-save-status').forEach(el => {
+        el.textContent = badge.textContent || '✓ Guardado';
+        el.style.color = badge.style.color || '#065f46';
+      });
+    }
+  },
+
+  _setCaretToEnd(el) {
+    if (!el || typeof window === 'undefined' || !window.getSelection) return;
+    try {
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      range.collapse(false);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } catch (e) {}
+  },
+
+  _setCaretToStart(el) {
+    if (!el || typeof window === 'undefined' || !window.getSelection) return;
+    try {
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      range.collapse(true);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } catch (e) {}
+  },
+
+  _isCaretAtEndOfBlock(node, range) {
+    if (!node || !range || typeof Range === 'undefined') return false;
+    try {
+      const checkRange = document.createRange();
+      checkRange.selectNodeContents(node);
+      return range.compareBoundaryPoints(Range.END_TO_END, checkRange) === 0;
+    } catch (e) {
+      return false;
     }
   },
 

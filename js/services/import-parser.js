@@ -53,7 +53,24 @@ class ImportParserClass {
       str = str.replace(/\\neq\b/g, '≠');
       str = str.replace(/\\approx\b/g, '≈');
       str = str.replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '$1/$2');
+      str = str.replace(/\\(?:rightarrow|to)\b/gi, '→');
+      str = str.replace(/\\(?:Rightarrow|implies)\b/gi, '⇒');
+      str = str.replace(/\\leftarrow\b/gi, '←');
+      str = str.replace(/\\Leftarrow\b/gi, '⇐');
+      str = str.replace(/\\leftrightarrow\b/gi, '↔');
+      str = str.replace(/\\degree\b/gi, '°');
+      str = str.replace(/\\(?:dots|ldots|cdots)\b/gi, '...');
     }
+
+    // 2b. Limpiar flechas LaTeX con barra diagonal o invertida (/rightarrow, /rigtharrow, /right, \rightarrow)
+    if (/[\/\\](?:rightarrow|rigtharrow|right|leftarrow|leftrightarrow|Rightarrow|Leftarrow)\b/i.test(str)) {
+      str = str.replace(/[\/\\]+(?:rightarrow|rigtharrow|right|to)\b/gi, '→');
+      str = str.replace(/[\/\\]+(?:leftarrow)\b/gi, '←');
+      str = str.replace(/[\/\\]+(?:leftrightarrow)\b/gi, '↔');
+      str = str.replace(/[\/\\]+(?:Rightarrow|implies)\b/gi, '⇒');
+      str = str.replace(/[\/\\]+(?:Leftarrow)\b/gi, '⇐');
+    }
+    str = str.replace(/\\+→/g, '→').replace(/\\+←/g, '←').replace(/\\+↔/g, '↔');
 
     // 3. Limpiar signos de dólar $ y $$ que envuelven texto, números o comparaciones
     if (str.includes('$')) {
@@ -120,6 +137,25 @@ class ImportParserClass {
 
     // 10. Limpiar chinchetas o pines pegados en opciones múltiples (ej. "📌 C) ", "📌 A)")
     str = str.replace(/(?:^|\n)\s*📌\s*(\(?[a-dA-D][\.\)])/g, '\n$1');
+
+    // 11. Limpiar cajas de metadatos redundantes con el encabezado institucional
+    str = str.replace(/<p\b[^>]*class=["'][^"']*notebook-metadata-line[^"']*["'][^>]*>[\s\S]*?<\/p>\s*/gi, '');
+
+    // 11b. Limpiar etiquetas residuales de paginación de pantalla ("Hoja 2", "Hoja 2 • Margen 1.27 cm", "Margen 1.27 cm")
+    str = str.replace(/(?:^|\n)\s*(?:[#•\-\s📌📄]*)?Hoja\s+\d+[\s•\-\–—\.,]*(?:Margen\s+[\d\.,]+\s*cm)?\s*(?=\n|$)/gi, '\n');
+    str = str.replace(/(?:^|\n)\s*(?:[#•\-\s📌]*)?Margen\s+[\d\.,]+\s*cm\s*(?=\n|$)/gi, '\n');
+
+    // 12. Limpiar etiquetas residuales de hoja independiente y membretes estudiantiles redundantes
+    str = str.replace(/^\s*(?:##\s*)?(?:[\s\p{Emoji}\p{Extended_Pictographic}\uFE0F\u200D]*)?📄?\s*Hoja\s+Independiente\s*:\s*Taller[^\n]*(?:\r?\n|$)/gmiu, '');
+    str = str.replace(/^\s*(?:##\s*)?(?:[📌✍️\s]*)?(?:Estudiante|Calificaci[oó]n|Fecha)\s*:\s*_{2,}[^\n]*(?:\r?\n|$)/gmi, '');
+    str = str.replace(/^\s*(?:##\s*)?(?:[📑📌📚\s]*)?[A-ZÁÉÍÓÚÑa-z]+\s*-\s*Grado\s+[0-9°ºA-Za-z]+[^\n]*(?:\r?\n|$)/gmi, '');
+    // No borrar el primer encabezado de Taller en texto crudo para que formatMarkdownToHtml pueda detectar la sección de taller
+
+    // 13. Limpiar líneas huérfanas que contienen únicamente emojis o signos sueltos sin texto pedagógico
+    str = str.replace(/^\s*[\p{Emoji}\p{Extended_Pictographic}\uFE0F\u200D\s\/\\|\-—–_•*#]{1,15}\s*(?:\r?\n|$)/gmu, (m) => {
+      if (/[0-9a-zA-ZáéíóúñÁÉÍÓÚÑ]/.test(m)) return m;
+      return '';
+    });
 
     if (imagePlaceholders && imagePlaceholders.length > 0) {
       imagePlaceholders.forEach((imgTag, idx) => {
@@ -218,10 +254,21 @@ class ImportParserClass {
         return p1 + ' ' + (starsBefore || '') + p2 + (starsAfter || '');
       }
 
+      // NUNCA separar si está precedido de '(' o '[', o si hay paréntesis abierto sin cerrar en la misma línea
+      if (p1 === '(' || p1 === '[' || /\([^\)\n]*$/i.test(prefixBefore)) {
+        return p1 + (starsBefore || '') + p2 + (starsAfter || '');
+      }
+
+      // NUNCA separar si está seguido inmediatamente de ')' o ']'
+      const afterMatch = fullStr.substring(offset + match.length, offset + match.length + 10);
+      if (/^\s*[\)\]]/.test(afterMatch)) {
+        return p1 + ' ' + (starsBefore || '') + p2 + (starsAfter || '');
+      }
+
       if (/PARTE\s+[12]:?\s*$/i.test(prefixBefore.trim())) return p1 + ' ' + (starsBefore || '') + p2 + (starsAfter || '');
       
       // No separar si es un encabezado compuesto institucional como "RECURSOS DIDÁCTICOS: Y MATERIALES" o "TAREAS / COMPROMISOS: Y ACTIVIDADES EXTRACLASE"
-      if (/(?:RECURSOS|DID[AÁ]CTICOS|TAREAS?|COMPROMISOS?)\s*[:\/-]?\s*(?:Y\s*)?$/i.test(prefixBefore)) {
+      if (/(?:RECURSOS|DID[AÁ]CTICOS|TAREAS?|COMPROMISOS?|TALLER)\s*[:\/-]?\s*(?:Y\s*)?$/i.test(prefixBefore)) {
         return p1 + ' ' + (starsBefore || '') + p2 + (starsAfter || '');
       }
 
@@ -238,7 +285,7 @@ class ImportParserClass {
     clean = clean.replace(/([^\n*])\s*(\*{0,2})(PARTE\s+[12]\s*:?)(\*{0,2})/gi, '$1\n\n$2$3$4');
 
     // 3b. Despegar secciones estructurales del planeador / cuaderno en mayúsculas sostenidas
-    clean = clean.replace(/([^\n])\s+((?:TEMAS\s+(?:DEL\s+)?(?:PRIMER|SEGUNDO|TERCER|CUARTO|[1-4][°º]?)\s+PER[IÍ]ODO|DESEMPEÑOS?\s+DE\s+APRENDIZAJE|CRITERIOS?\s+DE\s+EVALUACI[OÓ]N|INSTRUMENTOS?\s+DE\s+EVALUACI[OÓ]N|EJES?\s+TEM[AÁ]TICOS?|ACTIVIDADES?\s+DE\s+APRENDIZAJE)\b)(?!\s*(?:principal)?[\\s:]*:)/gi, '$1\n\n## $2\n\n');
+    clean = clean.replace(/([^\n(\[\p{Emoji}\p{Extended_Pictographic}\uFE0F\u200D#])\s+((?:TEMAS\s+(?:DEL\s+)?(?:PRIMER|SEGUNDO|TERCER|CUARTO|[1-4][°º]?)\s+PER[IÍ]ODO|DESEMPEÑOS?\s+DE\s+APRENDIZAJE|CRITERIOS?\s+DE\s+EVALUACI[OÓ]N|INSTRUMENTOS?\s+DE\s+EVALUACI[OÓ]N|EJES?\s+TEM[AÁ]TICOS?|ACTIVIDADES?\s+DE\s+APRENDIZAJE)\b)(?![^\n.]{0,60}:)(?!\s*[\)\]])/gu, '$1\n\n## $2\n\n');
 
     // 4. Despegar campos clave-valor conocidos preservando negritas **
     const inlineFields = [
@@ -282,13 +329,20 @@ class ImportParserClass {
       if (/(?:la|el|de|del|en|para|por|sobre|esta|cada|nuestra|durante|su|sus)\s*$/i.test(prefixBefore)) {
         return match;
       }
+      // No separar rótulos compuestos (ej. "Primer tema:", "Segundo tema:", "Nuevo tema:"): si lo que antecede
+      // en la misma línea son solo 1 a 3 palabras sin puntuación, forman parte del mismo título.
+      const lineStart = fullStr.lastIndexOf('\n', offset) + 1;
+      const linePrefix = fullStr.substring(lineStart, offset + 1);
+      if (/^[ \t•\-*#]*[A-Za-zÁÉÍÓÚÑáéíóúñü]{2,20}(?:[ \t]+[A-Za-zÁÉÍÓÚÑáéíóúñü]{1,20}){0,2}[ \t]*$/.test(linePrefix)) {
+        return match;
+      }
       const charBefore = offset > 0 ? fullStr[offset - 1] : '\n';
       const prefix = (charBefore === '\n') ? '' : '\n';
       return prefix + (starsBefore || '') + fieldName + (starsAfter || '') + ':';
     });
 
     // 4b. Despegar subtítulos con dos puntos dentro de párrafos monoliticos: ej. ". Correo electrónico:", ". Herramientas de chat:"
-    clean = clean.replace(/(?<!\b\d)([.)])\s+([A-ZÁÉÍÓÚÑ][^:\n\r]{2,55}:)(?=\s+[A-ZÁÉÍÓÚÑa-záéíóúñ0-9«\"]|\s*$)/g, '$1\n• $2');
+    clean = clean.replace(/(?<!\b\d)([.)])\s+(?!(?:Paso\s*(?:\d+|[A-E]\b)|Fase\b|Parte\b))([A-ZÁÉÍÓÚÑ][^:\n\r]{2,55}:)(?=\s+[A-ZÁÉÍÓÚÑa-záéíóúñ0-9«"]|\s*$)/g, '$1\n• $2');
 
     // 4b2. Despegar instrucciones numeradas con dos puntos seguidas de incisos con letras (ej. "1. Resuelve las siguientes operaciones:\na)")
     clean = clean.replace(/(^|\n)(\d+[\.\)]\s+[^\n:]{2,80}:)\s*\n(?=[a-e]\))/gi, '$1$2\n\n');
@@ -310,6 +364,7 @@ class ImportParserClass {
     // 4b7. Despegar secciones universales pedagógicas conocidas si vienen inline
     const universalSections = [
       'Solucionario(?:\\s+del\\s+docente)?',
+      'Ejemplos?\\s+resueltos?\\s+paso\\s+a\\s+paso',
       'Ejemplos?\\s+resueltos?',
       'Jerarqu[ií]a\\s+de\\s+operaciones',
       'Conceptos?\\s+clave',
@@ -318,7 +373,7 @@ class ImportParserClass {
       'Preguntas?\\s+(?:de\\s+reflexi[oó]n|orientadoras?|gu[ií]a)',
       'Glosario(?:\\s+de\\s+t[eé]rminos)?'
     ].join('|');
-    clean = clean.replace(new RegExp('([^\\n])\\s+(' + universalSections + ')(?=\\s+|$)', 'gi'), (match, charBefore, secName, offset, fullStr) => {
+    clean = clean.replace(new RegExp('([^\\n•\\-\\*#])\\s+(' + universalSections + ')(?=\\s*[:\\n]|$|\\s+[A-ZÁÉÍÓÚÑ])', 'gi'), (match, charBefore, secName, offset, fullStr) => {
       const prefixBefore = fullStr.substring(Math.max(0, offset - 30), offset + charBefore.length);
       if (/(?:la|el|de|del|en|para|por|sobre|con|sin|cada|su|sus|uso)\s*$/i.test(prefixBefore)) {
         return match;
@@ -346,7 +401,13 @@ class ImportParserClass {
     clean = clean.replace(/(?<!\b\d)([.)])\s+([A-ZÁÉÍÓÚÑ][^:\n\r]{2,60}:)(?=\s+[A-ZÁÉÍÓÚÑa-záéíóúñ0-9«"]|\s*$)/g, '$1\n\n$2');
 
     // 7. Despegar títulos en mayúsculas sostenidas precedidos de viñeta o al inicio (ej. "• LA IMPORTANCIA DE LA TRANSCRIPCIÓN PRECISA Transcribir...")
-    clean = clean.replace(/(?:^|\n|[.!?]\s*|\s+)•\s*([\p{Lu}0-9\s\/\-:\(\)]{5,}[\p{Lu}0-9\)])(?=\s+[\p{Lu}][\p{Ll}]|\s*•|\s*$)/gu, '\n\n## $1\n\n');
+    clean = clean.replace(/(^|\n|[.!?]|\s)\s*[•\-\*]\s*([¡¿]?[\p{Lu}0-9\s\/\-:\(\)]{4,}[\p{Lu}0-9\):!?])(?=\s+[\p{Lu}][\p{Ll}]|\s*[•\-\*]|\s*[:\n]|\s*$)/gu, (m, prefix, title) => {
+      const cleanTitle = title.replace(/^[:\s]+|[:\s]+$/g, '').trim();
+      if (/[A-ZÁÉÍÓÚÑ]{3,}/.test(cleanTitle) && !/^(?:POR|PARA|CON|SIN|DEL?|LAS?|LOS?|UN(?:OS|AS)?)\b/i.test(cleanTitle)) {
+        return (prefix ? prefix.trimEnd() : '') + '\n\n## ' + title.trim() + '\n\n';
+      }
+      return m;
+    });
 
     // 7b. Separar títulos en mayúsculas sostenidas seguidos directamente de texto con mayúscula inicial
     clean = clean.replace(/(?:^|\n)(##\s+)?([\p{Lu}]{2,}(?:\s+[\p{Lu}0-9\/\-]+){1,8})\s+([\p{Lu}][\p{Ll}])/gu, (match, hash, title, nextWord) => {
@@ -403,7 +464,7 @@ class ImportParserClass {
     clean = clean.replace(/\$([0-9\.,\s\+\-\*\/=><\w]+)\$/g, '$1');
 
     // 7o. Despegar Paso \d: como bloque de encabezado independiente
-    clean = clean.replace(/(?:^|\n)\s*(\*{0,2}Paso\s*[A-Z\d][^\n:•]*:?[^\n•]*?\*{0,2})\s*(?=\n|•|$)/gi, '\n\n$1\n\n');
+    clean = clean.replace(/(?:^|\n)[ \t]*(?![•\-\*])(\*{0,2}(?!paso\s+a\s+paso\b)Paso\s*(?:\d+|[A-E](?!\s+paso)\b)[^\n:•]{0,90}:?[^\n•]{0,90}?\*{0,2})\s*(?=\n|$)/gi, '\n\n$1\n\n');
 
     // 8. Despegar viñetas (- o *) ÚNICAMENTE si vienen tras puntuación de cierre o asteriscos (nunca separar signos de resta entre números como "= 12 + 8 - 5")
     clean = clean.replace(/([.:;\n]|\*{2})\s+([-*])\s+(?=[A-ZÁÉÍÓÚÑa-záéíóúñ¿¡"«\*\d])/g, '$1\n$2 ');
@@ -413,7 +474,7 @@ class ImportParserClass {
     clean = clean.replace(/(\*{2}\d+[\.\)]\s+[^\n*]+\*{2})\s*([A-ZÁÉÍÓÚÑ¿¡•])/g, '$1\n\n$2');
 
     // 10. Despegar reglas, pasos, normas, notas y subtítulos con dos puntos (ej. "**Regla número 1:**", "**Lectura completa:**")
-    clean = clean.replace(/([.!?:;)\]\*])\s*(\*{1,2}(?:Regla(?:\s+(?:fundamental|de\s+memoria\s+f[aá]cil|n[úu]mero))?|Paso\s*[A-Z\d]|Norma\s*\d+|Lectura\s+completa|Definici[oó]n|Ejemplo(?:\s+paso\s+a\s+paso)?|Importante|Nota|Pregunta)\b[^:\n\r]{0,50}:\*{0,2})/gi, '$1\n\n$2');
+    clean = clean.replace(/([.!?:;)\]\*])\s*(\*{1,2}(?:Regla(?:\s+(?:fundamental|de\s+memoria\s+f[aá]cil|n[úu]mero))?|Paso\s*[A-Z\d]|Norma\s*\d+|Lectura\s+completa|Definici[oó]n|Ejemplo(?:\s+resuelto)?(?:\s+paso\s+a\s+paso)?|Importante|Nota|Pregunta)\b[^:\n\r]{0,50}:\*{0,2})/gi, '$1\n\n$2');
 
     // 10b. Aislar líneas de encabezado independientes que tengan solo un salto de línea
     const rawLines = clean.split('\n');
@@ -424,10 +485,11 @@ class ImportParserClass {
         processedLines.push('');
         continue;
       }
-      const isStandaloneHeading = (
-        line.length >= 3 && line.length <= 75 &&
-        /^[A-ZÁÉÍÓÚÑ\p{Emoji}]/u.test(line) &&
-        !/[.,;?!]$/.test(line) &&
+      const isMetadataField = /^(?:Fecha|Clase|Asignatura|Materia|Grado|Docente|Profesor|Curso|Tiempo(?:\s+disponible)?|Duraci[oó]n|Área|Instituci[oó]n|Jornada|Sede|Periodo)\s*:/i.test(line);
+      const isStandaloneHeading = !isMetadataField && (
+        line.length >= 3 && line.length <= 85 &&
+        /^[¡¿A-ZÁÉÍÓÚÑ\p{Emoji}]/u.test(line) &&
+        !/[.,;]$/.test(line) &&
         !/^(?:En|Por|Con|Sin|Hacia|Desde|Durante|Sobre|Bajo|Entre|Ante|Tras)\s+(?:la|el|los|las|un|una|unos|unas|mi|tu|su)\b/i.test(line) &&
         !/^(?:con|sin|de|del|para|por|hacia|desde)\s+[a-z]/i.test(line) &&
         !/\.\s+[A-Z]/.test(line) &&
@@ -529,6 +591,10 @@ class ImportParserClass {
       return prefix + prep + ' ' + nextChar;
     });
 
+    // 5b. Unir paréntesis o corchetes partidos por salto de línea
+    clean = clean.replace(/(\([^\n\)]*)\n+\s*(\)(?:\s*:)?)/g, '$1$2');
+    clean = clean.replace(/(?:^|\n)\s*\)(?:\s*:)?\s*(?=\n|$)/g, '\n');
+
     // 6. Unir líneas que terminan en palabra normal y la siguiente empieza con minúscula (continuación directa de renglón tras corte suave de párrafo largo)
     // Solo si la línea es de párrafo largo (> 55 caracteres) para preservar versos líricos de poemas o estrofas cortas
     clean = clean.replace(/([^\n]{55,}[a-záéíóúñA-ZÁÉÍÓÚÑ0-9,])\s*\n\s*([a-záéíóúñ])/g, '$1 $2');
@@ -550,7 +616,8 @@ class ImportParserClass {
 
     // 10. Eliminar saltos dobles innecesarios entre un encabezado con dos puntos (:) y su primera viñeta
     if (clean.includes(':')) {
-      clean = clean.replace(/([^\n:]{1,120}:)\s*\n{2,}([•]|[-*](?!\*))/g, '$1\n$2');
+      clean = clean.replace(/(?<!^#{1,6}\s[^\n]*)(?<!\n#{1,6}\s[^\n]*)([^\n:#]{1,120}:)\s*\n{2,}([•]|[-*](?!\*))/g, '$1\n$2');
+      clean = clean.replace(/(#{1,6}\s+[^\n]+)\n+(?=[•\-\*\d])/g, '$1\n\n');
     }
 
     // 11. Normalizar saltos triples o excesivos
@@ -847,8 +914,13 @@ class ImportParserClass {
       const block = b.trim();
       if (!block) continue;
 
-      // Descartar si el bloque completo es solo puntuación, asteriscos huérfanos o almohadillas (#)
-      if (/^[\s,.;:\-–—\(\)\[\]\{\}\*•#]+$/.test(block)) continue;
+      // Descartar si el bloque no contiene ningún carácter alfanumérico (solo emojis, barras, espacios o puntuación suelta)
+      // Excepción: bloques de código y fórmulas matemáticas protegidas
+      if (!block.startsWith('___') && !/[0-9a-zA-ZáéíóúñÁÉÍÓÚÑ]/.test(block)) continue;
+
+      // Descartar etiquetas de hoja independiente o membretes de estudiante sueltos como texto
+      if (/^📄?\s*Hoja\s+Independiente\b/i.test(block) || /^(?:Estudiante|Calificaci[oó]n|Fecha)\s*:\s*_{2,}/i.test(block) ||
+          /^(?:[📌📄•\-\s*#]*)?Hoja\s+\d+/i.test(block) || /^(?:[📌•\-\s*#]*)?Margen\s+[\d\.,]+\s*cm/i.test(block)) continue;
 
       // Bloque de código protegido (C++, Python, Arduino, HTML, etc.)
       const codeShieldMatch = block.match(/^___CODE_BLOCK_SHIELD_(\d+)___$/);
@@ -885,9 +957,10 @@ class ImportParserClass {
       }
 
       // 1. Títulos de Paso (ej: "Paso 1: Cálculo mental y comparación...")
-      const stepMatch = block.match(/^(?:\*{0,2})(Paso\s*[A-Z\d][^\n:]*:?\s*[^\n]*)\*{0,2}$/i);
-      if (stepMatch) {
-        const stepTitle = this._formatInlineMarkdown(stepMatch[1]);
+      const stepMatch = block.match(/^(?:[•\-\*]\s*)?(?:\*{0,2})((?!paso\s+a\s+paso\b)Paso\s*(?:\d+|[A-E](?!\s+paso)\b)[^\n:]*:?\s*[^\n]*)\*{0,2}$/i);
+      if (stepMatch && block.length <= 95 && !/\.\s+[A-ZÁÉÍÓÚÑ]/.test(block)) {
+        let stepTitle = this._formatInlineMarkdown(stepMatch[1]).trim();
+        stepTitle = stepTitle.replace(/^[\p{Emoji}\p{Extended_Pictographic}\uFE0F\u200D\s]+/u, '').trim();
         htmlBlocks.push(`<h3 style="color:#1d4ed8; font-weight:800; margin-top:0.7rem; margin-bottom:0.25rem; font-size:1.02rem; display:flex; align-items:center; gap:6px;">🛠️ ${stepTitle}</h3>`);
         continue;
       }
@@ -895,14 +968,26 @@ class ImportParserClass {
       // Detectar si el bloque es una opción de pregunta (A, B, C, D o a, b, c, d)
       const isOptionLine = /^\(?[a-zA-Z][\.\)]\s+/.test(block);
 
+      // Detección de bloque o líneas de metadatos de la clase (Fecha, Clase, Asignatura, Grado, etc.)
+      const metadataFieldRegex = /^(?:Fecha|Clase|Asignatura|Materia|Grado|Docente|Profesor|Curso|Tiempo(?:\s+disponible)?|Duraci[oó]n|Área|Instituci[oó]n|Jornada|Sede|Periodo)\s*:/i;
+      const blockLines = block.split('\n').map(l => l.trim()).filter(Boolean);
+      const isMetadataBlock = blockLines.length > 0 && blockLines.every(l => metadataFieldRegex.test(l));
+
+      if (isMetadataBlock) {
+        // Los metadatos de la clase (Fecha, Clase, Asignatura, Docente, etc.) ya son presentados por el encabezado institucional oficial del cuaderno.
+        // Se omiten del cuerpo editable para evitar cajas duplicadas.
+        continue;
+      }
+
       // 1b. Títulos y Encabezados mayores numerados, con ## o en MAYÚSCULAS o Títulos pedagógicos
       const isMdHeading = block.match(/^(?:#{1,3}\s+)(.+)$/);
       const isBoldHeading = block.match(/^\*{2}([^*]+?)\*{2}$/);
       const isNumberedHeading = block.match(/^(?:\*{2})(\d+[\.\)]\s+[A-ZÁÉÍÓÚÑ¿¡][^\n*]+?)\*{2}$/) && !block.includes('\n');
-      const isAllCapsHeading = !isOptionLine && !block.includes('\n') && block.length >= 4 && block.length <= 80 && /^[\p{Lu}0-9\s\/\-:\(\)]+$/u.test(block) && /[A-ZÁÉÍÓÚÑ]{3,}/.test(block);
-      const isStandaloneHeading = !isOptionLine && !block.includes('\n') && block.length >= 3 && block.length <= 75 &&
-        /^[A-ZÁÉÍÓÚÑ\p{Emoji}]/u.test(block) &&
-        !/[.,;?!]$/.test(block) &&
+      const isMetadataField = /^(?:Fecha|Clase|Asignatura|Materia|Grado|Docente|Profesor|Curso|Tiempo(?:\s+disponible)?|Duraci[oó]n|Área|Instituci[oó]n|Jornada|Sede|Periodo)\s*:/i.test(block);
+      const isAllCapsHeading = !isOptionLine && !isMetadataField && !block.includes('\n') && block.length >= 4 && block.length <= 85 && /^[¡¿\p{Lu}0-9\s\/\-:\(\)!?]+$/u.test(block) && /[A-ZÁÉÍÓÚÑ]{3,}/.test(block);
+      const isStandaloneHeading = !isOptionLine && !isMetadataField && !block.includes('\n') && block.length >= 3 && block.length <= 85 &&
+        /^[¡¿A-ZÁÉÍÓÚÑ\p{Emoji}]/u.test(block) &&
+        !/[.,;]$/.test(block) &&
         !/^(?:En|Por|Con|Sin|Hacia|Desde|Durante|Sobre|Bajo|Entre|Ante|Tras)\s+(?:la|el|los|las|un|una|unos|unas|mi|tu|su)\b/i.test(block) &&
         !/^(?:con|sin|de|del|para|por|hacia|desde)\s+[a-z]/i.test(block) &&
         !/\.\s+[A-Z]/.test(block) &&
@@ -933,22 +1018,35 @@ class ImportParserClass {
     <div><strong>Calificación:</strong> _________</div>
   </div>
 </div>`.trim());
-            continue;
           }
+          continue;
+        }
+
+        // Omitir etiquetas de hoja independiente que intenten renderizarse como títulos
+        if (/^📄?\s*Hoja\s+Independiente\b/i.test(title) || /^(?:Estudiante|Calificaci[oó]n|Fecha)\s*:\s*_{2,}/i.test(title)) {
+          continue;
         }
 
         let icon = '';
-        if (/TRANSCRIPCI[OÓ]N|PROP[OÓ]SITO|OBJETIVO|INTRODUCCI[OÓ]N/i.test(title)) icon = '🎯 ';
-        else if (/PAR[AÁ]METROS|FORMATO|ESPECIFICACI/i.test(title)) icon = '📐 ';
-        else if (/REGLAS|NORMAS|ESTILO|DIGITACI[OÓ]N/i.test(title)) icon = '⌨️ ';
-        else if (/PROCEDIMIENTO|T[EÉ]CNICO|RESUMEN|PASO/i.test(title)) icon = '🛠️ ';
-        else if (/SUSTRACCI[OÓ]N|ADICI[OÓ]N|N[UÚ]MEROS|OPERACION|MATEM[AÁ]TICA|ABSOLUTO/i.test(title)) icon = '🔢 ';
-        else if (/SIGNO|PAR[EÉ]NTESIS|LEY/i.test(title)) icon = '⚡ ';
-        else if (/M[EÉ]TODO|POLINOMIO|CADENA/i.test(title)) icon = '📋 ';
-        else if (/CONEXI[OÓ]N|SIGUIENTE/i.test(title)) icon = '🚀 ';
-        else if (/SOLUCIONARIO|RESPUESTA/i.test(title)) icon = '💡 ';
-        else if (/CONCEPTOS?|IDEA|GLOSARIO/i.test(title)) icon = '💡 ';
-        else if (!/^[\d\.\s\p{Emoji}]/u.test(title)) icon = '📌 ';
+        if (/^[\p{Emoji}\p{Extended_Pictographic}\uFE0F\u200D]/u.test(title.trim())) {
+          // Ya contiene emoticón: conservar intacto y NUNCA apilar otro
+          icon = '';
+        } else {
+          if (/BIENVENIDO|BIENVENIDA|SALUDO/i.test(title)) icon = '🎉 ';
+          else if (/TEMAS?\b|EJE|CONTENIDO/i.test(title)) icon = '📚 ';
+          else if (/LOGROS?|METAS?|DESEMPEÑOS?|OBJETIVOS?/i.test(title)) icon = '🎯 ';
+          else if (/TRANSCRIPCI[OÓ]N|PROP[OÓ]SITO|INTRODUCCI[OÓ]N/i.test(title)) icon = '🎯 ';
+          else if (/PAR[AÁ]METROS|FORMATO|ESPECIFICACI/i.test(title)) icon = '📐 ';
+          else if (/REGLAS|NORMAS|ESTILO|DIGITACI[OÓ]N/i.test(title)) icon = '⌨️ ';
+          else if (/PROCEDIMIENTO|T[EÉ]CNICO|RESUMEN|PASO/i.test(title)) icon = '🛠️ ';
+          else if (/SUSTRACCI[OÓ]N|ADICI[OÓ]N|N[UÚ]MEROS|OPERACION|MATEM[AÁ]TICA|ABSOLUTO/i.test(title)) icon = '🔢 ';
+          else if (/SIGNO|PAR[EÉ]NTESIS|LEY/i.test(title)) icon = '⚡ ';
+          else if (/M[EÉ]TODO|POLINOMIO|CADENA/i.test(title)) icon = '📋 ';
+          else if (/CONEXI[OÓ]N|SIGUIENTE/i.test(title)) icon = '🚀 ';
+          else if (/SOLUCIONARIO|RESPUESTA/i.test(title)) icon = '💡 ';
+          else if (/CONCEPTOS?|IDEA|GLOSARIO/i.test(title)) icon = '💡 ';
+          else if (!/^[\d\.\s]/u.test(title)) icon = '📌 ';
+        }
 
         htmlBlocks.push(`<h2 style="color:#1e3a8a; margin-top:1.1rem; margin-bottom:0.4rem; font-size:1.15rem; font-weight:700; border-bottom:1.5px solid #bfdbfe; padding-bottom:4px; letter-spacing:-0.01em;">${icon}${this._escape(title)}</h2>`);
         continue;
@@ -972,7 +1070,7 @@ class ImportParserClass {
       }
 
       // 3. Reglas pedagógicas, pasos, ejemplos o definiciones formateados limpiamente como párrafo con título en negrita
-      const ruleMatch = block.match(/^\*{0,2}((?:Regla(?:\s+(?:fundamental|de\s+memoria\s+f[aá]cil|n[úu]mero))?|Norma\s*\d+|Lectura\s+completa|Definici[oó]n|Ejemplo(?:\s+paso\s+a\s+paso|\s*\d+)?|Importante|Nota|Pregunta)[^\n:]*:)\*{0,2}\s*([\s\S]+)$/i);
+      const ruleMatch = block.match(/^\*{0,2}((?:Regla(?:\s+(?:fundamental|de\s+memoria\s+f[aá]cil|n[úu]mero))?|Norma\s*\d+|Lectura\s+completa|Definici[oó]n|Ejemplo(?:\s+resuelto)?(?:\s+paso\s+a\s+paso|\s*\d+)?|Importante|Nota|Pregunta)[^\n:]*:)\*{0,2}\s*([\s\S]+)$/i);
       if (ruleMatch) {
         const ruleLabel = ruleMatch[1].replace(/[\*#]/g, '').trim();
         const ruleLines = ruleMatch[2].split('\n').map(l => l.trim()).filter(Boolean);
@@ -1001,14 +1099,46 @@ class ImportParserClass {
       const isBulletLine = (l) => /^[•]\s+/.test(l) || (/^[\-\*]\s+/.test(l) && !/[-+]\s*(?:por|mas|más|menos|entre|[0-9\(\)\|])|=/i.test(l));
       const isBulletList = validLines.length > 0 && validLines.every(l => isBulletLine(l));
       if (isBulletList) {
-        const listItemsHtml = validLines.map(l => {
-          const content = l.replace(/^[•]\s+|^(?:[\-\*]\s+)/, '').trim();
-          if (!content || /^[\s\*•\-\–—_.]+$/.test(content)) return '';
-          return `<li style="margin-bottom:0.2rem;">${this._formatInlineMarkdown(content)}</li>`;
-        }).filter(Boolean).join('');
-        if (listItemsHtml) {
-          htmlBlocks.push(`<ul style="margin:0.35rem 0 0.55rem 1.25rem; padding-left:0.8rem; line-height:1.45; color:#1e293b;">${listItemsHtml}</ul>`);
+        let currentSubList = [];
+        const flushSubList = () => {
+          if (currentSubList.length > 0) {
+            htmlBlocks.push(`<ul style="margin:0.35rem 0 0.55rem 1.25rem; padding-left:0.8rem; line-height:1.45; color:#1e293b;">${currentSubList.join('')}</ul>`);
+            currentSubList = [];
+          }
+        };
+
+        for (let i = 0; i < validLines.length; i++) {
+          const rawLine = validLines[i];
+          const content = rawLine.replace(/^[•]\s+|^(?:[\-\*]\s+)/, '').trim();
+          if (!content || /^[\s\*•\-\–—_.]+$/.test(content)) continue;
+
+          const isStepItem = /^(?!paso\s+a\s+paso\b)Paso\s*(?:\d+|[A-E](?!\s+paso)\b)/i.test(content) && content.length <= 95;
+          if (isStepItem) {
+            flushSubList();
+            let stepTitle = this._formatInlineMarkdown(content).trim();
+            stepTitle = stepTitle.replace(/^[\p{Emoji}\p{Extended_Pictographic}\uFE0F\u200D\s]+/u, '').trim();
+            htmlBlocks.push(`<h3 style="color:#1d4ed8; font-weight:800; margin-top:0.7rem; margin-bottom:0.25rem; font-size:1.02rem; display:flex; align-items:center; gap:6px;">🛠️ ${stepTitle}</h3>`);
+            continue;
+          }
+
+          // Si el elemento termina en ':' o contiene palabras clave de subtítulo/sección (TEMAS, LOGROS, OBJETIVOS, etc.)
+          const isHeadingItem = (content.endsWith(':') || content.endsWith(':)') || content.endsWith(':**')) &&
+            (i < validLines.length - 1) &&
+            (content.length >= 6) &&
+            (/(?:TEMAS?|LOGROS?|METAS?|DESEMPEÑOS?|OBJETIVOS?|CRITERIOS?|MATERIALES?|REGLAS?|CONTENIDOS?|PROP[OÓ]SITO)/i.test(content) || /^[A-ZÁÉÍÓÚÑ\s\(\)\/\-]{4,}:?$/.test(content));
+
+          if (isHeadingItem) {
+            flushSubList();
+            let icon = '📌 ';
+            if (/TEMAS?\b|EJE|CONTENIDO/i.test(content)) icon = '📚 ';
+            else if (/LOGROS?|METAS?|DESEMPEÑOS?|OBJETIVOS?/i.test(content)) icon = '🎯 ';
+            const headingClean = content.replace(/^[:\s]+|[:\s]+$/g, '');
+            htmlBlocks.push(`<h3 style="color:#1e3a8a; margin-top:0.95rem; margin-bottom:0.35rem; font-size:1.06rem; font-weight:700;">${icon}${this._escape(headingClean)}:</h3>`);
+          } else {
+            currentSubList.push(`<li style="margin-bottom:0.2rem;">${this._formatInlineMarkdown(content)}</li>`);
+          }
         }
+        flushSubList();
         continue;
       }
 
@@ -1244,7 +1374,7 @@ class ImportParserClass {
       const fieldMatch = this.detectInlineField(trimmed);
       if (fieldMatch) {
         // Si estamos dentro del cuaderno del estudiante o actividad práctica, NO consumir líneas de texto pedagógico
-        if (currentSection === 'studentNotebook' || currentSection === 'practicalActivity') {
+        if (currentSection === 'studentNotebook' || currentSection === 'practicalActivity' || currentSection === 'detailedContent') {
           if (fieldMatch.field === 'topic' && !result.curriculum.topic) {
             result.curriculum.topic = fieldMatch.value;
             result.detected.topic = true;
@@ -1536,8 +1666,10 @@ class ImportParserClass {
         break;
       }
       case 'topic':
-        result.curriculum.topic = val;
-        result.detected.topic = true;
+        if (!result.curriculum.topic || currentSection === 'generalInfo') {
+          result.curriculum.topic = val;
+          result.detected.topic = true;
+        }
         break;
       case 'dba':
         result.curriculum.dba = val;

@@ -314,9 +314,18 @@ class CalendarComponent {
               <div style="font-size:0.83rem; opacity:0.92;">Supervisando planeaciones de <strong>Manuel Muñoz</strong> — Modo Solo Lectura y Descargas (Word y PDF)</div>
             </div>
           </div>
-          <div style="display:flex; gap:8px;">
-            <button type="button" class="btn btn-sm" onclick="App.openDownloadCenter()" style="background:#ffffff; color:#1e40af; font-weight:700; border:none; padding:6px 14px; border-radius:8px; cursor:pointer;" title="Centro de descargas">
-              📥 Descargas Semanales / Diarias
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            <button type="button" class="btn btn-sm" onclick="CoordinatorView.openDayClassesReview(new Date().toISOString().slice(0, 10))" style="background:#ecfdf5; color:#065f46; font-weight:800; border:1px solid #a7f3d0; padding:6px 13px; border-radius:8px; cursor:pointer; display:inline-flex; align-items:center; gap:5px;" title="Ver las clases y planeaciones correspondientes al día de hoy">
+              📅 Clases de Hoy
+            </button>
+            <button type="button" class="btn btn-sm" onclick="CoordinatorView.openDashboard('usr_manuel')" style="background:rgba(255,255,255,0.2); color:#ffffff; font-weight:700; border:1px solid rgba(255,255,255,0.4); padding:6px 13px; border-radius:8px; cursor:pointer; display:inline-flex; align-items:center; gap:5px;" title="Supervisión general y auditoría docente">
+              📊 Panel General
+            </button>
+            <button type="button" class="btn btn-sm" onclick="App.openDownloadCenter()" style="background:#ffffff; color:#1e40af; font-weight:700; border:none; padding:6px 13px; border-radius:8px; cursor:pointer; display:inline-flex; align-items:center; gap:5px;" title="Centro de descargas">
+              📥 Descargas
+            </button>
+            <button type="button" class="btn btn-sm" onclick="AuthModal.logout()" style="background:#fee2e2; color:#b91c1c; font-weight:700; border:1px solid #fca5a5; padding:6px 11px; border-radius:8px; cursor:pointer; display:inline-flex; align-items:center; gap:4px;" title="Cerrar sesión institucional">
+              🚪 Salir
             </button>
           </div>
         </div>

@@ -25,12 +25,14 @@
 
 const PageConfig = {
   // Configuración activa
-  paperSize: 'letter', // 'letter' | 'a4'
+  paperSize: 'letter', // 'letter' | 'a4' | 'legal'
+  orientation: 'portrait', // 'portrait' | 'landscape'
 
   // Dimensiones físicas estándar en milímetros (ISO y ANSI)
   SIZES: {
     letter: { widthMm: 215.9, heightMm: 279.4, name: 'Carta (Letter)' },
-    a4:     { widthMm: 210.0, heightMm: 297.0, name: 'A4' }
+    a4:     { widthMm: 210.0, heightMm: 297.0, name: 'A4' },
+    legal:  { widthMm: 215.9, heightMm: 355.6, name: 'Oficio (Legal)' }
   },
 
   // Márgenes estándar en centímetros (1.27 cm = Margen Estrecho oficial)
@@ -55,12 +57,14 @@ const PageConfig = {
 
   getPageWidthPx() {
     const size = this.SIZES[this.paperSize] || this.SIZES.letter;
-    return Math.round(this.mmToPx(size.widthMm)); // 816 px para Carta
+    const w = this.orientation === 'landscape' ? size.heightMm : size.widthMm;
+    return Math.round(this.mmToPx(w));
   },
 
   getPageHeightPx() {
     const size = this.SIZES[this.paperSize] || this.SIZES.letter;
-    return Math.round(this.mmToPx(size.heightMm)); // 1056 px para Carta
+    const h = this.orientation === 'landscape' ? size.widthMm : size.heightMm;
+    return Math.round(this.mmToPx(h));
   },
 
   getMarginTopPx() {
@@ -98,6 +102,17 @@ const PageConfig = {
     if (this.SIZES[sizeName]) {
       this.paperSize = sizeName;
     }
+  },
+
+  setOrientation(orientation) {
+    if (orientation === 'portrait' || orientation === 'landscape') {
+      this.orientation = orientation;
+    }
+  },
+
+  getPaperName() {
+    const s = this.SIZES[this.paperSize] || this.SIZES.letter;
+    return s.name;
   }
 };
 
@@ -140,9 +155,14 @@ const PaginationEngine = {
       paperContainer.style.paddingBottom = marginBottomPx + 'px';
       paperContainer.style.paddingLeft = marginLeftPx + 'px';
       paperContainer.style.paddingRight = marginRightPx + 'px';
+      if (paperContainer.style && paperContainer.style.setProperty) {
+        paperContainer.style.setProperty('--nb-margin-left', marginLeftPx + 'px');
+        paperContainer.style.setProperty('--nb-margin-right', marginRightPx + 'px');
+      }
 
       // 3. Recombinar splits previos y remover espaciadores temporales para medir el flujo natural
       this._removeExistingSpacers(paperContainer);
+      this._normalizeNestedPageBreaks(editor);
 
       // 4. Medir encabezado institucional en Página 1
       const headerCard = paperContainer.querySelector('.notebook-page-header-card');
@@ -171,8 +191,25 @@ const PaginationEngine = {
 
         // Verificar si es un salto manual explícito (Ctrl+Enter)
         if (block.classList && block.classList.contains('notebook-page-break')) {
+          const isFollowedByWorksheet = (i + 1 < blocks.length) && (
+            (blocks[i + 1].classList && blocks[i + 1].classList.contains('notebook-student-worksheet-header')) ||
+            Boolean(blocks[i + 1].querySelector && blocks[i + 1].querySelector('.notebook-student-worksheet-header'))
+          );
+          if (currentHeightOnPage < 120 && !isFollowedByWorksheet) {
+            i++;
+            continue;
+          }
+
+          const blockStyle = (typeof window !== 'undefined' && window.getComputedStyle) ? window.getComputedStyle(block) : { marginTop: '0px', marginBottom: '0px' };
+          const mt = parseFloat(blockStyle.marginTop) || 0;
+          const mb = parseFloat(blockStyle.marginBottom) || 0;
+          const breakHeight = Math.ceil((block.offsetHeight || 25) + mt + mb);
+          currentHeightOnPage += breakHeight;
+
+          const target = (i + 1 < blocks.length) ? blocks[i + 1] : block;
+
           breaks.push({
-            targetBlock: block,
+            targetBlock: target,
             pageNum: currentPage + 1,
             remainingSpace: Math.max(0, maxPageHeight - currentHeightOnPage),
             isManual: true
@@ -208,6 +245,13 @@ const PaginationEngine = {
         // Si es encabezado y NO cabe junto con el inicio del contenido siguiente,
         // trasladar el encabezado a la siguiente página para evitar que quede huérfano.
         if (isHeading && currentHeightOnPage > 0 && (currentHeightOnPage + blockHeight + extraLookahead > maxPageHeight)) {
+          // Guarda: Si estamos en Página 1 y apenas hay un título (currentHeightOnPage < 120px)
+          // y la página tiene espacio disponible (>= 150px), no expulsar el encabezado dejando la hoja 1 en blanco
+          if (currentHeightOnPage < 150 && (maxPageHeight - currentHeightOnPage) >= 150) {
+            currentHeightOnPage += blockHeight;
+            i++;
+            continue;
+          }
           const remainingSpace = Math.max(0, maxPageHeight - currentHeightOnPage);
           breaks.push({
             targetBlock: block,
@@ -251,6 +295,13 @@ const PaginationEngine = {
               } else {
                 break;
               }
+            }
+
+            // Guarda contra página vacía: si estamos en Página 1 o página con poco contenido (currentHeightOnPage < 150px)
+            // y no cupo ningún ítem pero hay espacio disponible (>= 60px), colocar al menos el primer ítem
+            if (fitCount === 0 && (currentPage === 1 || currentHeightOnPage < 150) && availableSpace >= 60 && items.length > 0) {
+              fitCount = 1;
+              accumulatedH = Math.min(availableSpace, Math.ceil((items[0].offsetHeight || 30)));
             }
 
             if (fitCount > 0 && fitCount < items.length) {
@@ -315,6 +366,14 @@ const PaginationEngine = {
 
         // Si no se puede dividir o no cabe ningún ítem:
         if (currentHeightOnPage > 0) {
+          // Guarda de fidelidad: Si estamos en Página 1 y apenas hay un título (currentHeightOnPage < 120px)
+          // y la página tiene espacio disponible (>= 150px), no expulsar el bloque dejando la hoja 1 en blanco:
+          if (currentHeightOnPage < 150 && (maxPageHeight - currentHeightOnPage) >= 150) {
+            currentHeightOnPage += blockHeight;
+            i++;
+            continue;
+          }
+
           const remainingSpace = Math.max(0, maxPageHeight - currentHeightOnPage);
           breaks.push({
             targetBlock: block,
@@ -381,6 +440,68 @@ const PaginationEngine = {
   /**
    * Determina si un elemento funciona como encabezado o título de sección
    */
+  /**
+   * Normaliza saltos de página manuales (.notebook-page-break) que hayan sido insertados
+   * dentro de listas (UL/OL) o párrafos, promoviéndolos a bloques directos del editor
+   * para que el salto divida limpiamente los elementos como en Word / Google Docs.
+   */
+  _normalizeNestedPageBreaks(editor) {
+    if (!editor || !editor.querySelectorAll) return;
+    const nestedBreaks = Array.from(editor.querySelectorAll('.notebook-page-break')).filter(brk => brk.parentNode !== editor);
+    nestedBreaks.forEach(brk => {
+      let topContainer = brk;
+      while (topContainer && topContainer.parentNode !== editor) {
+        topContainer = topContainer.parentNode;
+      }
+      if (!topContainer) return;
+
+      const tag = topContainer.tagName;
+      if (tag === 'UL' || tag === 'OL') {
+        const ul = topContainer;
+        const allLis = Array.from(ul.children).filter(el => el.tagName === 'LI');
+        const brkLi = brk.closest ? brk.closest('li') : null;
+        let splitIndex = allLis.length - 1;
+        if (brkLi) {
+          splitIndex = allLis.indexOf(brkLi);
+        }
+
+        if (brk.parentNode && brk.parentNode.removeChild) {
+          brk.parentNode.removeChild(brk);
+        } else if (brk.remove) {
+          brk.remove();
+        }
+
+        const remainingLis = allLis.slice(splitIndex + 1);
+        if (remainingLis.length > 0 && typeof document !== 'undefined' && document.createElement) {
+          const nextUl = document.createElement(ul.tagName);
+          if (ul.className) nextUl.className = ul.className;
+          if (ul.style && ul.style.cssText) nextUl.style.cssText = ul.style.cssText;
+          if (ul.tagName === 'OL') {
+            const start = parseInt(ul.getAttribute('start') || '1', 10) || 1;
+            nextUl.setAttribute('start', String(start + splitIndex + 1));
+          }
+          remainingLis.forEach(it => nextUl.appendChild(it));
+
+          if (ul.parentNode && ul.parentNode.insertBefore) {
+            ul.parentNode.insertBefore(brk, ul.nextSibling);
+            brk.parentNode.insertBefore(nextUl, brk.nextSibling);
+          }
+        } else if (ul.parentNode && ul.parentNode.insertBefore) {
+          ul.parentNode.insertBefore(brk, ul.nextSibling);
+        }
+      } else {
+        if (brk.parentNode && brk.parentNode.removeChild) {
+          brk.parentNode.removeChild(brk);
+        } else if (brk.remove) {
+          brk.remove();
+        }
+        if (topContainer.parentNode && topContainer.parentNode.insertBefore) {
+          topContainer.parentNode.insertBefore(brk, topContainer.nextSibling);
+        }
+      }
+    });
+  },
+
   _isHeadingElement(block) {
     if (!block || !block.tagName) return false;
     const tag = block.tagName.toUpperCase();
@@ -565,10 +686,14 @@ const PaginationEngine = {
   _applySpacers(breaks) {
     const marginBottomPx = this.config.getMarginBottomPx();
     const marginTopPx = this.config.getMarginTopPx();
+    const marginLeftPx = this.config.getMarginLeftPx();
+    const marginRightPx = this.config.getMarginRightPx();
     const marginCm = this.config.margins.topCm;
+    const paperName = this.config.getPaperName ? this.config.getPaperName() : 'Carta';
 
     breaks.forEach(({ targetBlock, pageNum, remainingSpace, isManual, isClosingBlock }) => {
-      const spacerHeight = Math.max(30, Math.round(remainingSpace + marginBottomPx + marginTopPx));
+      const deskGapHeight = 32;
+      const spacerHeight = Math.max(30, Math.round(remainingSpace + marginBottomPx + deskGapHeight + marginTopPx));
 
       let spacer = null;
       if (typeof document !== 'undefined' && document.createElement) {
@@ -577,17 +702,25 @@ const PaginationEngine = {
         spacer.contentEditable = 'false';
         spacer.setAttribute('data-page-num', pageNum);
         spacer.style.height = spacerHeight + 'px';
+        spacer.style.marginLeft = '-' + marginLeftPx + 'px';
+        spacer.style.marginRight = '-' + marginRightPx + 'px';
+        spacer.style.width = 'calc(100% + ' + (marginLeftPx + marginRightPx) + 'px)';
+
+        const gapTop = Math.round(remainingSpace + marginBottomPx);
 
         spacer.innerHTML = `
-          <div class="nb-page-break-inner" style="top:${Math.round(remainingSpace + marginBottomPx)}px;">
-            <div class="nb-page-break-line"></div>
-            <span class="nb-page-break-badge">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px; margin-right:4px;">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                <polyline points="14 2 14 8 20 8"></polyline>
-              </svg>
-              Hoja ${pageNum} &bull; Margen ${marginCm} cm
-            </span>
+          <div class="nb-page-break-inner" style="top:${gapTop}px;">
+            <div class="nb-page-desk-gap">
+              <div class="nb-page-gap-shadow-top"></div>
+              <span class="nb-page-break-badge">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px; margin-right:4px;">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                  <polyline points="14 2 14 8 20 8"></polyline>
+                </svg>
+                Hoja ${pageNum} &bull; ${paperName} &bull; Margen ${marginCm} cm
+              </span>
+              <div class="nb-page-gap-shadow-bottom"></div>
+            </div>
           </div>
         `;
       } else {
@@ -595,7 +728,8 @@ const PaginationEngine = {
           className: 'nb-page-break-spacer',
           style: { height: spacerHeight + 'px' },
           pageNum,
-          spacerHeight
+          spacerHeight,
+          remainingSpace
         };
       }
 
@@ -630,6 +764,17 @@ const PaginationEngine = {
     const range = sel.getRangeAt(0);
     if (!editor.contains || !editor.contains(range.startContainer)) return null;
 
+    try {
+      if (typeof document !== 'undefined' && document.createElement) {
+        const marker = document.createElement('span');
+        marker.id = 'nb-caret-temp-marker';
+        marker.style.cssText = 'display:inline-block;width:0;height:0;line-height:0;overflow:hidden;opacity:0;';
+        marker.textContent = '\uFEFF';
+        range.insertNode(marker);
+        return { hasMarker: true };
+      }
+    } catch (e) {}
+
     return {
       startContainer: range.startContainer,
       startOffset: range.startOffset,
@@ -644,14 +789,31 @@ const PaginationEngine = {
   _restoreSelection(editor, saved) {
     if (!saved || typeof window === 'undefined' || !window.getSelection) return;
     try {
-      if (!editor.contains || !editor.contains(saved.startContainer)) return;
-      const sel = window.getSelection();
-      const range = document.createRange();
-      range.setStart(saved.startContainer, saved.startOffset);
-      range.setEnd(saved.endContainer, saved.endOffset);
-      sel.removeAllRanges();
-      sel.addRange(range);
-    } catch (e) {}
+      if (saved.hasMarker) {
+        const marker = editor.querySelector('#nb-caret-temp-marker');
+        if (marker) {
+          const range = document.createRange();
+          range.setStartAfter(marker);
+          range.collapse(true);
+          const sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(range);
+          marker.remove();
+          return;
+        }
+      }
+      if (saved.startContainer && saved.startContainer.isConnected) {
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        const range = document.createRange();
+        range.setStart(saved.startContainer, saved.startOffset);
+        range.setEnd(saved.endContainer || saved.startContainer, saved.endOffset || saved.startOffset);
+        sel.addRange(range);
+      }
+    } catch (e) {
+      const marker = editor.querySelector('#nb-caret-temp-marker');
+      if (marker) marker.remove();
+    }
   },
 
   /**
@@ -695,7 +857,7 @@ const PaginationEngine = {
     const clone = editor.cloneNode(true);
     this._recombineSplitElements(clone);
     if (clone.querySelectorAll) {
-      clone.querySelectorAll('.nb-page-break-spacer, .nb-auto-page-break').forEach(el => el.remove());
+      clone.querySelectorAll('.nb-page-break-spacer, .nb-auto-page-break, #nb-caret-temp-marker').forEach(el => el.remove());
       clone.querySelectorAll('.nb-page-break-target').forEach(el => {
         el.classList.remove('nb-page-break-target');
         if (el.dataset && el.dataset.origMarginTop !== undefined) {
@@ -722,6 +884,15 @@ const PaginationEngine = {
           el.remove();
         }
       });
+      // Limpiar cualquier nodo que sea únicamente un indicador de paginación ("Hoja 2", "Margen 1.27 cm")
+      clone.querySelectorAll('p, li, h1, h2, h3, h4, h5, h6').forEach(el => {
+        const text = (el.textContent || '').trim();
+        if (/^(?:[📌📄•\-\s*#]*)?Hoja\s+\d+(?:[\s•\-\–—\.,]*Margen\s+[\d\.,]+\s*cm)?$/i.test(text) ||
+            /^(?:[📌•\-\s*#]*)?Margen\s+[\d\.,]+\s*cm$/i.test(text)) {
+          el.remove();
+        }
+      });
+
       // Limpiar listas que hayan quedado vacías
       clone.querySelectorAll('ul, ol').forEach(el => {
         if (!el.children.length) el.remove();
